@@ -1,0 +1,2220 @@
+<!DOCTYPE html>
+<html lang="ru" prefix="og: https://ogp.me/ns#">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="yandex-verification" content="8a962b6cfea12254" />
+  
+  <!-- Основные поисковые теги (SEO) -->
+  <title>ШКОЛА ДРОП — Кейсы CS2 и Честный Школьный Апгрейдер | Официальный сайт игры</title>
+  <meta name="description" content="ШКОЛА ДРОП (shkoladrop.vercel.app) — Официальный интерактивный симулятор школьных кейсов и честный CS2 апгрейдер от David Lite Studio. 100% честные шансы, лут со школы, крути кейсы и улучшай скины бесплатно без доната!" />
+  <meta name="keywords" content="школа дроп, школа дроп кейсы, школа дроп апгрейдер, честный апгрейд кс2, школьный симулятор, симулятор кейсов кс2, david lite studio, shkola drop" />
+  <meta name="author" content="David Lite Studio / ShkolaDrop Interactive" />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://shkoladrop.vercel.app/" />
+
+  <!-- Превью карточки для соцсетей (Telegram, VK, WhatsApp) -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://shkoladrop.vercel.app/" />
+  <meta property="og:title" content="ШКОЛА ДРОП — Кейсы CS2 и Честный Школьный Апгрейдер" />
+  <meta property="og:description" content="Официальный школьный симулятор кейсов и апгрейдер CS2 от David Lite Studio. Честные шансы и заносы без доната!" />
+  <meta property="og:site_name" content="ШКОЛА ДРОП" />
+  <meta property="og:locale" content="ru_RU" />
+
+  <!-- Twitter / X Карточка -->
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="ШКОЛА ДРОП — Честный CS2 Апгрейдер и Школьные Кейсы" />
+  <meta name="twitter:description" content="Симулятор открытия школьных кейсов и апгрейда скинов от David Lite Studio." />
+
+  <!-- Структурированные данные Schema.org для поисковых систем (Rich Snippets) -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "VideoGame",
+    "name": "ШКОЛА ДРОП",
+    "alternateName": "Shkola Drop",
+    "description": "Интерактивный игровой симулятор открытия кейсов и честный апгрейдер скинов CS2 со школьной тематикой.",
+    "genre": ["Симулятор", "Инди-игра", "Кликер", "Рулетка"],
+    "playMode": "SinglePlayer",
+    "applicationCategory": "Browser Game",
+    "operatingSystem": "All modern browsers (Web, Android, iOS)",
+    "url": "https://shkoladrop.vercel.app/",
+    "author": {
+      "@type": "Organization",
+      "name": "David Lite Studio"
+    },
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "RUB",
+      "category": "free"
+    }
+  }
+  </script>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,600;0,700;1,700&family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+  
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            display: ['"Chakra Petch"', 'sans-serif'],
+          },
+          colors: {
+            csConsumer: '#b0c3d9',
+            csMilSpec: '#4b69ff',
+            csRestricted: '#8847ff',
+            csClassified: '#d32ce6',
+            csCovert: '#eb4b4b',
+            csGold: '#ffd700',
+            schoolDark: '#0b0e14',
+            schoolCard: '#151922',
+            schoolAccent: '#ff5500',
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    body {
+      background: radial-gradient(circle at 50% 0%, #151a24 0%, #080a0f 100%);
+      color: #f3f4f6;
+      font-family: 'Inter', sans-serif;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+    
+    .font-cs {
+      font-family: 'Chakra Petch', sans-serif;
+    }
+
+    .glow-orange {
+      box-shadow: 0 0 25px -3px rgba(255, 85, 0, 0.45);
+    }
+    .glow-gold {
+      box-shadow: 0 0 25px -2px rgba(255, 215, 0, 0.5);
+    }
+
+    ::-webkit-scrollbar {
+      width: 4px;
+      height: 4px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #2a3447;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .wheel-pointer {
+      position: absolute;
+      top: -10px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 0;
+      height: 0;
+      border-left: 11px solid transparent;
+      border-right: 11px solid transparent;
+      border-top: 19px solid #ff3b30;
+      filter: drop-shadow(0 0 10px #ff3b30);
+      z-index: 25;
+    }
+
+    .item-selected {
+      outline: 2px solid #ff5500;
+      box-shadow: 0 0 16px rgba(255, 85, 0, 0.6);
+      transform: translateY(-2px);
+    }
+
+    /* Case Roulette Styles */
+    .case-tape-container {
+      position: relative;
+      overflow: hidden;
+      mask-image: linear-gradient(to right, transparent, black 15%, black 85%, transparent);
+      -webkit-mask-image: linear-gradient(to right, transparent, black 15%, black 85%, transparent);
+    }
+    .case-pointer-top {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 0;
+      height: 0;
+      border-left: 9px solid transparent;
+      border-right: 9px solid transparent;
+      border-top: 14px solid #ff5500;
+      z-index: 30;
+      filter: drop-shadow(0 0 6px #ff5500);
+    }
+    .case-pointer-bottom {
+      position: absolute;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 0;
+      height: 0;
+      border-left: 9px solid transparent;
+      border-right: 9px solid transparent;
+      border-bottom: 14px solid #ff5500;
+      z-index: 30;
+      filter: drop-shadow(0 0 6px #ff5500);
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-start pb-12 max-w-md mx-auto relative overflow-x-hidden border-x border-slate-800/40 shadow-2xl bg-schoolDark">
+
+  <!-- Header -->
+  <header class="w-full px-3.5 pt-3 pb-2.5 flex items-center justify-between border-b border-slate-800/80 bg-slate-900/80 backdrop-blur-md sticky top-0 z-30">
+    <div class="flex items-center space-x-2.5">
+      <!-- Logo Button -->
+      <button onclick="handleAdminTrigger()" title="🎒 ШКОЛА ДРОП by David Lite Studio" class="w-10 h-10 rounded-xl bg-gradient-to-tr from-orange-600 to-amber-500 flex items-center justify-center text-xl shadow-lg shadow-orange-500/25 active:scale-90 transition">
+        🎒
+      </button>
+      <div>
+        <div class="flex items-center space-x-1.5">
+          <h1 class="text-xs font-black uppercase tracking-wider text-orange-400 font-cs">ШКОЛА ДРОП</h1>
+          <span class="text-[8px] bg-amber-500/20 text-amber-300 font-bold px-1.5 py-0.5 rounded border border-amber-500/40">STUDIO</span>
+        </div>
+        <div class="text-[10px] text-slate-400 font-medium">David Lite Studio</div>
+      </div>
+    </div>
+
+    <!-- User Profile & Balance Block -->
+    <div class="flex items-center space-x-1.5">
+      <!-- Profile Button -->
+      <button onclick="openProfileModal()" id="btnHeaderProfile" class="bg-slate-800/90 hover:bg-slate-750 border border-slate-700/70 px-2 py-1.5 rounded-lg flex items-center space-x-1.5 transition active:scale-95">
+        <span id="headerUserAvatar" class="text-sm">👤</span>
+        <span id="headerUserName" class="text-[11px] font-bold text-slate-200 max-w-[65px] truncate">Вход</span>
+      </button>
+
+      <!-- Balance Badge -->
+      <div class="bg-slate-800/90 border border-slate-700/70 px-2.5 py-1.5 rounded-lg flex items-center space-x-1.5">
+        <span class="text-amber-400 text-sm">🪙</span>
+        <span id="headerBalance" class="font-cs font-bold text-xs text-white">0 ₽</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Брендовый баннер студии разработчиков -->
+  <div class="w-full px-3 pt-2">
+    <div class="w-full bg-gradient-to-r from-orange-600/20 via-amber-600/20 to-orange-500/10 border border-orange-500/40 rounded-2xl p-2.5 flex items-center justify-between shadow-lg relative overflow-hidden">
+      <div class="flex items-center space-x-2 z-10">
+        <div class="text-2xl animate-bounce">⚡</div>
+        <div>
+          <div class="text-[10px] font-black text-amber-300 uppercase tracking-widest font-cs flex items-center space-x-1">
+            <span>🔥 ОФИЦИАЛЬНЫЙ CS2 АПГРЕЙДЕР И КЕЙСЫ</span>
+          </div>
+          <div class="text-[11px] font-extrabold text-white leading-tight">ШКОЛА ДРОП: СЕЗОН 1 🎒</div>
+        </div>
+      </div>
+      <button onclick="switchTab('cases')" class="z-10 px-2.5 py-1 rounded-lg bg-orange-500 text-black text-[10px] font-black font-cs uppercase hover:brightness-110 active:scale-95 transition">
+        Кейсы
+      </button>
+      <div class="absolute -right-4 -bottom-4 text-6xl opacity-10 select-none">🏆</div>
+    </div>
+  </div>
+
+  <!-- Navigation Tabs Bar -->
+  <div class="w-full px-3 pt-2 pb-1 grid grid-cols-5 gap-1">
+    <button onclick="switchTab('upgrade')" id="tabUpgrade" class="py-2 text-[10px] font-bold uppercase tracking-wider rounded-xl bg-orange-500 text-black shadow-md transition text-center flex flex-col items-center">
+      <span>⚡</span><span>Апгрейд</span>
+    </button>
+    <button onclick="switchTab('cases')" id="tabCases" class="py-2 text-[10px] font-bold uppercase tracking-wider rounded-xl bg-slate-800/80 text-slate-300 hover:text-white border border-slate-700/50 transition text-center flex flex-col items-center">
+      <span>📦</span><span>Кейсы</span>
+    </button>
+    <button onclick="switchTab('inventory')" id="tabInv" class="py-2 text-[10px] font-bold uppercase tracking-wider rounded-xl bg-slate-800/80 text-slate-300 hover:text-white border border-slate-700/50 transition text-center flex flex-col items-center">
+      <span>🎒</span><span>Рюкзак (<span id="invCountBadge">0</span>)</span>
+    </button>
+    <button onclick="switchTab('game')" id="tabGame" class="py-2 text-[10px] font-bold uppercase tracking-wider rounded-xl bg-slate-800/80 text-slate-300 hover:text-white border border-slate-700/50 transition text-center flex flex-col items-center">
+      <span>🎮</span><span>Фарм</span>
+    </button>
+    <button onclick="switchTab('shop')" id="tabShop" class="py-2 text-[10px] font-bold uppercase tracking-wider rounded-xl bg-slate-800/80 text-slate-300 hover:text-white border border-slate-700/50 transition text-center flex flex-col items-center">
+      <span>🏪</span><span>Лавка</span>
+    </button>
+  </div>
+
+  <!-- TAB 1: UPGRADER -->
+  <main id="viewUpgrade" class="w-full px-4 flex flex-col items-center mt-1 space-y-3">
+    
+    <!-- Roulette Canvas Area -->
+    <div class="relative w-64 h-64 sm:w-72 sm:h-72 flex items-center justify-center my-1">
+      <div class="wheel-pointer"></div>
+      
+      <canvas id="rouletteCanvas" width="280" height="280" class="rounded-full shadow-2xl transition duration-200"></canvas>
+
+      <!-- Center HUD Indicator -->
+      <div class="absolute w-36 h-36 rounded-full bg-slate-950/90 border border-slate-700/70 shadow-inner flex flex-col items-center justify-center text-center p-2 z-10 backdrop-blur-sm pointer-events-none">
+        <span class="text-[9px] uppercase font-bold text-slate-400 tracking-wider">Шанс заноса</span>
+        <span id="hudChance" class="font-cs text-2xl font-bold text-orange-400 tracking-tight">0.00%</span>
+        <span id="hudMultiplier" class="text-[10px] text-slate-400 font-mono">x0.00</span>
+        <div id="statusBadge" class="mt-0.5 text-[9px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+          Выбери цель
+        </div>
+      </div>
+    </div>
+
+    <!-- Direction / Strategy toggles -->
+    <div class="w-full flex items-center justify-between bg-slate-900/70 p-2 rounded-xl border border-slate-800">
+      <span class="text-[11px] text-slate-400 font-medium pl-1">Зона победы:</span>
+      <div class="flex space-x-1 text-xs">
+        <button id="btnDirUnder" onclick="setRollDirection('under')" class="px-2.5 py-1 rounded-lg bg-orange-500/20 text-orange-400 border border-orange-500/40 font-bold transition text-[11px]">
+          ◀ По часовой (0 - X%)
+        </button>
+        <button id="btnDirOver" onclick="setRollDirection('over')" class="px-2.5 py-1 rounded-lg bg-slate-800 text-slate-400 border border-slate-700 font-bold transition text-[11px]">
+          Против часовой ▶
+        </button>
+      </div>
+    </div>
+
+    <!-- VS Selection Deck (School Dep vs Target Item) -->
+    <div class="w-full grid grid-cols-2 gap-2.5">
+      
+      <!-- Left: Deposited School Item -->
+      <div onclick="openItemPicker('school')" class="cursor-pointer group relative bg-slate-900/80 hover:bg-slate-800/80 border border-dashed border-orange-500/40 hover:border-orange-400 rounded-2xl p-2.5 flex flex-col items-center justify-center min-h-[145px] transition text-center">
+        <span class="absolute top-2 left-2 text-[9px] font-bold text-orange-400/90 uppercase tracking-wider bg-orange-950/50 px-1.5 py-0.5 rounded border border-orange-500/20">Твой Депозит</span>
+        <div id="depositSlotContent" class="flex flex-col items-center justify-center mt-3 w-full"></div>
+      </div>
+
+      <!-- Right: Target Skin or Item -->
+      <div onclick="openItemPicker('target')" class="cursor-pointer group relative bg-slate-900/80 hover:bg-slate-800/80 border border-dashed border-cyan-500/40 hover:border-cyan-400 rounded-2xl p-2.5 flex flex-col items-center justify-center min-h-[145px] transition text-center">
+        <span class="absolute top-2 right-2 text-[9px] font-bold text-cyan-400/90 uppercase tracking-wider bg-cyan-950/50 px-1.5 py-0.5 rounded border border-cyan-500/20">Желанная цель</span>
+        <div id="targetSlotContent" class="flex flex-col items-center justify-center mt-3 w-full"></div>
+      </div>
+
+    </div>
+
+    <!-- Upgrade Action Button -->
+    <div class="w-full pt-1">
+      <button id="btnUpgrade" onclick="startUpgradeRoll()" disabled class="w-full py-3.5 px-4 rounded-xl font-cs text-sm sm:text-base font-bold uppercase tracking-wider bg-gradient-to-r from-orange-500 to-amber-500 text-black shadow-lg shadow-orange-500/20 disabled:opacity-40 disabled:cursor-not-allowed hover:brightness-110 active:scale-[0.98] transition flex items-center justify-center space-x-2">
+        <span>⚡</span>
+        <span id="btnUpgradeText">ДЕПНУТЬ В АПГРЕЙД</span>
+        <span>⚡</span>
+      </button>
+      <div class="text-center text-[10px] text-slate-500 mt-1.5">
+        Честный шанс = стоимость депозита / цена скина (виртуальный игровой инвентарь)
+      </div>
+    </div>
+
+    <!-- Live Roll History -->
+    <div class="w-full bg-slate-900/40 border border-slate-800/60 rounded-xl p-2.5">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Лента последних заносов</span>
+        <span class="text-[10px] text-orange-400/80 font-mono">LIVE FEED</span>
+      </div>
+      <div id="feedList" class="flex space-x-2 overflow-x-auto pb-1 text-xs"></div>
+    </div>
+
+  </main>
+
+  <!-- TAB: CASES (ШКОЛА ДРОП КЕЙСЫ) -->
+  <main id="viewCases" class="w-full px-4 mt-2 hidden space-y-3">
+    <div class="flex items-center justify-between">
+      <div>
+        <h2 class="font-cs text-sm font-bold uppercase tracking-wider text-slate-200">Школьные Кейсы</h2>
+        <p class="text-[11px] text-slate-400">Крути кейсы со школьным лутом и депай в апгрейдер</p>
+      </div>
+      <span class="text-xs bg-orange-500/20 text-orange-400 font-bold px-2 py-0.5 rounded-lg border border-orange-500/30">ШКОЛА ДРОП</span>
+    </div>
+
+    <!-- Active Case Opening Stage -->
+    <div id="caseOpeningBox" class="w-full bg-slate-900/90 border border-orange-500/40 rounded-2xl p-3 flex flex-col items-center relative shadow-xl">
+      <div class="w-full flex items-center justify-between mb-2">
+        <span id="currentCaseTitle" class="text-xs font-bold text-amber-400 font-cs uppercase">Кейс: Завтрак второгодника</span>
+        <span id="currentCasePrice" class="text-xs font-bold font-cs text-white">250 ₽</span>
+      </div>
+
+      <!-- Tape roulette container with physical pointer -->
+      <div id="caseTapeWrapper" class="w-full h-28 bg-slate-950 rounded-xl border border-slate-800 case-tape-container relative flex items-center">
+        <div id="casePointerTop" class="case-pointer-top"></div>
+        <div id="casePointerBottom" class="case-pointer-bottom"></div>
+        <div id="caseRouletteTrack" class="flex items-center space-x-2 pl-40 transition-transform duration-100 ease-linear">
+          <!-- Items injected via JS -->
+        </div>
+      </div>
+
+      <button id="btnOpenCase" onclick="openSelectedCase()" class="w-full mt-3 py-3 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-black font-cs font-bold text-xs uppercase tracking-wider shadow-lg shadow-orange-500/20 hover:brightness-110 active:scale-95 transition flex items-center justify-center space-x-2">
+        <span>📦</span>
+        <span id="btnOpenCaseText">ОТКРЫТЬ КЕЙС</span>
+      </button>
+    </div>
+
+    <!-- Case Selection Grid -->
+    <div class="space-y-2">
+      <span class="text-xs font-bold text-slate-300 uppercase tracking-wider">Выбор кейса</span>
+      <div class="grid grid-cols-2 gap-2.5" id="casesGrid">
+        <!-- Injected via JS -->
+      </div>
+    </div>
+  </main>
+
+  <!-- TAB 2: INVENTORY -->
+  <main id="viewInventory" class="w-full px-4 mt-2 hidden space-y-3">
+    <div class="flex items-center justify-between">
+      <div>
+        <h2 class="font-cs text-sm font-bold uppercase tracking-wider text-slate-200">Школьный рюкзак</h2>
+        <p class="text-[11px] text-slate-400">Все твои залутанные вещи, дроп из кейсов и скины</p>
+      </div>
+      <button onclick="sellAllNonSchool()" class="px-2.5 py-1 text-[11px] font-bold bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-lg transition active:scale-95">
+        Продать скины
+      </button>
+    </div>
+
+    <div class="flex space-x-1.5 text-xs overflow-x-auto pb-1">
+      <button onclick="setInvFilter('all')" id="fltAll" class="px-2.5 py-1 rounded-lg bg-orange-500 text-black font-bold whitespace-nowrap">Все (<span id="countAll">0</span>)</button>
+      <button onclick="setInvFilter('school')" id="fltSchool" class="px-2.5 py-1 rounded-lg bg-slate-800 text-slate-400 hover:text-white whitespace-nowrap">Школа (<span id="countSchool">0</span>)</button>
+      <button onclick="setInvFilter('cs2')" id="fltCs2" class="px-2.5 py-1 rounded-lg bg-slate-800 text-slate-400 hover:text-white whitespace-nowrap">CS2 (<span id="countCs2">0</span>)</button>
+      <button onclick="setInvFilter('games')" id="fltGames" class="px-2.5 py-1 rounded-lg bg-slate-800 text-slate-400 hover:text-white whitespace-nowrap">Игры (<span id="countGames">0</span>)</button>
+    </div>
+
+    <div id="inventoryGrid" class="grid grid-cols-2 gap-2.5 min-h-[300px] max-h-[520px] overflow-y-auto pr-0.5"></div>
+  </main>
+
+  <!-- TAB 3: MINI GAME "ПЕРЕМЕНА: ЛОВИ ПЯТЁРКИ" -->
+  <main id="viewGame" class="w-full px-4 mt-2 hidden flex flex-col items-center space-y-3">
+    <div class="w-full text-left">
+      <h2 class="font-cs text-sm font-bold uppercase tracking-wider text-slate-200">Перемена: Лови Пятёрки!</h2>
+      <p class="text-[11px] text-slate-400">Управляй школьником внизу: лови пятёрки и пирожки (+₽), уворачивайся от двоек и указок!</p>
+    </div>
+
+    <div class="w-full bg-slate-900/90 rounded-2xl border border-slate-800 p-3 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div>
+          <div class="text-[10px] text-slate-400 uppercase">Очки / Монеты</div>
+          <div id="gameScoreText" class="font-cs font-bold text-lg text-amber-400">0 ₽</div>
+        </div>
+        <div>
+          <div class="text-[10px] text-slate-400 uppercase">Жизни</div>
+          <div id="gameLivesText" class="text-base">❤️❤️❤️</div>
+        </div>
+      </div>
+      <button id="btnGameControl" onclick="toggleMiniGame()" class="px-4 py-2 rounded-xl bg-orange-500 text-black font-cs font-bold text-xs uppercase tracking-wider hover:brightness-110 active:scale-95 shadow-md">
+        Старт игры
+      </button>
+    </div>
+
+    <!-- Arcade Canvas -->
+    <div class="relative w-full aspect-[4/5] max-h-[380px] bg-slate-950 rounded-2xl border border-slate-800 overflow-hidden shadow-inner">
+      <canvas id="miniGameCanvas" class="w-full h-full block"></canvas>
+      <div id="gameOverlay" class="absolute inset-0 bg-black/70 backdrop-blur-xs flex flex-col items-center justify-center p-4 text-center">
+        <div class="text-4xl mb-2">🏃‍♂️🎒</div>
+        <div class="font-cs font-bold text-base text-white mb-1">Звонок на перемену!</div>
+        <p class="text-xs text-slate-400 mb-3 max-w-[220px]">Веди пальцем или стрелками влево-вправо, чтобы лутать баланс на скины!</p>
+        <button onclick="toggleMiniGame()" class="px-5 py-2.5 bg-orange-500 text-black rounded-xl font-cs font-bold text-xs uppercase">
+          Погнали!
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <!-- TAB 4: SCHOOL SHOP -->
+  <main id="viewShop" class="w-full px-4 mt-2 hidden space-y-3">
+    <div>
+      <h2 class="font-cs text-sm font-bold uppercase tracking-wider text-slate-200">Школьный Маркет & Буфет</h2>
+      <p class="text-[11px] text-slate-400">Покупай предметы школы для депов или продавай ненужное</p>
+    </div>
+
+    <!-- Instant Clicker -->
+    <div class="bg-gradient-to-br from-slate-900 to-slate-850 p-3.5 rounded-2xl border border-slate-800 flex items-center justify-between">
+      <div>
+        <span class="text-xs font-bold text-amber-400 uppercase tracking-wider">Стрельнуть мелочь</span>
+        <p class="text-[11px] text-slate-400">Быстрый кликер карманных денег</p>
+        <div class="text-xs text-slate-300 font-mono mt-0.5">+150 ₽ за каждый тап</div>
+      </div>
+      <button onclick="tapForMoney(event)" class="w-14 h-14 rounded-2xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 flex items-center justify-center text-3xl shadow-lg active:scale-90 transition select-none">
+        🥟
+      </button>
+    </div>
+
+    <div class="space-y-2">
+      <span class="text-xs font-bold text-slate-300 uppercase tracking-wider">Ассортимент школьных предметов</span>
+      <div id="shopList" class="space-y-2 max-h-[380px] overflow-y-auto pr-0.5"></div>
+    </div>
+  </main>
+
+  <!-- MODAL: PROFILE & REGISTRATION -->
+  <div id="profileModal" class="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center px-4 hidden">
+    <div class="bg-slate-900 border-2 border-orange-500/60 rounded-3xl p-5 max-w-sm w-full shadow-2xl relative">
+      <div class="flex items-center justify-between pb-2 mb-3 border-b border-slate-800">
+        <div class="flex items-center space-x-2">
+          <span class="text-orange-400 text-xl font-bold">👤</span>
+          <h3 id="profileModalTitle" class="font-cs text-sm font-bold uppercase text-white">Профиль игрока</h3>
+        </div>
+        <button onclick="closeProfileModal()" class="text-slate-400 hover:text-white text-lg">✕</button>
+      </div>
+
+      <!-- Registration Form (If guest) -->
+      <div id="profileRegisterView" class="space-y-3">
+        <p class="text-[11px] text-slate-300 leading-relaxed">
+          Создай профиль в <b class="text-orange-400">David Lite Studio</b>, чтобы сохранять прогресс инвентаря и получить <b>+1 500 ₽</b>!
+        </p>
+
+        <div>
+          <label class="text-[10px] text-slate-400 uppercase font-bold block mb-1">Выбери школьный аватар:</label>
+          <div class="flex justify-between p-1 bg-slate-950 rounded-xl border border-slate-800" id="avatarSelector">
+            <button type="button" onclick="selectRegAvatar('🎒')" class="w-9 h-9 rounded-lg text-lg flex items-center justify-center bg-orange-500/30 border border-orange-500">🎒</button>
+            <button type="button" onclick="selectRegAvatar('🕶️')" class="w-9 h-9 rounded-lg text-lg flex items-center justify-center bg-slate-850 hover:bg-slate-800">🕶️</button>
+            <button type="button" onclick="selectRegAvatar('👑')" class="w-9 h-9 rounded-lg text-lg flex items-center justify-center bg-slate-850 hover:bg-slate-800">👑</button>
+            <button type="button" onclick="selectRegAvatar('🧢')" class="w-9 h-9 rounded-lg text-lg flex items-center justify-center bg-slate-850 hover:bg-slate-800">🧢</button>
+            <button type="button" onclick="selectRegAvatar('🤖')" class="w-9 h-9 rounded-lg text-lg flex items-center justify-center bg-slate-850 hover:bg-slate-800">🤖</button>
+            <button type="button" onclick="selectRegAvatar('🍕')" class="w-9 h-9 rounded-lg text-lg flex items-center justify-center bg-slate-850 hover:bg-slate-800">🍕</button>
+          </div>
+        </div>
+
+        <div>
+          <label class="text-[10px] text-slate-400 uppercase font-bold block mb-1">Никнейм ученика:</label>
+          <input type="text" id="regNicknameInput" placeholder="Например: David_CS, Второгодник228" maxlength="18" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-orange-500">
+        </div>
+
+        <div>
+          <label class="text-[10px] text-slate-400 uppercase font-bold block mb-1">Твой класс (необязательно):</label>
+          <input type="text" id="regGradeInput" placeholder="Например: 7-Б класс" maxlength="15" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-orange-500">
+        </div>
+
+        <button onclick="submitRegistration()" class="w-full py-3 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-black font-cs font-bold text-xs uppercase tracking-wider shadow-lg active:scale-95 transition">
+          Зарегистрироваться (+1 500 ₽)
+        </button>
+      </div>
+
+      <!-- Logged In View -->
+      <div id="profileLoggedInView" class="space-y-3 hidden">
+        <div class="flex items-center space-x-3 bg-slate-950 p-3 rounded-2xl border border-slate-800">
+          <div id="profileViewAvatar" class="w-12 h-12 rounded-2xl bg-orange-500/20 border border-orange-500/50 flex items-center justify-center text-2xl shadow-inner">
+            🎒
+          </div>
+          <div>
+            <div id="profileViewNick" class="font-cs text-sm font-bold text-white leading-tight">Ученик</div>
+            <div id="profileViewGrade" class="text-[10px] text-slate-400">7-Б класс</div>
+            <span class="text-[9px] bg-emerald-500/20 text-emerald-300 font-bold px-1.5 py-0.5 rounded border border-emerald-500/30">Аккаунт подтвержден</span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2 text-center text-xs">
+          <div class="bg-slate-950 p-2 rounded-xl border border-slate-800">
+            <div class="text-[10px] text-slate-400">Предметов в сумке</div>
+            <div id="statItemCount" class="font-cs font-bold text-amber-400 text-sm">0</div>
+          </div>
+          <div class="bg-slate-950 p-2 rounded-xl border border-slate-800">
+            <div class="text-[10px] text-slate-400">Статус в школе</div>
+            <div id="statSchoolRank" class="font-cs font-bold text-emerald-400 text-sm">Любитель</div>
+          </div>
+        </div>
+
+        <button onclick="logoutProfile()" class="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 font-cs font-bold text-xs uppercase tracking-wider transition">
+          Сменить профиль
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: USER AGREEMENT & LEGAL INFO -->
+  <div id="termsModal" class="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center px-4 hidden">
+    <div class="bg-slate-900 border border-slate-700 rounded-3xl p-5 max-w-sm w-full shadow-2xl relative max-h-[85vh] flex flex-col">
+      <div class="flex items-center justify-between pb-2 mb-3 border-b border-slate-800">
+        <h3 class="font-cs text-sm font-bold uppercase text-white">Пользовательское соглашение</h3>
+        <button onclick="closeTermsModal()" class="text-slate-400 hover:text-white text-lg">✕</button>
+      </div>
+      <div class="overflow-y-auto pr-1 text-[11px] text-slate-300 space-y-2 leading-relaxed">
+        <p><b>1. Назначение проекта:</b> Веб-ресурс «ШКОЛА ДРОП» (shkoladrop.vercel.app) создан независимой студией <b>David Lite Studio</b> как сатирическая юмористическая браузерная видеоигра.</p>
+        <p><b>2. Отсутствие реальных денег:</b> Игровые рубли (₽) и монеты являются сугубо виртуальными баллами. На сайте <b>нет приема реальных платежей</b>, нет депозитов с банковских карт и нет вывода средств.</p>
+        <p><b>3. Авторские права:</b> Все товарные знаки Valve Corp, Mojang/Microsoft и Facepunch принадлежат их владельцам.</p>
+        <p><b>4. Возрастной рейтинг:</b> 12+ (Интерактивная развлекательная игра для школьников и фанатов мемов).</p>
+      </div>
+      <button onclick="closeTermsModal()" class="mt-3 w-full py-2 rounded-xl bg-orange-500 text-black font-cs font-bold text-xs uppercase">
+        Понятно
+      </button>
+    </div>
+  </div>
+
+  <!-- MODAL: SECRET ADMIN RIGGING PANEL (Активируется при ADMIN_ACCESS = 2) -->
+  <div id="adminModal" class="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center px-4 hidden">
+    <div class="bg-slate-900 border-2 border-red-500 rounded-3xl p-5 max-w-sm w-full shadow-2xl relative">
+      <div class="flex items-center justify-between pb-2 mb-3 border-b border-slate-800">
+        <div class="flex items-center space-x-2">
+          <span class="text-red-500 text-xl font-bold">⚙️</span>
+          <h3 class="font-cs text-sm font-bold uppercase text-red-400">Секретная Админка (Подкрутка)</h3>
+        </div>
+        <button onclick="closeAdminModal()" class="text-slate-400 hover:text-white">✕</button>
+      </div>
+
+      <p class="text-[11px] text-slate-300 mb-3">
+        Выбирай, как закончится следующий апгрейд рулетки:
+      </p>
+
+      <div class="space-y-2 mb-4 text-xs font-bold font-cs">
+        <button onclick="setRigMode('win')" id="rigWinBtn" class="w-full py-2.5 rounded-xl border border-emerald-500/50 bg-emerald-950/40 text-emerald-300 flex items-center justify-between px-3">
+          <span>🔥 ПОДКРУТКА: 100% ЗАНОС (WIN)</span>
+          <span id="rigWinCheck" class="text-emerald-400">✓</span>
+        </button>
+        <button onclick="setRigMode('near')" id="rigNearBtn" class="w-full py-2.5 rounded-xl border border-slate-800 bg-slate-950 text-slate-400 flex items-center justify-between px-3">
+          <span>💔 СЛИВ НА ВОЛОСКЕ (~0.1% ДО ПОБЕДЫ)</span>
+          <span id="rigNearCheck" class="hidden text-amber-400">✓</span>
+        </button>
+        <button onclick="setRigMode('lose')" id="rigLoseBtn" class="w-full py-2.5 rounded-xl border border-slate-800 bg-slate-950 text-slate-400 flex items-center justify-between px-3">
+          <span>💀 ОБЫЧНЫЙ СЛИВ (LOSE)</span>
+          <span id="rigLoseCheck" class="hidden text-rose-400">✓</span>
+        </button>
+        <button onclick="setRigMode('fair')" id="rigFairBtn" class="w-full py-2.5 rounded-xl border border-slate-800 bg-slate-950 text-slate-400 flex items-center justify-between px-3">
+          <span>🎲 ЧЕСТНЫЙ РАНДОМ (FAIR)</span>
+          <span id="rigFairCheck" class="hidden text-amber-400">✓</span>
+        </button>
+      </div>
+
+      <div class="pt-2 border-t border-slate-800">
+        <label class="text-[11px] text-slate-400 block mb-1">Выдать карманные деньги админа:</label>
+        <div class="grid grid-cols-2 gap-2">
+          <button onclick="adminAddMoney(50000)" class="py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-bold">+50 000 ₽</button>
+          <button onclick="adminAddMoney(1000000)" class="py-1.5 rounded-lg bg-amber-500 text-black text-xs font-bold font-cs">+1 000 000 ₽</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: ITEM PICKER -->
+  <div id="itemModal" class="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex flex-col justify-end hidden transition duration-200">
+    <div class="bg-slate-900 border-t border-slate-700 rounded-t-3xl max-h-[85vh] flex flex-col w-full max-w-md mx-auto p-4">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div>
+          <h3 id="modalTitle" class="font-cs text-sm font-bold uppercase tracking-wider text-white">Выбор предмета</h3>
+          <p id="modalSubtitle" class="text-[10px] text-slate-400">Нажми на нужный предмет</p>
+        </div>
+        <button onclick="closeItemModal()" class="w-8 h-8 rounded-full bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center text-sm font-bold">
+          ✕
+        </button>
+      </div>
+
+      <!-- Categories Filter for Target selection -->
+      <div id="targetCategoryFilters" class="flex space-x-1.5 py-2 overflow-x-auto text-xs hidden">
+        <button onclick="setTargetCategory('all')" id="tgtCatAll" class="px-2 py-0.5 rounded-lg bg-cyan-500 text-black font-bold whitespace-nowrap">Все цели</button>
+        <button onclick="setTargetCategory('cs2')" id="tgtCatCs2" class="px-2 py-0.5 rounded-lg bg-slate-800 text-slate-400 whitespace-nowrap">CS2</button>
+        <button onclick="setTargetCategory('school')" id="tgtCatSchool" class="px-2 py-0.5 rounded-lg bg-slate-800 text-slate-400 whitespace-nowrap">Школа</button>
+        <button onclick="setTargetCategory('other')" id="tgtCatOther" class="px-2 py-0.5 rounded-lg bg-slate-800 text-slate-400 whitespace-nowrap">Minecraft / Dota / Rust</button>
+      </div>
+
+      <div class="py-1">
+        <input type="text" id="modalSearchInput" oninput="filterModalItems()" placeholder="Поиск по названию..." class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-orange-500">
+      </div>
+
+      <div id="modalItemsGrid" class="grid grid-cols-2 gap-2 overflow-y-auto max-h-[48vh] py-1"></div>
+    </div>
+  </div>
+
+  <!-- RESULT OVERLAY MODAL -->
+  <div id="resultOverlay" class="fixed inset-0 z-50 pointer-events-none flex items-center justify-center px-5 transition duration-300 opacity-0 scale-95">
+    <div id="resultCard" class="w-full max-w-sm rounded-3xl p-6 text-center shadow-2xl border backdrop-blur-xl pointer-events-auto flex flex-col items-center">
+      <div id="resultIconBox" class="w-20 h-20 rounded-2xl flex items-center justify-center mb-2 shadow-xl border"></div>
+      <h3 id="resultHeading" class="font-cs text-2xl font-bold uppercase tracking-wider mb-1">УСПЕХ!</h3>
+      <p id="resultText" class="text-xs text-slate-300 mb-4">Ты успешно апнул школу в топовый скин!</p>
+      
+      <div id="resultItemBox" class="w-full bg-slate-950/70 rounded-xl p-3 border border-slate-800 flex items-center space-x-3 mb-4"></div>
+      
+      <button onclick="closeResultOverlay()" class="w-full py-3 rounded-xl font-cs font-bold text-xs uppercase tracking-wider bg-orange-500 text-black hover:brightness-110 active:scale-95 transition shadow-lg">
+        Забрать и продолжить
+      </button>
+    </div>
+  </div>
+
+  <!-- MODAL: WELCOME / SITE DISCLAIMER -->
+  <div id="welcomeDisclaimerModal" class="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center px-4 transition-opacity duration-300">
+    <div class="bg-slate-900 border border-orange-500/40 rounded-3xl p-5 max-w-sm w-full text-center shadow-2xl relative">
+      <div class="w-14 h-14 mx-auto rounded-2xl bg-orange-500/20 border border-orange-500/40 flex items-center justify-center text-3xl mb-3 shadow-lg">
+        🎒⚡
+      </div>
+      <h3 class="font-cs text-lg font-bold uppercase text-white mb-1">ШКОЛА ДРОП by David Lite</h3>
+      <div class="text-[10px] text-orange-400 font-mono mb-2">shkoladrop.vercel.app</div>
+      <div class="bg-slate-950/80 border border-slate-800 rounded-xl p-3 text-xs text-slate-300 text-left space-y-2 mb-4">
+        <p class="text-amber-400 font-medium">
+          ⚠️ <b>Официальное уведомление для игроков:</b>
+        </p>
+        <p class="text-[11px] leading-relaxed text-slate-300">
+          Данный сервис является <b>некоммерческим игровым симулятором</b>. Скины и монеты являются виртуальными очками.
+        </p>
+        <p class="text-[11px] leading-relaxed text-emerald-400 font-medium">
+          ✅ Честный рандом, сохранение профиля в браузере, кейсы и апгрейды без реального доната!
+        </p>
+      </div>
+      <button onclick="closeWelcomeDisclaimer()" class="w-full py-3 rounded-xl font-cs font-bold text-xs uppercase tracking-wider bg-gradient-to-r from-orange-500 to-amber-500 text-black shadow-lg shadow-orange-500/30 hover:brightness-110 active:scale-95 transition">
+        Понятно, погнали играть! 🚀
+      </button>
+    </div>
+  </div>
+
+  <!-- ОФИЦИАЛЬНЫЙ ФУТЕР, ЮРИДИЧЕСКИЙ ДИСКЛЕЙМЕР И КОНТАКТЫ СТУДИИ -->
+  <footer class="w-full px-4 py-6 mt-8 border-t border-slate-800/80 bg-slate-950 text-center space-y-3.5">
+    
+    <!-- Плашка студии разработчиков -->
+    <div class="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-slate-900 border border-slate-800 text-[10px] text-slate-400">
+      <span>🚀</span>
+      <span>Разработано инди-студией <b>David Lite Studio</b> & ShkolaDrop Team</span>
+    </div>
+
+    <!-- Быстрые юридические ссылки -->
+    <div class="flex justify-center space-x-3 text-[10px] text-orange-400">
+      <button onclick="openTermsModal()" class="hover:underline">Пользовательское соглашение</button>
+      <span>•</span>
+      <button onclick="openProfileModal()" class="hover:underline">Личный кабинет</button>
+    </div>
+
+    <!-- Полный отказ от ответственности и подтверждение некоммерческого статуса -->
+    <div class="text-[10px] text-slate-400 leading-relaxed text-left bg-slate-900/60 p-3.5 rounded-2xl border border-slate-800/70 space-y-2">
+      <div class="font-bold text-slate-300 uppercase tracking-wide text-[9px] flex items-center space-x-1.5">
+        <span>⚖️</span>
+        <span>Отказ от ответственности и товарные знаки:</span>
+      </div>
+      <p class="text-[9.5px] leading-normal text-slate-400">
+        Веб-проект «ШКОЛА ДРОП» (shkoladrop.vercel.app) от <b>David Lite Studio</b> является исключительно <b>некоммерческим фановым симулятором</b> и сатирической интерактивной игрой. Проект не осуществляет азартных игр, лотерей или приема финансовых средств. Все внутриигровые ценности являются виртуальными и не подлежат монетизации.
+      </p>
+      <ul class="list-disc list-inside text-[9px] text-slate-400 space-y-0.5 pl-1">
+        <li><b>Google LLC</b> и проекту <b>Gemini AI</b>;</li>
+        <li><b>Valve Corporation</b> (Counter-Strike 2, Dota 2, TF2);</li>
+        <li><b>Mojang Studios / Microsoft Corporation</b> (Minecraft);</li>
+        <li><b>Facepunch Studios</b> (Rust).</li>
+      </ul>
+    </div>
+
+    <!-- Блок связи для правообладателей и идей игроков -->
+    <div class="bg-gradient-to-br from-slate-900 via-slate-900 to-slate-850 p-3.5 rounded-2xl border border-slate-800 text-left space-y-2">
+      <div class="flex items-center justify-between">
+        <div class="text-[11px] font-bold text-amber-400 uppercase tracking-wider flex items-center space-x-1">
+          <span>📬</span>
+          <span>Официальный контакт студии</span>
+        </div>
+        <span class="text-[9px] px-2 py-0.5 bg-slate-800 text-slate-300 rounded font-mono">SUPPORT & DMCA</span>
+      </div>
+      
+      <p class="text-[10px] text-slate-300 leading-normal">
+        По вопросам авторских прав, предложений и сотрудничества пишите разработчику напрямую:
+      </p>
+
+      <!-- Интерактивная плашка почты с возможностью копирования -->
+      <div class="pt-1 flex items-center justify-between bg-slate-950 p-2.5 rounded-xl border border-slate-800">
+        <div class="flex items-center space-x-2 overflow-hidden">
+          <span class="text-base">✉️</span>
+          <a id="projectContactEmail" href="mailto:shkoladrop.contact@gmail.com" class="text-xs font-mono font-bold text-orange-400 hover:underline truncate">
+            shkoladrop.contact@gmail.com
+          </a>
+        </div>
+        <button onclick="copyContactEmail()" id="btnCopyEmail" class="flex-shrink-0 ml-2 px-2.5 py-1 text-[10px] font-bold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition active:scale-95">
+          Скопировать
+        </button>
+      </div>
+    </div>
+
+    <div class="text-[9px] text-slate-600">
+      © David Lite Studio / ШКОЛА ДРОП, 2026. Все права на упоминаемые видеоигры принадлежат их законным правообладателям.
+    </div>
+  </footer>
+
+  <!-- JAVASCRIPT GAME LOGIC -->
+  <script>
+    const ADMIN_ACCESS = 1;
+
+    function copyContactEmail() {
+      const emailElem = document.getElementById('projectContactEmail');
+      const emailText = emailElem ? emailElem.innerText.trim() : 'shkoladrop.contact@gmail.com';
+      navigator.clipboard.writeText(emailText).then(() => {
+        const btn = document.getElementById('btnCopyEmail');
+        if (btn) {
+          const prevText = btn.innerText;
+          btn.innerText = 'Скопировано! ✓';
+          btn.classList.add('text-emerald-400');
+          setTimeout(() => {
+            btn.innerText = prevText;
+            btn.classList.remove('text-emerald-400');
+          }, 2000);
+        }
+      }).catch(() => {
+        alert('Почта для связи: ' + emailText);
+      });
+    }
+
+    class SoundEngine {
+      constructor() {
+        this.ctx = null;
+      }
+      init() {
+        if (!this.ctx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          if (AudioContext) this.ctx = new AudioContext();
+        }
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      }
+      playTick() {
+        if (!this.ctx) return;
+        try {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(440, this.ctx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(120, this.ctx.currentTime + 0.025);
+          gain.gain.setValueAtTime(0.08, this.ctx.currentTime);
+          gain.gain.linearRampToValueAtTime(0.001, this.ctx.currentTime + 0.025);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start();
+          osc.stop(this.ctx.currentTime + 0.025);
+        } catch(e){}
+      }
+      playWin() {
+        if (!this.ctx) return;
+        try {
+          const freqs = [523.25, 659.25, 783.99, 1046.50, 1318.51];
+          freqs.forEach((f, i) => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(f, this.ctx.currentTime + i * 0.07);
+            gain.gain.setValueAtTime(0.18, this.ctx.currentTime + i * 0.07);
+            gain.gain.linearRampToValueAtTime(0.001, this.ctx.currentTime + i * 0.07 + 0.35);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(this.ctx.currentTime + i * 0.07);
+            osc.stop(this.ctx.currentTime + i * 0.07 + 0.38);
+          });
+        } catch(e){}
+      }
+      playLoss() {
+        if (!this.ctx) return;
+        try {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(260, this.ctx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(55, this.ctx.currentTime + 0.4);
+          gain.gain.setValueAtTime(0.18, this.ctx.currentTime);
+          gain.gain.linearRampToValueAtTime(0.001, this.ctx.currentTime + 0.4);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start();
+          osc.stop(this.ctx.currentTime + 0.42);
+        } catch(e){}
+      }
+      playCoin() {
+        if (!this.ctx) return;
+        try {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(987, this.ctx.currentTime);
+          osc.frequency.setValueAtTime(1318, this.ctx.currentTime + 0.05);
+          gain.gain.setValueAtTime(0.12, this.ctx.currentTime);
+          gain.gain.linearRampToValueAtTime(0.001, this.ctx.currentTime + 0.18);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start();
+          osc.stop(this.ctx.currentTime + 0.18);
+        } catch(e){}
+      }
+    }
+    const audio = new SoundEngine();
+
+    const RARITIES = {
+      consumer: { name: 'Ширпотреб', color: '#b0c3d9', bg: 'rgba(176, 195, 217, 0.12)' },
+      milspec: { name: 'Армейское', color: '#4b69ff', bg: 'rgba(75, 105, 255, 0.12)' },
+      restricted: { name: 'Запрещенное', color: '#8847ff', bg: 'rgba(136, 71, 255, 0.12)' },
+      classified: { name: 'Засекреченное', color: '#d32ce6', bg: 'rgba(211, 44, 230, 0.12)' },
+      covert: { name: 'Тайное', color: '#eb4b4b', bg: 'rgba(235, 75, 75, 0.18)' },
+      gold: { name: '★ Чрезвычайно редкое', color: '#ffd700', bg: 'rgba(255, 215, 0, 0.22)' }
+    };
+
+    const SCHOOL_CATALOG = [
+      { id: 'sch_bad_grade', name: 'Двойка в электронном дневнике', price: 60, icon: '📝', badgeBg: 'from-rose-600/30 to-red-900/40', rarity: 'consumer', category: 'school', desc: 'Мама уже увидела пуш-уведомление' },
+      { id: 'sch_cold_cutlet', name: 'Холодная котлета в тесте', price: 150, icon: '🥟', badgeBg: 'from-amber-600/30 to-yellow-900/40', rarity: 'consumer', category: 'school', desc: 'Легендарный буфетный деликатес' },
+      { id: 'sch_chewed_pen', name: 'Погрызанная синяя ручка', price: 300, icon: '🖊️', badgeBg: 'from-blue-600/30 to-indigo-900/40', rarity: 'milspec', category: 'school', desc: 'Без колпачка, течет прямо на пальцы' },
+      { id: 'sch_eraser', name: 'Ластик с дыркой от циркуля', price: 500, icon: '🧼', badgeBg: 'from-cyan-600/30 to-blue-900/40', rarity: 'milspec', category: 'school', desc: 'Служил мишенью на всех уроках геометрии' },
+      { id: 'sch_diary_note', name: 'Замечание красной пастой', price: 850, icon: '📕', badgeBg: 'from-red-600/30 to-rose-900/40', rarity: 'milspec', category: 'school', desc: '«Бегал по парте и кидался ластиками»' },
+      { id: 'sch_ruler_wood', name: 'Разбитая деревянная линейка', price: 1200, icon: '📏', badgeBg: 'from-amber-700/30 to-amber-900/40', rarity: 'milspec', category: 'school', desc: 'Использовалась как меч на перемене' },
+      { id: 'sch_chalk', name: 'Коробка цветного мела', price: 1800, icon: '🖍️', badgeBg: 'from-purple-600/30 to-indigo-900/40', rarity: 'restricted', category: 'school', desc: 'Стырено из учительской на перемене' },
+      { id: 'sch_cheat_sheet', name: 'Шпаргалка под часами на руке', price: 2900, icon: '📜', badgeBg: 'from-violet-600/30 to-fuchsia-900/40', rarity: 'restricted', category: 'school', desc: 'Спасет на контрольной по химии' },
+      { id: 'sch_phys_teacher', name: 'Злая учительница физики', price: 4500, icon: '👩‍🏫', badgeBg: 'from-fuchsia-600/30 to-purple-900/40', rarity: 'restricted', category: 'school', desc: '«Звонок звенит для учителя, сидим!»' },
+      { id: 'sch_trudovik', name: 'Трудовик с напильником', price: 7500, icon: '🧔🔧', badgeBg: 'from-amber-600/40 to-stone-900/40', rarity: 'restricted', category: 'school', desc: 'Учит пилить табуретку строго по ГОСТу' },
+      { id: 'sch_parent_meet', name: 'Экстренное собрание родителей', price: 12000, icon: '🤬', badgeBg: 'from-pink-600/30 to-red-950/40', rarity: 'classified', category: 'school', desc: 'Дома ждет жесткий разговор' },
+      { id: 'sch_gym_shoes', name: 'Забытая сменка с физры', price: 28000, icon: '👟', badgeBg: 'from-emerald-600/30 to-teal-900/40', rarity: 'classified', category: 'school', desc: 'Пролежала в раздевалке с сентября' },
+      { id: 'sch_medal_sport', name: 'Кубок за победу в эстафете', price: 45000, icon: '🏆', badgeBg: 'from-yellow-500/30 to-amber-700/40', rarity: 'classified', category: 'school', desc: 'Стоит в стеклянном шкафу у входа' },
+      { id: 'sch_gold_medal', name: 'Школьная золотая медаль', price: 75000, icon: '🥇', badgeBg: 'from-amber-400/40 to-yellow-600/30', rarity: 'covert', category: 'school', desc: 'Гордость всей параллели' },
+      { id: 'sch_red_diploma', name: 'Красный аттестат с отличием', price: 140000, icon: '📜✨', badgeBg: 'from-rose-500/40 to-red-800/40', rarity: 'covert', category: 'school', desc: 'Все 5.00 в табеле' },
+      { id: 'sch_director_office', name: 'Кабинет директора с завучем', price: 220000, icon: '🏢', badgeBg: 'from-red-500/40 to-amber-700/30', rarity: 'covert', category: 'school', desc: 'Там решается судьба твоего аттестата' },
+      { id: 'sch_entire_school', name: 'ШКОЛА №1337 ЦЕЛИКОМ', price: 650000, icon: '🏫', badgeBg: 'from-yellow-400/40 to-orange-600/40', rarity: 'gold', category: 'school', desc: 'Со всеми 11 классами и столовой' },
+      { id: 'sch_golden_diary', name: 'Дневник отличника (Только 5+)', price: 999999, icon: '⭐', badgeBg: 'from-amber-300/50 to-yellow-500/50', rarity: 'gold', category: 'school', desc: 'Супер-редкий секретный лут из Тайника Завуча!' }
+    ];
+
+    const CS2_CATALOG = [
+      { id: 'cs_p250_sand', name: 'P250 | Песчаная буря', price: 110, icon: '🔫', img: 'https://community.cloudflare.steamstatic.com/economy/image/-9a81dlWLwJ2UUGcVs_nsVtzdOEdtWwKGZZLQHTxDZ7I56KU0Zwwo4NUX4oFJZEHLbXH5ApeO4YmlhxYQknCRvCo04DEVlxkKgpopujwezhoyszMdTRH_8i_k4WIkuPzNrfum25V4dB8xLvF8d6s2wXnqkdoZmv7d9fDcwI7YFGB-VTtye3mgpPu7Z_Mm3BkupN2-z-DyP2rGkYQ/200fx200f', rarity: 'consumer', category: 'cs2', wear: 'После полевых' },
+      { id: 'cs_usp_torque', name: 'USP-S | Закрученный', price: 420, icon: '🔫', img: 'https://community.cloudflare.steamstatic.com/economy/image/-9a81dlWLwJ2UUGcVs_nsVtzdOEdtWwKGZZLQHTxDZ7I56KU0Zwwo4NUX4oFJZEHLbXH5ApeO4YmlhxYQknCRvCo04DEVlxkKgpoo6m1FBRp3_bGcjhQ09-jq5WYh8j3KqnUjlRd4cJ5nqeWpI-g3Qe3r0s6ZTzzcNXAcwY5aArY8gXtx-rt05S-uZ7Nz3I2vCYr5Hnayxe0iB1POLE7gvCACQLJxH0Gf_4/200fx200f', rarity: 'milspec', category: 'cs2', wear: 'Прямо с завода' },
+      { id: 'cs_glock_water', name: 'Glock-18 | Водяной элементаль', price: 1350, icon: '🔫', img: 'https://community.cloudflare.steamstatic.com/economy/image/-9a81dlWLwJ2UUGcVs_nsVtzdOEdtWwKGZZLQHTxDZ7I56KU0Zwwo4NUX4oFJZEHLbXH5ApeO4YmlhxYQknCRvCo04DEVlxkKgposbaqKAxf0v73fyhB4Nm3hr-Yksj4OrzZgiVT68ch2b-R896s0Vfs8kZsYTzzLIWRcgc9MFCD-wLtxum805646svMynJk6yV2-z-DyD-Vq0jC/200fx200f', rarity: 'restricted', category: 'cs2', wear: 'Немного поношенное' },
+      { id: 'cs_m4a4_buzz', name: 'M4A4 | Дозор смерти', price: 3400, icon: '🔫', img: 'https://community.cloudflare.steamstatic.com/economy/image/-9a81dlWLwJ2UUGcVs_nsVtzdOEdtWwKGZZLQHTxDZ7I56KU0Zwwo4NUX4oFJZEHLbXH5ApeO4YmlhxYQknCRvCo04DEVlxkKgpou-6kejhz2v_Nfz5H_uO1gb-Gw_alIITBhGJf_NZlmOzA-LP5gVO8v11sYm2nLY6Vd1Q3Yl6D-li3kunp0Me4tJqfznBhvnZ35S6IzBfhn1gSOaOaU4gC/200fx200f', rarity: 'classified', category: 'cs2', wear: 'Прямо с завода' },
+      { id: 'cs_ak_slate', name: 'AK-47 | Сланец', price: 5200, icon: '🔫', img: 'https://community.cloudflare.steamstatic.com/economy/image/-9a81dlWLwJ2UUGcVs_nsVtzdOEdtWwKGZZLQHTxDZ7I56KU0Zwwo4NUX4oFJZEHLbXH5ApeO4YmlhxYQknCRvCo04DEVlxkKgpot7HxfDhjxszJemkV08y5nY6fqPP9ILrDhGpI18h0juDU-MKmigXm-0Y6MW7yJoecJwBoNFzUrwLskem9jZW8vZzNmnUyuXUmsH-ImkG20hoYbeFxxavJ7sM84e8/200fx200f', rarity: 'restricted', category: 'cs2', wear: 'Прямо с завода' },
+      { id: 'cs_awp_asiimov', name: 'AWP | Азимов', price: 21000, icon: '🎯', img: 'https://community.cloudflare.steamstatic.com/economy/image/-9a81dlWLwJ2UUGcVs_nsVtzdOEdtWwKGZZLQHTxDZ7I56KU0Zwwo4NUX4oFJZEHLbXH5ApeO4YmlhxYQknCRvCo04DEVlxkKgpot621FAR17PLfYQJD_9W7m5a0n_L1JaKfzzoGuMlOpu-Voo-h2Qzk-UtvNTr6dYfBeg9sYl7TrQC3wbvth5O1vM7NzyMyu3Nw-z-DyHOx4mF6/200fx200f', rarity: 'classified', category: 'cs2', wear: 'После полевых' },
+      { id: 'cs_ak_vulcan', name: 'AK-47 | Вулкан', price: 46000, icon: '🔫', img: 'https://community.cloudflare.steamstatic.com/economy/image/-9a81dlWLwJ2UUGcVs_nsVtzdOEdtWwKGZZLQHTxDZ7I56KU0Zwwo4NUX4oFJZEHLbXH5ApeO4YmlhxYQknCRvCo04DEVlxkKgpot7HxfDhjxszJemkV08-5lpKKqPrxN7LEmyVQ7MEpiLuSrYmnjQO3-UdsZGHyd4_BdwE2aVCE_VO8k-fs18W76pnInCRr7ygl4WGlm0OxiB5SLrs4vW4Qz8A/200fx200f', rarity: 'covert', category: 'cs2', wear: 'Немного поношенное' },
+      { id: 'cs_karambit_fade', name: '★ Керамбит | Градиент', price: 175000, icon: '🔪', img: 'https://community.cloudflare.steamstatic.com/economy/image/-9a81dlWLwJ2UUGcVs_nsVtzdOEdtWwKGZZLQHTxDZ7I56KU0Zwwo4NUX4oFJZEHLbXH5ApeO4YmlhxYQknCRvCo04DEVlxkKgpovbss3vTxfqvmZDpx79b5hoWYg8j5Nr_Yg2YfucFw2r-Vp92j21C2_kE-Z2-hLYaTIwU6NFCE_AK6xOq-gMe86cjLnCRrvCl2-z-DyI4j2d37/200fx200f', rarity: 'gold', category: 'cs2', wear: 'Прямо с завода' },
+      { id: 'cs_butterfly_lore', name: '★ Нож-бабочка | Легенды', price: 380000, icon: '🦋', img: 'https://community.cloudflare.steamstatic.com/economy/image/-9a81dlWLwJ2UUGcVs_nsVtzdOEdtWwKGZZLQHTxDZ7I56KU0Zwwo4NUX4oFJZEHLbXH5ApeO4YmlhxYQknCRvCo04DEVlxkKgpovbss3vTxfqzgfD595MWkgoWOh-PnJr7um25V4dB8xOiW8Nug2Ffm_EU-Z2vzdoCRdlA2Y1DXrFHrk-rnh8ftu5icmHFivSMr53fYmEezg0lPbeFxxavJd6N3b8Y/200fx200f', rarity: 'gold', category: 'cs2', wear: 'Прямо с завода' },
+      { id: 'cs_awp_dlore', name: 'AWP | История о драконе', price: 890000, icon: '🐉', img: 'https://community.cloudflare.steamstatic.com/economy/image/-9a81dlWLwJ2UUGcVs_nsVtzdOEdtWwKGZZLQHTxDZ7I56KU0Zwwo4NUX4oFJZEHLbXH5ApeO4YmlhxYQknCRvCo04DEVlxkKgpot621FAR17P7NdTRH-t26q4SZlvD7PYTQgXtu5Mx2gv2PoI-n3wDk_hY6YmCiI9CRdQc8NVyBqVW8x-zphZC-us_MmnNmv3Yn-z-DyCGv77-B/200fx200f', rarity: 'gold', category: 'cs2', wear: 'Прямо с завода' },
+      { id: 'cs_m4_howl', name: 'M4A4 | Вой (StatTrak)', price: 1450000, icon: '🐺', img: 'https://community.cloudflare.steamstatic.com/economy/image/-9a81dlWLwJ2UUGcVs_nsVtzdOEdtWwKGZZLQHTxDZ7I56KU0Zwwo4NUX4oFJZEHLbXH5ApeO4YmlhxYQknCRvCo04DEVlxkKgpou-6kejhz2v_Nfz5H_uO1gb-Gw_alIITBhGJf_NZlmOzA-LP5gVO8v11sYm2nLY6Vd1Q3Yl6D-li3kunp0Me4tJqfznBhvnZ35S6IzBfhn1gSOaOaU4gC/200fx200f', rarity: 'covert', category: 'cs2', wear: 'Прямо с завода' }
+    ];
+
+    const OTHER_GAMES_CATALOG = [
+      { id: 'gm_mc_pickaxe', name: 'Алмазная кирка (Удача III)', price: 1400, icon: '⛏️', badgeBg: 'from-cyan-500/40 to-blue-900/50', rarity: 'milspec', category: 'other', game: 'Minecraft', desc: 'Добывает обсидиан за считанные секунды' },
+      { id: 'gm_mc_apple', name: 'Зачарованное золотое яблоко', price: 9500, icon: '🍏✨', badgeBg: 'from-amber-400/40 to-yellow-600/50', rarity: 'restricted', category: 'other', game: 'Minecraft', desc: 'Дает регенерацию V и огнестойкость' },
+      { id: 'gm_mc_sword', name: 'Незеритовый меч (Острота V)', price: 32000, icon: '🗡️', badgeBg: 'from-slate-700/50 to-neutral-900/60', rarity: 'classified', category: 'other', game: 'Minecraft', desc: 'Урон по боссам на максималках' },
+      { id: 'gm_rust_ak', name: 'Штурмовая винтовка (Калаш)', price: 8200, icon: '💥', badgeBg: 'from-orange-700/40 to-stone-900/50', rarity: 'restricted', category: 'other', game: 'Rust', desc: 'С зажимом на 100 метров' },
+      { id: 'gm_rust_c4', name: 'С4 (Взрывчатка с таймером)', price: 24000, icon: '💣', badgeBg: 'from-red-600/40 to-stone-950/60', rarity: 'classified', category: 'other', game: 'Rust', desc: 'Сносит любую железную стену' },
+      { id: 'gm_dota_arcana', name: 'Manifold Paradox (PA Arcana)', price: 42000, icon: '⚔️', badgeBg: 'from-teal-500/40 to-cyan-900/50', rarity: 'covert', category: 'other', game: 'Dota 2', desc: 'Клинки Мортред с кровавым следом' },
+      { id: 'gm_dota_hook', name: 'Dragonclaw Hook (Pudge)', price: 320000, icon: '🪝', badgeBg: 'from-amber-600/40 to-stone-900/50', rarity: 'gold', category: 'other', game: 'Dota 2', desc: 'Легендарный хук из костей дракона' },
+      { id: 'gm_tf2_unusual', name: 'Burning Flames Team Captain', price: 540000, icon: '🔥👑', badgeBg: 'from-orange-500/40 to-red-900/50', rarity: 'gold', category: 'other', game: 'TF2', desc: 'Король всех Unusual шапок Team Fortress' }
+    ];
+
+    const ALL_MASTER_ITEMS = [...SCHOOL_CATALOG, ...CS2_CATALOG, ...OTHER_GAMES_CATALOG];
+
+    const CASES_LIST = [
+      {
+        id: 'case_penal',
+        name: 'Пенал отличника',
+        price: 90,
+        icon: '✏️',
+        desc: 'Ручки, ластики и первые двойки',
+        items: ['sch_bad_grade', 'sch_cold_cutlet', 'sch_chewed_pen', 'sch_eraser']
+      },
+      {
+        id: 'case_breakfast',
+        name: 'Завтрак второгодника',
+        price: 250,
+        icon: '🥪',
+        desc: 'Котлеты, булки и погрызанные ручки',
+        items: ['sch_cold_cutlet', 'sch_chewed_pen', 'sch_eraser', 'sch_diary_note']
+      },
+      {
+        id: 'case_rusichka',
+        name: 'Гнев русички',
+        price: 1500,
+        icon: '📚',
+        desc: 'Замечания, мел, шпоры и злые учителя',
+        items: ['sch_diary_note', 'sch_ruler_wood', 'sch_chalk', 'sch_cheat_sheet', 'sch_phys_teacher']
+      },
+      {
+        id: 'case_trud',
+        name: 'Подвал трудовика',
+        price: 5500,
+        icon: '🪚',
+        desc: 'Линейки, табуретки, трудовик и забытая сменка',
+        items: ['sch_ruler_wood', 'sch_phys_teacher', 'sch_trudovik', 'sch_gym_shoes']
+      },
+      {
+        id: 'case_director',
+        name: 'Сейф директора',
+        price: 15000,
+        icon: '💼',
+        desc: 'Сменка, родительские собрания и медали',
+        items: ['sch_parent_meet', 'sch_gym_shoes', 'sch_medal_sport', 'sch_gold_medal', 'sch_director_office']
+      },
+      {
+        id: 'case_attestat',
+        name: 'Аттестат с отличием',
+        price: 45000,
+        icon: '🎓',
+        desc: 'Медали, кубки, красный диплом и директор',
+        items: ['sch_medal_sport', 'sch_gold_medal', 'sch_red_diploma', 'sch_director_office']
+      },
+      {
+        id: 'case_legend',
+        name: 'Тайник завуча №1337',
+        price: 120000,
+        icon: '👑',
+        desc: 'Школа целиком и секретный Золотой Дневник!',
+        items: ['sch_red_diploma', 'sch_director_office', 'sch_entire_school', 'sch_golden_diary']
+      }
+    ];
+
+    let selectedCase = CASES_LIST[1];
+    let isOpeningCase = false;
+    let targetFilterCategory = 'all';
+
+    function renderItemMedia(item, sizeClass = 'w-12 h-12 text-3xl') {
+      const rarity = RARITIES[item.rarity] || RARITIES.consumer;
+      if (item.img) {
+        return `
+          <div class="${sizeClass} rounded-2xl overflow-hidden flex items-center justify-center p-1 relative shadow-inner" style="background:${rarity.bg}; border: 1.5px solid ${rarity.color}88">
+            <img src="${item.img}" alt="${item.name}" class="w-full h-full object-contain filter drop-shadow-md" 
+              onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+            <div style="display:none;" class="w-full h-full items-center justify-center text-2xl font-bold">
+              ${item.icon || '🔫'}
+            </div>
+          </div>
+        `;
+      }
+      const gradient = item.badgeBg || 'from-slate-700 to-slate-900';
+      return `
+        <div class="${sizeClass} rounded-2xl bg-gradient-to-br ${gradient} flex items-center justify-center relative shadow-lg transition-transform" style="border: 1.5px solid ${rarity.color}88; box-shadow: inset 0 0 12px ${rarity.color}33">
+          <span class="filter drop-shadow-[0_2px_8px_rgba(0,0,0,0.7)] select-none transform hover:scale-110 transition">${item.icon}</span>
+        </div>
+      `;
+    }
+
+    let state = {
+      balance: 2000,
+      inventory: [
+        { ...SCHOOL_CATALOG[0], uid: 'init_1' },
+        { ...SCHOOL_CATALOG[1], uid: 'init_2' },
+        { ...SCHOOL_CATALOG[2], uid: 'init_3' },
+        { ...SCHOOL_CATALOG[4], uid: 'init_4' },
+      ],
+      user: null, // { nick: 'David', avatar: '🎒', grade: '7-Б' }
+      selectedSchoolItem: null,
+      selectedTargetItem: null,
+      rollDirection: 'under',
+      isRolling: false,
+      currentAngle: 0,
+      activeModalType: null,
+      currentFilter: 'all',
+      rigMode: 'fair',
+      adminClicks: 0,
+      tempRegAvatar: '🎒',
+    };
+
+    try {
+      const saved = localStorage.getItem('shkola_drop_save_v7');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        state.balance = parsed.balance ?? 2000;
+        state.inventory = parsed.inventory ?? state.inventory;
+        state.user = parsed.user ?? null;
+      }
+    } catch(e){}
+
+    function saveState() {
+      try {
+        localStorage.setItem('shkola_drop_save_v7', JSON.stringify({
+          balance: state.balance,
+          inventory: state.inventory,
+          user: state.user,
+        }));
+      } catch(e){}
+    }
+
+    state.selectedSchoolItem = state.inventory[0] || null;
+    state.selectedTargetItem = CS2_CATALOG[1];
+
+    // --- Система Профиля и Регистрации ---
+    function openProfileModal() {
+      audio.init();
+      audio.playTick();
+      const modal = document.getElementById('profileModal');
+      const regView = document.getElementById('profileRegisterView');
+      const logView = document.getElementById('profileLoggedInView');
+      const title = document.getElementById('profileModalTitle');
+
+      if (!state.user) {
+        title.innerText = 'Создание профиля ученика';
+        regView.classList.remove('hidden');
+        logView.classList.add('hidden');
+      } else {
+        title.innerText = 'Личный кабинет';
+        regView.classList.add('hidden');
+        logView.classList.remove('hidden');
+
+        document.getElementById('profileViewAvatar').innerText = state.user.avatar || '🎒';
+        document.getElementById('profileViewNick').innerText = state.user.nick;
+        document.getElementById('profileViewGrade').innerText = state.user.grade || 'Свободный слушатель';
+        document.getElementById('statItemCount').innerText = state.inventory.length;
+
+        let totalValue = 0;
+        state.inventory.forEach(i => totalValue += i.price);
+        document.getElementById('statSchoolRank').innerText = totalValue > 100000 ? 'Гроза школы' : (totalValue > 10000 ? 'Староста' : 'Любитель');
+      }
+
+      modal.classList.remove('hidden');
+    }
+
+    function closeProfileModal() {
+      document.getElementById('profileModal').classList.add('hidden');
+    }
+
+    function selectRegAvatar(emoji) {
+      state.tempRegAvatar = emoji;
+      const btns = document.querySelectorAll('#avatarSelector button');
+      btns.forEach(b => {
+        if (b.innerText === emoji) {
+          b.className = 'w-9 h-9 rounded-lg text-lg flex items-center justify-center bg-orange-500/30 border border-orange-500';
+        } else {
+          b.className = 'w-9 h-9 rounded-lg text-lg flex items-center justify-center bg-slate-850 hover:bg-slate-800';
+        }
+      });
+    }
+
+    function submitRegistration() {
+      const input = document.getElementById('regNicknameInput');
+      const gradeInput = document.getElementById('regGradeInput');
+      const nick = (input.value || '').trim();
+
+      if (!nick || nick.length < 2) {
+        alert('Пожалуйста, введи никнейм (от 2 символов)!');
+        return;
+      }
+
+      audio.init();
+      audio.playWin();
+
+      state.user = {
+        nick: nick,
+        avatar: state.tempRegAvatar || '🎒',
+        grade: (gradeInput.value || '').trim() || 'Ученик школы',
+        joinedAt: new Date().toLocaleDateString()
+      };
+
+      // Бонус за регистрацию
+      state.balance += 1500;
+      saveState();
+
+      try {
+        confetti({ particleCount: 80, spread: 70, origin: { y: 0.5 } });
+      } catch(e){}
+
+      closeProfileModal();
+      updateUI();
+      alert(`🎉 Поздравляем, ${nick}! Профиль успешно зарегистрирован. Тебе начислен приветственный бонус +1 500 ₽!`);
+    }
+
+    function logoutProfile() {
+      if (confirm('Точно сменить текущий профиль?')) {
+        state.user = null;
+        saveState();
+        updateUI();
+        openProfileModal();
+      }
+    }
+
+    // Соглашение
+    function openTermsModal() {
+      audio.init();
+      audio.playTick();
+      document.getElementById('termsModal').classList.remove('hidden');
+    }
+    function closeTermsModal() {
+      document.getElementById('termsModal').classList.add('hidden');
+    }
+
+    function handleAdminTrigger() {
+      if (ADMIN_ACCESS !== 2) return;
+      state.adminClicks++;
+      audio.init();
+      audio.playTick();
+      if (state.adminClicks >= 5) {
+        state.adminClicks = 0;
+        openAdminModal();
+      }
+    }
+
+    function openAdminModal() {
+      if (ADMIN_ACCESS !== 2) return;
+      document.getElementById('adminModal').classList.remove('hidden');
+      updateAdminUI();
+    }
+
+    function closeAdminModal() {
+      document.getElementById('adminModal').classList.add('hidden');
+    }
+
+    function setRigMode(mode) {
+      if (ADMIN_ACCESS !== 2) return;
+      audio.init();
+      audio.playTick();
+      state.rigMode = mode;
+      updateAdminUI();
+    }
+
+    function updateAdminUI() {
+      if (ADMIN_ACCESS !== 2) return;
+      const modes = ['win', 'near', 'lose', 'fair'];
+      modes.forEach(m => {
+        const btn = document.getElementById(`rig${m.charAt(0).toUpperCase() + m.slice(1)}Btn`);
+        const check = document.getElementById(`rig${m.charAt(0).toUpperCase() + m.slice(1)}Check`);
+        if (state.rigMode === m) {
+          btn.classList.add('border-orange-500', 'bg-orange-500/20');
+          check.classList.remove('hidden');
+        } else {
+          btn.classList.remove('border-orange-500', 'bg-orange-500/20');
+          check.classList.add('hidden');
+        }
+      });
+    }
+
+    function adminAddMoney(amount) {
+      if (ADMIN_ACCESS !== 2) return;
+      audio.init();
+      audio.playCoin();
+      state.balance += amount;
+      saveState();
+      updateUI();
+    }
+
+    function closeWelcomeDisclaimer() {
+      audio.init();
+      audio.playTick();
+      const modal = document.getElementById('welcomeDisclaimerModal');
+      if (modal) {
+        modal.classList.add('opacity-0', 'pointer-events-none');
+        setTimeout(() => modal.remove(), 300);
+      }
+    }
+
+    const canvas = document.getElementById('rouletteCanvas');
+    const ctx = canvas.getContext('2d');
+
+    function calculateChance() {
+      if (!state.selectedSchoolItem || !state.selectedTargetItem) return 0;
+      let raw = (state.selectedSchoolItem.price / state.selectedTargetItem.price) * 100;
+      return Math.min(Math.max(raw, 0.05), 95);
+    }
+
+    function calculateMultiplier() {
+      const chance = calculateChance();
+      if (chance <= 0) return 0;
+      return (100 / chance).toFixed(2);
+    }
+
+    function normalizeAngle(a) {
+      const twoPi = Math.PI * 2;
+      return ((a % twoPi) + twoPi) % twoPi;
+    }
+
+    function drawWheel(currentAngle = 0) {
+      const w = canvas.width;
+      const h = canvas.height;
+      const centerX = w / 2;
+      const centerY = h / 2;
+      const radius = w / 2 - 12;
+      const innerRadius = radius - 24;
+
+      ctx.clearRect(0, 0, w, h);
+
+      const chance = calculateChance();
+      const winSpan = (chance / 100) * (Math.PI * 2);
+      const topAngle = -Math.PI / 2;
+
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+      ctx.arc(centerX, centerY, innerRadius, Math.PI * 2, 0, true);
+      ctx.fillStyle = '#111723';
+      ctx.fill();
+
+      let winStart = 0;
+      let winEnd = 0;
+      if (state.rollDirection === 'under') {
+        winStart = topAngle;
+        winEnd = topAngle + winSpan;
+      } else {
+        winEnd = topAngle;
+        winStart = topAngle - winSpan;
+      }
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, radius, winStart, winEnd);
+      ctx.arc(centerX, centerY, innerRadius, winEnd, winStart, true);
+      ctx.closePath();
+
+      const winGrad = ctx.createLinearGradient(0, 0, w, h);
+      winGrad.addColorStop(0, '#10b981');
+      winGrad.addColorStop(1, '#059669');
+      ctx.fillStyle = winGrad;
+      ctx.shadowColor = 'rgba(16, 185, 129, 0.7)';
+      ctx.shadowBlur = 16;
+      ctx.fill();
+      ctx.restore();
+
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, radius + 1.5, 0, Math.PI * 2);
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#2d3748';
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, innerRadius - 1.5, 0, Math.PI * 2);
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#1e293b';
+      ctx.stroke();
+
+      ctx.save();
+      ctx.translate(centerX, centerY);
+      ctx.rotate(currentAngle);
+
+      ctx.beginPath();
+      ctx.moveTo(0, -innerRadius + 4);
+      ctx.lineTo(0, -radius - 4);
+      ctx.lineWidth = 3.5;
+      ctx.strokeStyle = '#ffffff';
+      ctx.shadowColor = '#ff5500';
+      ctx.shadowBlur = 12;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(0, -radius - 4, 4.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#ff5500';
+      ctx.shadowColor = '#ff5500';
+      ctx.shadowBlur = 14;
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    function updateUI() {
+      document.getElementById('headerBalance').innerText = `${state.balance.toLocaleString('ru-RU')} ₽`;
+      document.getElementById('invCountBadge').innerText = state.inventory.length;
+
+      // Profile in header
+      if (state.user) {
+        document.getElementById('headerUserAvatar').innerText = state.user.avatar || '🎒';
+        document.getElementById('headerUserName').innerText = state.user.nick;
+      } else {
+        document.getElementById('headerUserAvatar').innerText = '👤';
+        document.getElementById('headerUserName').innerText = 'Вход';
+      }
+
+      const chance = calculateChance();
+      const mult = calculateMultiplier();
+
+      document.getElementById('hudChance').innerText = `${chance.toFixed(2)}%`;
+      document.getElementById('hudMultiplier').innerText = `x${mult}`;
+
+      const statusBadge = document.getElementById('statusBadge');
+      const btnUpgrade = document.getElementById('btnUpgrade');
+      const btnUpgradeText = document.getElementById('btnUpgradeText');
+
+      if (!state.selectedSchoolItem) {
+        statusBadge.innerText = 'Депни предмет';
+        statusBadge.className = 'mt-0.5 text-[9px] px-2 py-0.5 rounded-full bg-rose-950/70 text-rose-300 border border-rose-800/40';
+        btnUpgrade.disabled = true;
+        btnUpgradeText.innerText = 'ВЫБЕРИ ДЕПОЗИТ ИЗ РЮКЗАКА';
+      } else if (!state.selectedTargetItem) {
+        statusBadge.innerText = 'Выбери цель';
+        statusBadge.className = 'mt-0.5 text-[9px] px-2 py-0.5 rounded-full bg-amber-950/70 text-amber-300 border border-amber-800/40';
+        btnUpgrade.disabled = true;
+        btnUpgradeText.innerText = 'ВЫБЕРИ ЖЕЛАННУЮ ЦЕЛЬ';
+      } else {
+        statusBadge.innerText = chance >= 60 ? 'Высокий занос' : (chance >= 20 ? 'Хороший шанс' : 'Рисковый занос');
+        statusBadge.className = 'mt-0.5 text-[9px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700';
+        btnUpgrade.disabled = state.isRolling;
+        btnUpgradeText.innerText = state.isRolling ? 'КРУТИМ БАРАБАН...' : `АПГРЕЙД (${chance.toFixed(2)}%)`;
+      }
+
+      renderSlot('depositSlotContent', state.selectedSchoolItem);
+      renderSlot('targetSlotContent', state.selectedTargetItem);
+
+      drawWheel(state.currentAngle);
+      renderInventory();
+      renderShop();
+      renderCasesUI();
+    }
+
+    function renderCasesUI() {
+      const grid = document.getElementById('casesGrid');
+      if (!grid) return;
+      grid.innerHTML = '';
+
+      document.getElementById('currentCaseTitle').innerText = `Кейс: ${selectedCase.name}`;
+      document.getElementById('currentCasePrice').innerText = `${selectedCase.price.toLocaleString('ru-RU')} ₽`;
+      const btnOpen = document.getElementById('btnOpenCase');
+      const btnOpenText = document.getElementById('btnOpenCaseText');
+
+      if (isOpeningCase) {
+        btnOpen.disabled = true;
+        btnOpenText.innerText = 'ОТКРЫВАЕМ КЕЙС...';
+      } else {
+        btnOpen.disabled = state.balance < selectedCase.price;
+        btnOpenText.innerText = `ОТКРЫТЬ ЗА ${selectedCase.price.toLocaleString('ru-RU')} ₽`;
+      }
+
+      CASES_LIST.forEach(c => {
+        const isSelected = c.id === selectedCase.id;
+        const card = document.createElement('div');
+        card.className = `p-3 rounded-2xl border text-center cursor-pointer transition active:scale-95 ${
+          isSelected ? 'bg-orange-950/30 border-orange-500 shadow-md shadow-orange-500/10' : 'bg-slate-900/70 border-slate-800 hover:border-slate-700'
+        }`;
+        card.onclick = () => selectCase(c.id);
+        card.innerHTML = `
+          <div class="text-3xl mb-1">${c.icon}</div>
+          <div class="text-xs font-bold font-cs text-white leading-tight">${c.name}</div>
+          <div class="text-[10px] text-slate-400 line-clamp-1 my-1">${c.desc}</div>
+          <div class="text-xs font-cs font-bold text-amber-400">${c.price.toLocaleString('ru-RU')} ₽</div>
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    function selectCase(id) {
+      if (isOpeningCase) return;
+      audio.init();
+      audio.playTick();
+      const found = CASES_LIST.find(c => c.id === id);
+      if (found) {
+        selectedCase = found;
+        renderCasesUI();
+        setupCaseTape();
+      }
+    }
+
+    function setupCaseTape() {
+      const track = document.getElementById('caseRouletteTrack');
+      if (!track) return;
+      track.style.transition = 'none';
+      track.style.transform = 'translateX(0px)';
+      track.innerHTML = '';
+
+      const pool = selectedCase.items.map(id => ALL_MASTER_ITEMS.find(i => i.id === id)).filter(Boolean);
+      
+      for (let i = 0; i < 55; i++) {
+        const it = pool[Math.floor(Math.random() * pool.length)];
+        const cardDiv = document.createElement('div');
+        cardDiv.className = 'case-item-card w-20 h-24 flex-shrink-0 bg-slate-900 rounded-xl border border-slate-800 p-1.5 flex flex-col items-center justify-between text-center relative select-none';
+        cardDiv.setAttribute('data-item-id', it.id);
+        cardDiv.setAttribute('data-index', i);
+        cardDiv.innerHTML = `
+          <div class="w-10 h-10 flex items-center justify-center pointer-events-none">${renderItemMedia(it, 'w-10 h-10 text-2xl')}</div>
+          <div class="text-[9px] font-bold text-white line-clamp-1 w-full pointer-events-none">${it.name}</div>
+          <div class="text-[9px] font-cs font-bold text-amber-400 pointer-events-none">${it.price}₽</div>
+        `;
+        track.appendChild(cardDiv);
+      }
+    }
+
+    function detectItemUnderPointer() {
+      const container = document.getElementById('caseTapeWrapper');
+      if (!container) return null;
+      const rect = container.getBoundingClientRect();
+      const pointerCenterX = rect.left + rect.width / 2;
+
+      const cards = document.querySelectorAll('.case-item-card');
+      let bestItem = null;
+      let minDistance = Infinity;
+
+      cards.forEach(card => {
+        const cRect = card.getBoundingClientRect();
+        const cardCenterX = cRect.left + cRect.width / 2;
+        const dist = Math.abs(pointerCenterX - cardCenterX);
+        if (dist < minDistance) {
+          minDistance = dist;
+          const itemId = card.getAttribute('data-item-id');
+          bestItem = ALL_MASTER_ITEMS.find(i => i.id === itemId);
+        }
+      });
+
+      return bestItem;
+    }
+
+    function openSelectedCase() {
+      if (isOpeningCase || state.balance < selectedCase.price) return;
+      audio.init();
+      audio.playCoin();
+
+      isOpeningCase = true;
+      state.balance -= selectedCase.price;
+      saveState();
+      renderCasesUI();
+
+      setupCaseTape();
+
+      const track = document.getElementById('caseRouletteTrack');
+      const itemCardWidth = 80 + 8;
+      const targetCardIndex = 38;
+      const container = document.getElementById('caseTapeWrapper');
+      const centerTargetOffset = (container.clientWidth / 2) - 40;
+
+      const randomCardOffset = (Math.random() - 0.5) * 56; 
+      const targetTranslate = -(targetCardIndex * itemCardWidth) + centerTargetOffset + randomCardOffset;
+
+      setTimeout(() => {
+        track.style.transition = 'transform 5.4s cubic-bezier(0.12, 0.85, 0.18, 1)';
+        track.style.transform = `translateX(${targetTranslate}px)`;
+        
+        let tickInterval = setInterval(() => {
+          audio.playTick();
+        }, 170);
+
+        setTimeout(() => {
+          clearInterval(tickInterval);
+        }, 4400);
+
+        setTimeout(() => {
+          isOpeningCase = false;
+          
+          const physicalWonItem = detectItemUnderPointer() || ALL_MASTER_ITEMS.find(i => i.id === selectedCase.items[0]);
+
+          audio.playWin();
+
+          const newItem = {
+            ...physicalWonItem,
+            uid: 'case_drop_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+            wonAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          };
+          state.inventory.unshift(newItem);
+          state.selectedSchoolItem = newItem;
+          saveState();
+          updateUI();
+
+          try {
+            confetti({ particleCount: 85, spread: 70, origin: { y: 0.5 } });
+          } catch(e){}
+
+          showResult(true, newItem, `Точное попадание под стрелку из кейса «${selectedCase.name}»!`);
+        }, 5500);
+      }, 50);
+    }
+
+    function renderSlot(containerId, item) {
+      const container = document.getElementById(containerId);
+      if (!item) {
+        container.innerHTML = `
+          <div class="text-3xl mb-1">❓</div>
+          <span class="text-xs font-bold text-slate-300">Нажми выбрать</span>
+        `;
+        return;
+      }
+      const rarity = RARITIES[item.rarity] || RARITIES.consumer;
+      container.innerHTML = `
+        <div class="mb-1">
+          ${renderItemMedia(item, 'w-12 h-12')}
+        </div>
+        <span class="text-xs font-bold text-white line-clamp-1 max-w-[130px]">${item.name}</span>
+        <span class="text-[11px] font-cs font-bold mt-0.5" style="color:${rarity.color}">${item.price.toLocaleString('ru-RU')} ₽</span>
+        <span class="text-[9px] text-orange-400 font-bold">${item.category === 'school' ? 'Школа' : (item.category === 'cs2' ? 'CS2' : (item.game || 'Игра'))}</span>
+      `;
+    }
+
+    function setRollDirection(dir) {
+      if (state.isRolling) return;
+      audio.init();
+      audio.playTick();
+      state.rollDirection = dir;
+      const btnUnder = document.getElementById('btnDirUnder');
+      const btnOver = document.getElementById('btnDirOver');
+      if (dir === 'under') {
+        btnUnder.className = 'px-2.5 py-1 rounded-lg bg-orange-500/20 text-orange-400 border border-orange-500/40 font-bold transition text-[11px]';
+        btnOver.className = 'px-2.5 py-1 rounded-lg bg-slate-800 text-slate-400 border border-slate-700 font-bold transition text-[11px]';
+      } else {
+        btnOver.className = 'px-2.5 py-1 rounded-lg bg-orange-500/20 text-orange-400 border border-orange-500/40 font-bold transition text-[11px]';
+        btnUnder.className = 'px-2.5 py-1 rounded-lg bg-slate-800 text-slate-400 border border-slate-700 font-bold transition text-[11px]';
+      }
+      updateUI();
+    }
+
+    function startUpgradeRoll() {
+      if (state.isRolling || !state.selectedSchoolItem || !state.selectedTargetItem) return;
+
+      audio.init();
+      state.isRolling = true;
+      updateUI();
+
+      const wageredItem = state.selectedSchoolItem;
+      const wagerIndex = state.inventory.findIndex(it => it.uid === wageredItem.uid);
+      if (wagerIndex !== -1) {
+        state.inventory.splice(wagerIndex, 1);
+      }
+      saveState();
+
+      const winChance = calculateChance();
+      const winFraction = winChance / 100;
+      const twoPi = Math.PI * 2;
+      const winSpan = winFraction * twoPi;
+
+      let isWin = false;
+      let isNearMiss = false;
+
+      if (state.rigMode === 'win') {
+        isWin = true;
+      } else if (state.rigMode === 'near') {
+        isWin = false;
+        isNearMiss = true;
+      } else if (state.rigMode === 'lose') {
+        isWin = false;
+      } else {
+        isWin = Math.random() < winFraction;
+        if (!isWin && Math.random() < 0.25) {
+          isNearMiss = true;
+        }
+      }
+
+      let targetLocalAngle = 0;
+
+      if (isWin) {
+        const marginFactor = winChance < 1 ? 0.5 : (0.15 + Math.random() * 0.70);
+        const landingOffset = winSpan * marginFactor;
+
+        if (state.rollDirection === 'under') {
+          targetLocalAngle = landingOffset;
+        } else {
+          targetLocalAngle = (twoPi - landingOffset) % twoPi;
+        }
+      } else if (isNearMiss) {
+        const ultraCloseMargin = (0.0006 + Math.random() * 0.0007) * twoPi;
+        if (state.rollDirection === 'under') {
+          targetLocalAngle = (winSpan + ultraCloseMargin) % twoPi;
+        } else {
+          targetLocalAngle = (twoPi - winSpan - ultraCloseMargin + twoPi) % twoPi;
+        }
+      } else {
+        const closeCallOffset = 0.005 + Math.random() * 0.04;
+        if (state.rollDirection === 'under') {
+          targetLocalAngle = Math.min(twoPi - 0.05, winSpan + closeCallOffset * twoPi);
+        } else {
+          targetLocalAngle = Math.max(0.05, (twoPi - winSpan) - closeCallOffset * twoPi);
+        }
+      }
+
+      const currentNorm = normalizeAngle(state.currentAngle);
+      const forwardDelta = normalizeAngle(targetLocalAngle - currentNorm);
+      const fullSpins = (5 + Math.floor(Math.random() * 2)) * twoPi;
+      const totalAngularDistance = fullSpins + forwardDelta;
+
+      const startAngle = state.currentAngle;
+      const duration = 5200;
+      const startTime = performance.now();
+      let lastTickAngle = startAngle;
+
+      function easeOutQuint(x) {
+        return 1 - Math.pow(1 - x, 5);
+      }
+
+      function animateSpin(now) {
+        const elapsed = now - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const eased = easeOutQuint(progress);
+
+        state.currentAngle = startAngle + (totalAngularDistance * eased);
+
+        if (state.currentAngle - lastTickAngle > (Math.PI / 12)) {
+          audio.playTick();
+          lastTickAngle = state.currentAngle;
+        }
+
+        drawWheel(state.currentAngle);
+
+        if (progress < 1) {
+          requestAnimationFrame(animateSpin);
+        } else {
+          state.currentAngle = startAngle + totalAngularDistance;
+          drawWheel(state.currentAngle);
+
+          const finalNorm = normalizeAngle(state.currentAngle);
+          let physicalWin = false;
+          if (state.rollDirection === 'under') {
+            physicalWin = finalNorm >= 0 && finalNorm <= (winSpan + 0.0001);
+          } else {
+            physicalWin = finalNorm >= (twoPi - winSpan - 0.0001) && finalNorm <= twoPi;
+          }
+
+          let missPercent = 0;
+          if (!physicalWin) {
+            let distRad = 0;
+            if (state.rollDirection === 'under') {
+              distRad = Math.min(finalNorm - winSpan, twoPi - finalNorm);
+            } else {
+              distRad = Math.min((twoPi - winSpan) - finalNorm, finalNorm);
+            }
+            if (distRad < 0) distRad = Math.abs(distRad);
+            missPercent = Math.max(0.01, (distRad / twoPi) * 100);
+          }
+
+          finishRoll(physicalWin, wageredItem, state.selectedTargetItem, winChance, missPercent);
+        }
+      }
+
+      requestAnimationFrame(animateSpin);
+    }
+
+    function finishRoll(isWin, wageredItem, targetItem, nominalChance, missPercent = 0) {
+      state.isRolling = false;
+
+      if (isWin) {
+        audio.playWin();
+        const wonItem = {
+          ...targetItem,
+          uid: 'won_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+          wonAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+        state.inventory.unshift(wonItem);
+        saveState();
+
+        try {
+          confetti({ particleCount: 90, spread: 70, origin: { y: 0.6 } });
+        } catch(e){}
+
+        showResult(true, wonItem, `Стрелка четко зашла в зелёный сектор ${nominalChance.toFixed(2)}%!`);
+        addFeedItem(true, wageredItem, targetItem);
+      } else {
+        audio.playLoss();
+        const missText = missPercent > 0 
+          ? `До заноса не хватило всего ${missPercent < 0.2 ? 'каких-то ' : ''}${missPercent.toFixed(2)}%! Буквально миллиметр до зелёного сектора!` 
+          : `Стрелка остановилась вне победной зоны при шансе ${nominalChance.toFixed(2)}%`;
+        showResult(false, targetItem, missText, missPercent);
+        addFeedItem(false, wageredItem, targetItem);
+      }
+
+      if (state.inventory.length > 0) {
+        state.selectedSchoolItem = state.inventory[0];
+      } else {
+        state.selectedSchoolItem = null;
+      }
+
+      updateUI();
+    }
+
+    function showResult(isWin, item, meta, missPercent = 0) {
+      const overlay = document.getElementById('resultOverlay');
+      const card = document.getElementById('resultCard');
+      const iconBox = document.getElementById('resultIconBox');
+      const heading = document.getElementById('resultHeading');
+      const text = document.getElementById('resultText');
+      const box = document.getElementById('resultItemBox');
+
+      const rarity = RARITIES[item.rarity] || RARITIES.consumer;
+
+      if (isWin) {
+        card.className = 'w-full max-w-sm rounded-3xl p-6 text-center shadow-2xl border border-emerald-500/40 bg-slate-900/95 backdrop-blur-xl pointer-events-auto flex flex-col items-center glow-gold';
+        iconBox.innerHTML = renderItemMedia(item, 'w-16 h-16 text-4xl');
+        heading.innerText = 'АПГРЕЙД ЗАЛЕТЕЛ!';
+        heading.className = 'font-cs text-2xl font-bold uppercase tracking-wider mb-1 text-emerald-400';
+        text.innerText = `Предмет успешно отправлен в твой рюкзак! ${meta}`;
+      } else {
+        card.className = 'w-full max-w-sm rounded-3xl p-6 text-center shadow-2xl border border-rose-500/40 bg-slate-900/95 backdrop-blur-xl pointer-events-auto flex flex-col items-center';
+        iconBox.innerHTML = `<span class="text-5xl">💔</span>`;
+        heading.innerText = missPercent < 0.25 ? 'ПОЧТИ ЗАНОС!' : 'ПРЕДМЕТ СГОРЕЛ!';
+        heading.className = `font-cs text-2xl font-bold uppercase tracking-wider mb-1 ${missPercent < 0.25 ? 'text-amber-400' : 'text-rose-400'}`;
+        text.innerHTML = `
+          <div class="mb-2 text-slate-300 text-xs">${meta}</div>
+          ${missPercent > 0 ? `
+            <div class="inline-block bg-rose-950/70 border border-rose-500/50 rounded-lg px-2.5 py-1 text-[11px] font-cs font-bold text-rose-300 mb-1">
+              Не хватило: <span class="text-amber-300 font-extrabold">${missPercent.toFixed(2)}%</span>
+            </div>
+          ` : ''}
+        `;
+      }
+
+      box.innerHTML = `
+        <div class="w-12 h-12 flex-shrink-0">
+          ${renderItemMedia(item, 'w-12 h-12')}
+        </div>
+        <div class="text-left flex-1 min-w-0">
+          <div class="text-xs font-bold text-white truncate">${item.name}</div>
+          <div class="text-[11px] font-cs font-bold" style="color:${rarity.color}">${item.price.toLocaleString('ru-RU')} ₽</div>
+        </div>
+      `;
+
+      overlay.classList.remove('hidden', 'opacity-0', 'scale-95');
+      overlay.classList.add('opacity-100', 'scale-100');
+    }
+
+    function closeResultOverlay() {
+      const overlay = document.getElementById('resultOverlay');
+      overlay.classList.add('opacity-0', 'scale-95');
+      setTimeout(() => overlay.classList.add('hidden'), 200);
+    }
+
+    function addFeedItem(isWin, schoolItem, targetItem) {
+      const feed = document.getElementById('feedList');
+      const div = document.createElement('div');
+      div.className = `flex-shrink-0 flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] ${
+        isWin ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300' : 'bg-rose-950/30 border-rose-500/30 text-rose-300'
+      }`;
+      div.innerHTML = `
+        <span>${schoolItem.icon}</span>
+        <span class="text-[9px] text-slate-400">➔</span>
+        <span>${targetItem.icon}</span>
+        <span class="font-bold">${isWin ? '+' : '✕'} ${targetItem.price.toLocaleString('ru-RU')}₽</span>
+      `;
+      feed.prepend(div);
+      if (feed.children.length > 8) feed.removeChild(feed.lastChild);
+    }
+
+    function openItemPicker(type) {
+      audio.init();
+      audio.playTick();
+      state.activeModalType = type;
+      const modal = document.getElementById('itemModal');
+      const title = document.getElementById('modalTitle');
+      const sub = document.getElementById('modalSubtitle');
+      const input = document.getElementById('modalSearchInput');
+      const targetCatFilters = document.getElementById('targetCategoryFilters');
+      input.value = '';
+
+      if (type === 'school') {
+        title.innerText = 'Выбери предмет из рюкзака';
+        sub.innerText = 'Любая твоя вещь для ставки в апгрейдер';
+        targetCatFilters.classList.add('hidden');
+      } else {
+        title.innerText = 'Выбери желанную цель';
+        sub.innerText = 'Скины CS2, топ-предметы школы или лут из других игр';
+        targetCatFilters.classList.remove('hidden');
+      }
+
+      modal.classList.remove('hidden');
+      renderModalItems();
+    }
+
+    function setTargetCategory(cat) {
+      targetFilterCategory = cat;
+      ['tgtCatAll', 'tgtCatCs2', 'tgtCatSchool', 'tgtCatOther'].forEach(id => {
+        document.getElementById(id).className = 'px-2 py-0.5 rounded-lg bg-slate-800 text-slate-400 whitespace-nowrap';
+      });
+      if (cat === 'all') document.getElementById('tgtCatAll').className = 'px-2 py-0.5 rounded-lg bg-cyan-500 text-black font-bold whitespace-nowrap';
+      if (cat === 'cs2') document.getElementById('tgtCatCs2').className = 'px-2 py-0.5 rounded-lg bg-cyan-500 text-black font-bold whitespace-nowrap';
+      if (cat === 'school') document.getElementById('tgtCatSchool').className = 'px-2 py-0.5 rounded-lg bg-cyan-500 text-black font-bold whitespace-nowrap';
+      if (cat === 'other') document.getElementById('tgtCatOther').className = 'px-2 py-0.5 rounded-lg bg-cyan-500 text-black font-bold whitespace-nowrap';
+      renderModalItems();
+    }
+
+    function closeItemModal() {
+      document.getElementById('itemModal').classList.add('hidden');
+      state.activeModalType = null;
+    }
+
+    function filterModalItems() {
+      renderModalItems();
+    }
+
+    function renderModalItems() {
+      const grid = document.getElementById('modalItemsGrid');
+      const search = (document.getElementById('modalSearchInput').value || '').toLowerCase();
+      grid.innerHTML = '';
+
+      let list = [];
+      if (state.activeModalType === 'school') {
+        list = state.inventory;
+        if (list.length === 0) {
+          grid.innerHTML = `
+            <div class="col-span-2 py-8 text-center text-slate-500 text-xs">
+              Твой рюкзак пуст!<br>
+              <button onclick="closeItemModal(); switchTab('cases')" class="mt-3 px-3 py-1.5 rounded-lg bg-orange-500 text-black font-bold">
+                Крутить школьные кейсы
+              </button>
+            </div>
+          `;
+          return;
+        }
+      } else {
+        if (targetFilterCategory === 'all') {
+          list = ALL_MASTER_ITEMS;
+        } else if (targetFilterCategory === 'cs2') {
+          list = CS2_CATALOG;
+        } else if (targetFilterCategory === 'school') {
+          list = SCHOOL_CATALOG;
+        } else if (targetFilterCategory === 'other') {
+          list = OTHER_GAMES_CATALOG;
+        }
+      }
+
+      const filtered = list.filter(item => item.name.toLowerCase().includes(search));
+
+      filtered.forEach(item => {
+        const rarity = RARITIES[item.rarity] || RARITIES.consumer;
+        const card = document.createElement('div');
+        card.className = 'bg-slate-950/80 hover:bg-slate-800/80 border border-slate-800 hover:border-slate-600 rounded-xl p-2.5 flex flex-col items-center text-center cursor-pointer transition active:scale-95';
+        card.onclick = () => selectItemFromModal(item);
+        card.innerHTML = `
+          <div class="mb-1">
+            ${renderItemMedia(item, 'w-11 h-11 text-2xl')}
+          </div>
+          <span class="text-xs font-bold text-slate-200 line-clamp-1 w-full">${item.name}</span>
+          <span class="text-[11px] font-cs font-bold mt-0.5" style="color:${rarity.color}">${item.price.toLocaleString('ru-RU')} ₽</span>
+          <span class="text-[9px] text-slate-400">${item.category === 'school' ? 'Школа' : (item.category === 'cs2' ? 'CS2' : item.game)}</span>
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    function selectItemFromModal(item) {
+      if (state.activeModalType === 'school') {
+        state.selectedSchoolItem = item;
+      } else {
+        state.selectedTargetItem = item;
+      }
+      closeItemModal();
+      updateUI();
+    }
+
+    function setInvFilter(type) {
+      state.currentFilter = type;
+      ['fltAll', 'fltSchool', 'fltCs2', 'fltGames'].forEach(id => {
+        document.getElementById(id).className = 'px-2.5 py-1 rounded-lg bg-slate-800 text-slate-400 hover:text-white font-medium whitespace-nowrap';
+      });
+      if (type === 'all') document.getElementById('fltAll').className = 'px-2.5 py-1 rounded-lg bg-orange-500 text-black font-bold whitespace-nowrap';
+      if (type === 'school') document.getElementById('fltSchool').className = 'px-2.5 py-1 rounded-lg bg-orange-500 text-black font-bold whitespace-nowrap';
+      if (type === 'cs2') document.getElementById('fltCs2').className = 'px-2.5 py-1 rounded-lg bg-orange-500 text-black font-bold whitespace-nowrap';
+      if (type === 'games') document.getElementById('fltGames').className = 'px-2.5 py-1 rounded-lg bg-orange-500 text-black font-bold whitespace-nowrap';
+      renderInventory();
+    }
+
+    function renderInventory() {
+      const grid = document.getElementById('inventoryGrid');
+      if (!grid) return;
+
+      const schoolItems = state.inventory.filter(i => i.category === 'school');
+      const cs2Items = state.inventory.filter(i => i.category === 'cs2');
+      const gameItems = state.inventory.filter(i => i.category === 'other');
+
+      document.getElementById('countAll').innerText = state.inventory.length;
+      document.getElementById('countSchool').innerText = schoolItems.length;
+      document.getElementById('countCs2').innerText = cs2Items.length;
+      document.getElementById('countGames').innerText = gameItems.length;
+
+      let list = state.inventory;
+      if (state.currentFilter === 'school') list = schoolItems;
+      if (state.currentFilter === 'cs2') list = cs2Items;
+      if (state.currentFilter === 'games') list = gameItems;
+
+      grid.innerHTML = '';
+
+      if (list.length === 0) {
+        grid.innerHTML = `
+          <div class="col-span-2 py-12 text-center text-slate-500 text-xs">
+            Рюкзак пуст! Открой кейс или заработай монет на перемене.
+          </div>
+        `;
+        return;
+      }
+
+      list.forEach(item => {
+        const rarity = RARITIES[item.rarity] || RARITIES.consumer;
+        const tag = item.category === 'school' ? 'Школа' : (item.category === 'cs2' ? 'CS2' : item.game);
+        const card = document.createElement('div');
+        card.className = `bg-slate-900/80 border rounded-2xl p-2.5 flex flex-col items-center justify-between text-center relative ${
+          state.selectedSchoolItem && state.selectedSchoolItem.uid === item.uid ? 'item-selected' : 'border-slate-800'
+        }`;
+
+        card.innerHTML = `
+          <span class="absolute top-2 left-2 text-[9px] px-1.5 py-0.5 rounded font-bold ${
+            item.category === 'school' ? 'bg-amber-950 text-amber-300 border border-amber-800' : 'bg-cyan-950 text-cyan-300 border border-cyan-800'
+          }">${tag}</span>
+          
+          <div class="my-1">
+            ${renderItemMedia(item, 'w-12 h-12 text-3xl')}
+          </div>
+          <span class="text-xs font-bold text-white line-clamp-1 w-full">${item.name}</span>
+          <span class="text-[11px] font-cs font-bold my-1" style="color:${rarity.color}">${item.price.toLocaleString('ru-RU')} ₽</span>
+          
+          <div class="w-full grid grid-cols-2 gap-1.5 mt-1">
+            <button onclick="pickForUpgrade('${item.uid}')" class="py-1 rounded-lg bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 border border-orange-500/30 text-[10px] font-bold">
+              В деп
+            </button>
+            <button onclick="sellSingleItem('${item.uid}')" class="py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold">
+              Продать
+            </button>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    function pickForUpgrade(uid) {
+      const item = state.inventory.find(i => i.uid === uid);
+      if (!item) return;
+      state.selectedSchoolItem = item;
+      switchTab('upgrade');
+      updateUI();
+    }
+
+    function sellSingleItem(uid) {
+      const idx = state.inventory.findIndex(i => i.uid === uid);
+      if (idx === -1) return;
+      audio.init();
+      audio.playCoin();
+      const item = state.inventory[idx];
+      state.balance += item.price;
+      state.inventory.splice(idx, 1);
+      if (state.selectedSchoolItem && state.selectedSchoolItem.uid === uid) {
+        state.selectedSchoolItem = state.inventory[0] || null;
+      }
+      saveState();
+      updateUI();
+    }
+
+    function sellAllNonSchool() {
+      const toSell = state.inventory.filter(i => i.category !== 'school');
+      if (toSell.length === 0) return;
+      audio.init();
+      audio.playCoin();
+      let gain = 0;
+      toSell.forEach(s => gain += s.price);
+      state.balance += gain;
+      state.inventory = state.inventory.filter(i => i.category === 'school');
+      saveState();
+      updateUI();
+    }
+
+    function renderShop() {
+      const list = document.getElementById('shopList');
+      if (!list) return;
+      list.innerHTML = '';
+
+      SCHOOL_CATALOG.filter(i => i.id !== 'sch_golden_diary').forEach(item => {
+        const rarity = RARITIES[item.rarity] || RARITIES.consumer;
+        const canAfford = state.balance >= item.price;
+        const row = document.createElement('div');
+        row.className = 'bg-slate-900/80 border border-slate-800/80 rounded-xl p-2.5 flex items-center justify-between';
+        row.innerHTML = `
+          <div class="flex items-center space-x-2.5">
+            <div class="flex-shrink-0">
+              ${renderItemMedia(item, 'w-10 h-10 text-2xl')}
+            </div>
+            <div>
+              <div class="text-xs font-bold text-white">${item.name}</div>
+              <div class="text-[10px] text-slate-400">${item.desc}</div>
+              <div class="text-[11px] font-cs font-bold" style="color:${rarity.color}">${item.price.toLocaleString('ru-RU')} ₽</div>
+            </div>
+          </div>
+          <button onclick="buySchoolItem('${item.id}')" ${canAfford ? '' : 'disabled'} class="px-3 py-1.5 rounded-lg text-xs font-bold font-cs transition ${
+            canAfford ? 'bg-orange-500 text-black hover:brightness-110 active:scale-95' : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+          }">
+            Купить
+          </button>
+        `;
+        list.appendChild(row);
+      });
+    }
+
+    function buySchoolItem(id) {
+      const proto = SCHOOL_CATALOG.find(i => i.id === id);
+      if (!proto || state.balance < proto.price) return;
+      audio.init();
+      audio.playCoin();
+      state.balance -= proto.price;
+      const newItem = {
+        ...proto,
+        uid: 'sch_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+      };
+      state.inventory.unshift(newItem);
+      if (!state.selectedSchoolItem) state.selectedSchoolItem = newItem;
+      saveState();
+      updateUI();
+    }
+
+    function tapForMoney(event) {
+      audio.init();
+      audio.playCoin();
+      state.balance += 150;
+      saveState();
+      updateUI();
+
+      const tapElem = document.createElement('span');
+      tapElem.innerText = '+150₽';
+      tapElem.className = 'fixed font-cs font-bold text-amber-400 pointer-events-none text-xs animate-bounce z-50';
+      tapElem.style.left = `${event.clientX - 10}px`;
+      tapElem.style.top = `${event.clientY - 20}px`;
+      document.body.appendChild(tapElem);
+      setTimeout(() => tapElem.remove(), 600);
+    }
+
+    const mCanvas = document.getElementById('miniGameCanvas');
+    const mCtx = mCanvas.getContext('2d');
+    let mGameRunning = false;
+    let mPlayerX = 140;
+    let mLives = 3;
+    let mScore = 0;
+    let mDrops = [];
+    let mLastDropTime = 0;
+    let mAnimationId = null;
+
+    function initMiniGameCanvas() {
+      const rect = mCanvas.getBoundingClientRect();
+      mCanvas.width = rect.width * (window.devicePixelRatio || 1);
+      mCanvas.height = rect.height * (window.devicePixelRatio || 1);
+      mPlayerX = mCanvas.width / 2;
+    }
+
+    function toggleMiniGame() {
+      audio.init();
+      audio.playTick();
+      const overlay = document.getElementById('gameOverlay');
+      const btn = document.getElementById('btnGameControl');
+
+      if (!mGameRunning) {
+        initMiniGameCanvas();
+        mGameRunning = true;
+        mLives = 3;
+        mScore = 0;
+        mDrops = [];
+        overlay.classList.add('hidden');
+        btn.innerText = 'Стоп';
+        btn.className = 'px-4 py-2 rounded-xl bg-red-600 text-white font-cs font-bold text-xs uppercase tracking-wider';
+        lastGameLoopTime = performance.now();
+        mAnimationId = requestAnimationFrame(miniGameLoop);
+      } else {
+        stopMiniGame();
+      }
+    }
+
+    function stopMiniGame() {
+      mGameRunning = false;
+      if (mAnimationId) cancelAnimationFrame(mAnimationId);
+      const overlay = document.getElementById('gameOverlay');
+      const btn = document.getElementById('btnGameControl');
+      overlay.classList.remove('hidden');
+      btn.innerText = 'Старт игры';
+      btn.className = 'px-4 py-2 rounded-xl bg-orange-500 text-black font-cs font-bold text-xs uppercase tracking-wider';
+    }
+
+    let lastGameLoopTime = 0;
+    function miniGameLoop(now) {
+      if (!mGameRunning) return;
+      const dt = Math.min((now - lastGameLoopTime) / 1000, 0.1);
+      lastGameLoopTime = now;
+
+      if (now - mLastDropTime > 550) {
+        mLastDropTime = now;
+        const isGood = Math.random() > 0.35;
+        mDrops.push({
+          x: Math.random() * (mCanvas.width - 40) + 20,
+          y: -20,
+          speed: (180 + Math.random() * 120) * (mCanvas.height / 400),
+          isGood: isGood,
+          type: isGood ? (Math.random() > 0.3 ? '5️⃣' : '🥟') : (Math.random() > 0.4 ? '2️⃣' : '📏'),
+          size: 26 * (mCanvas.width / 320)
+        });
+      }
+
+      for (let i = mDrops.length - 1; i >= 0; i--) {
+        const d = mDrops[i];
+        d.y += d.speed * dt;
+
+        const playerY = mCanvas.height - 40;
+        const dist = Math.hypot(d.x - mPlayerX, d.y - playerY);
+
+        if (dist < 34 * (mCanvas.width / 320)) {
+          if (d.isGood) {
+            audio.playCoin();
+            const reward = d.type === '🥟' ? 250 : 150;
+            mScore += reward;
+            state.balance += reward;
+            saveState();
+            updateUI();
+          } else {
+            audio.playLoss();
+            mLives--;
+            if (mLives <= 0) {
+              endMiniGame();
+              return;
+            }
+          }
+          mDrops.splice(i, 1);
+          continue;
+        }
+
+        if (d.y > mCanvas.height + 20) {
+          mDrops.splice(i, 1);
+        }
+      }
+
+      mCtx.clearRect(0, 0, mCanvas.width, mCanvas.height);
+
+      mCtx.strokeStyle = 'rgba(255,255,255,0.04)';
+      mCtx.lineWidth = 1;
+      for (let x = 0; x < mCanvas.width; x += 30) {
+        mCtx.beginPath();
+        mCtx.moveTo(x, 0);
+        mCtx.lineTo(x, mCanvas.height);
+        mCtx.stroke();
+      }
+
+      mCtx.textAlign = 'center';
+      mCtx.textBaseline = 'middle';
+      mDrops.forEach(d => {
+        mCtx.font = `${d.size}px sans-serif`;
+        mCtx.fillText(d.type, d.x, d.y);
+      });
+
+      const pY = mCanvas.height - 35;
+      mCtx.font = `${36 * (mCanvas.width / 320)}px sans-serif`;
+      mCtx.fillText('🎒', mPlayerX, pY);
+
+      document.getElementById('gameScoreText').innerText = `${mScore.toLocaleString('ru-RU')} ₽`;
+      document.getElementById('gameLivesText').innerText = '❤️'.repeat(Math.max(0, mLives));
+
+      mAnimationId = requestAnimationFrame(miniGameLoop);
+    }
+
+    function endMiniGame() {
+      stopMiniGame();
+      audio.playLoss();
+      const overlay = document.getElementById('gameOverlay');
+      overlay.innerHTML = `
+        <div class="text-4xl mb-2">🔔</div>
+        <div class="font-cs font-bold text-base text-white mb-1">Звонок на урок!</div>
+        <p class="text-xs text-slate-300 mb-2">Ты налутал: <span class="text-amber-400 font-bold">${mScore} ₽</span></p>
+        <button onclick="toggleMiniGame()" class="px-5 py-2.5 bg-orange-500 text-black rounded-xl font-cs font-bold text-xs uppercase">
+          Сыграть ещё
+        </button>
+      `;
+    }
+
+    function handleGameInput(e) {
+      if (!mGameRunning) return;
+      const rect = mCanvas.getBoundingClientRect();
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const relX = (clientX - rect.left) * (mCanvas.width / rect.width);
+      mPlayerX = Math.max(30, Math.min(mCanvas.width - 30, relX));
+    }
+    mCanvas.addEventListener('mousemove', handleGameInput);
+    mCanvas.addEventListener('touchmove', handleGameInput, { passive: true });
+    window.addEventListener('keydown', (e) => {
+      if (!mGameRunning) return;
+      if (e.key === 'ArrowLeft') mPlayerX = Math.max(30, mPlayerX - 35);
+      if (e.key === 'ArrowRight') mPlayerX = Math.min(mCanvas.width - 30, mPlayerX + 35);
+    });
+
+    function switchTab(tab) {
+      audio.init();
+      audio.playTick();
+      if (mGameRunning && tab !== 'game') stopMiniGame();
+
+      const views = {
+        upgrade: document.getElementById('viewUpgrade'),
+        cases: document.getElementById('viewCases'),
+        inventory: document.getElementById('viewInventory'),
+        game: document.getElementById('viewGame'),
+        shop: document.getElementById('viewShop'),
+      };
+      const tabs = {
+        upgrade: document.getElementById('tabUpgrade'),
+        cases: document.getElementById('tabCases'),
+        inventory: document.getElementById('tabInv'),
+        game: document.getElementById('tabGame'),
+        shop: document.getElementById('tabShop'),
+      };
+
+      Object.keys(views).forEach(k => {
+        if (k === tab) {
+          views[k].classList.remove('hidden');
+          tabs[k].className = 'py-2 text-[10px] font-bold uppercase tracking-wider rounded-xl bg-orange-500 text-black shadow-md transition text-center flex flex-col items-center';
+        } else {
+          views[k].classList.add('hidden');
+          tabs[k].className = 'py-2 text-[10px] font-bold uppercase tracking-wider rounded-xl bg-slate-800/80 text-slate-300 hover:text-white border border-slate-700/50 transition text-center flex flex-col items-center';
+        }
+      });
+
+      if (tab === 'game') {
+        setTimeout(initMiniGameCanvas, 50);
+      }
+      if (tab === 'cases') {
+        setupCaseTape();
+      }
+      updateUI();
+    }
+
+    window.onload = function() {
+      addFeedItem(true, SCHOOL_CATALOG[0], CS2_CATALOG[0]);
+      addFeedItem(true, SCHOOL_CATALOG[2], OTHER_GAMES_CATALOG[0]);
+      addFeedItem(false, SCHOOL_CATALOG[3], CS2_CATALOG[5]);
+      setupCaseTape();
+      updateUI();
+    };
+  </script>
+</body>
+</html>
