@@ -6,6 +6,12 @@
 function bootShkolaDrop() {
   try {
     initGame();
+
+    // Подбираем графику под устройство и замеряем реальный FPS
+    Quality.init(state.settings.quality);
+    applyQualityToUI();
+    Quality.probe(() => applyQualityToUI());
+
     checkStylesLoaded();
 
     // Приветственное окно показываем только в первый раз.

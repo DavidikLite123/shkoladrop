@@ -39,18 +39,64 @@ body[data-accent="emerald"] {
 /* ---------- База ---------- */
 * { -webkit-tap-highlight-color: transparent; }
 
+html { height: 100%; }
+
 body {
   background: radial-gradient(circle at 50% 0%, #151a24 0%, var(--bg-deep) 100%);
   color: #f3f4f6;
   font-family: 'Inter', sans-serif;
   user-select: none;
   touch-action: manipulation;
-  padding-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
+  overscroll-behavior-y: none;
+}
+
+/* ---------- Каркас приложения (как в мобильной игре) ----------
+   Шапка и нижняя навигация всегда на экране, контент скроллится между ними.
+   Так прокрутка работает даже внутри iframe предпросмотра и на любом «железе». */
+body.app-shell {
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.app-viewport {
+  flex: 1 1 auto;
+  min-height: 0;                     /* без этого flex-ребёнок не сжимается и скролл ломается */
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  scrollbar-width: thin;
+  contain: paint;
 }
 
 header {
+  flex: 0 0 auto;
   padding-top: calc(0.75rem + env(safe-area-inset-top, 0px));
 }
+
+/* ---------- Нижний таббар ---------- */
+.tabbar {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.25rem;
+  padding: 0.4rem 0.6rem calc(0.4rem + env(safe-area-inset-bottom, 0px));
+  background: rgba(9, 12, 18, 0.94);
+  border-top: 1px solid rgba(51, 65, 85, 0.65);
+  box-shadow: 0 -10px 30px -18px rgba(0, 0, 0, 0.95);
+}
+@media (min-width: 480px) {
+  .tabbar { backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+}
+
+/* Панель вкладки не должна «залипать» в собственный скролл */
+.view-panel { padding-bottom: 1rem; }
+
+/* Модалки блокируют прокрутку контента под ними */
+body.modal-open .app-viewport { overflow: hidden; }
 
 .font-cs { font-family: 'Chakra Petch', sans-serif; }
 
@@ -58,6 +104,10 @@ header {
 ::-webkit-scrollbar-thumb { background: #2a3447; border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: #3b465c; }
 ::-webkit-scrollbar-track { background: transparent; }
+
+input, select, textarea {
+  font-size: 16px !important;   /* iOS не зумит при фокусе */
+}
 
 :focus-visible {
   outline: 2px solid var(--accent);
@@ -605,3 +655,74 @@ body.no-motion .case-item-card::after,
 body.no-motion .itm-box,
 body.no-motion .case-aura { animation: none !important; }
 body.no-motion #fxCanvas { display: none; }
+
+
+/* ==========================================================================
+   АДАПТАЦИЯ ПОД УСТРОЙСТВО
+   ========================================================================== */
+
+/* На маленьких экранах размытия дешевле: телефоны слабее ноутбуков */
+@media (max-width: 640px) {
+  .bg-blob { filter: blur(42px); opacity: 0.28; }
+  .wheel-halo { filter: blur(12px); opacity: 0.32; }
+  .modal-card { max-height: 88vh; }
+}
+
+/* ---------- Режим низкого качества (слабый CPU/GPU, экономия батареи) ---------- */
+body.quality-low .bg-blob { animation: none !important; filter: blur(34px) !important; opacity: 0.2 !important; }
+body.quality-low .bg-grid { display: none !important; }
+body.quality-low .wheel-halo { display: none !important; }
+body.quality-low .btn-shine::after { display: none !important; }
+body.quality-low .case-item-card::after { display: none !important; }
+body.quality-low .itm-box[data-rarity="gold"],
+body.quality-low .itm-box[data-rarity="secret"] { animation: none !important; }
+body.quality-low .case-aura { animation: none !important; }
+body.quality-low header { background: rgba(15, 23, 42, 0.97) !important; }
+body.quality-low .tabbar { background: #0a0d14 !important; }
+body.quality-low .app-modal {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  background: rgba(2, 4, 8, 0.95) !important;
+}
+body.quality-low .modal-card,
+body.quality-low .toast,
+body.quality-low .levelup-card { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+body.quality-low .modal-card { box-shadow: 0 10px 24px -14px rgba(0, 0, 0, 0.9) !important; }
+body.quality-low .stat-tile,
+body.quality-low .case-card,
+body.quality-low .item-selected,
+body.quality-low .glow-gold,
+body.quality-low .glow-secret,
+body.quality-low .glow-orange { box-shadow: none !important; }
+body.quality-low .live-dot,
+body.quality-low .animate-ping-slow,
+body.quality-low .wheel-pointer { animation: none !important; }
+body.quality-low .bg-grid { display: none; }
+
+/* Переключатели качества в настройках */
+.quality-btn {
+  padding: 0.35rem 0.2rem;
+  border-radius: 0.6rem;
+  background: #1e293b;
+  color: #94a3b8;
+  border: 1px solid rgba(51, 65, 85, 0.6);
+  font-size: 10px;
+  font-weight: 700;
+  transition: all 0.18s ease;
+}
+.quality-btn:hover { color: #fff; }
+.quality-btn-active {
+  background: rgba(16, 185, 129, 0.18);
+  color: #6ee7b7;
+  border-color: rgba(16, 185, 129, 0.6);
+}
+
+/* Плавность прокрутки анимируем только на «железе» с запасом */
+@media (prefers-reduced-motion: no-preference) {
+  .app-viewport { scroll-behavior: smooth; }
+}
+body.quality-low .app-viewport { scroll-behavior: auto; }
+
+/* Тап-зоны не меньше 44px по высоте — палец попадает всегда */
+.nav-tab { min-height: 46px; }
+.filter-chip, .prof-tab, .toggle-pill { min-height: 30px; }

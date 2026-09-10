@@ -198,20 +198,27 @@ const Toast = {
 };
 
 /* ---------- Модалки ---------- */
+function anyOverlayOpen() {
+  return !!document.querySelector('.app-modal:not(.hidden), #itemModal:not(.hidden), #resultOverlay:not(.hidden), #welcomeDisclaimerModal');
+}
+
+/** Единая точка правды: прокрутка контента блокируется, пока открыт любой оверлей */
+function syncModalState() {
+  document.body.classList.toggle('modal-open', anyOverlayOpen());
+}
+
 const Modal = {
   open(id) {
     const el = $(id);
     if (!el) return;
     el.classList.remove('hidden');
-    document.body.style.overflow = 'hidden';
+    syncModalState();
   },
   close(id) {
     const el = $(id);
     if (!el) return;
     el.classList.add('hidden');
-    if (!document.querySelector('.app-modal:not(.hidden)') && !document.querySelector('#itemModal:not(.hidden)')) {
-      document.body.style.overflow = '';
-    }
+    syncModalState();
   },
   isOpen(id) {
     const el = $(id);
@@ -311,8 +318,10 @@ const LevelUpBanner = {
 
 /* ---------- Конфетти ---------- */
 const Fx = {
+  scaled(count) { return Math.max(12, Math.round(count * Quality.particleScale())); },
   burst(count = 80, colors = null) {
     if (document.body.classList.contains('no-motion')) return;
+    count = this.scaled(count);
     try {
       confetti({
         particleCount: count,
@@ -325,11 +334,11 @@ const Fx = {
   gold(count = 260) {
     if (document.body.classList.contains('no-motion')) return;
     try {
-      const end = Date.now() + 1400;
+      const end = Date.now() + (Quality.isLow() ? 700 : 1400);
       const colors = ['#ffd700', '#fde047', '#ffb703', '#fff7cc'];
       (function frame() {
-        confetti({ particleCount: 7, angle: 60, spread: 70, origin: { x: 0, y: 0.7 }, colors });
-        confetti({ particleCount: 7, angle: 120, spread: 70, origin: { x: 1, y: 0.7 }, colors });
+        confetti({ particleCount: Quality.isLow() ? 3 : 7, angle: 60, spread: 70, origin: { x: 0, y: 0.7 }, colors });
+        confetti({ particleCount: Quality.isLow() ? 3 : 7, angle: 120, spread: 70, origin: { x: 1, y: 0.7 }, colors });
         if (Date.now() < end) requestAnimationFrame(frame);
       })();
     } catch (e) {}
@@ -338,10 +347,10 @@ const Fx = {
   secretRain() {
     if (document.body.classList.contains('no-motion')) return;
     try {
-      const end = Date.now() + 2600;
+      const end = Date.now() + (Quality.isLow() ? 1200 : 2600);
       const colors = ['#00f0ff', '#a855f7', '#ec4899', '#ffd700'];
       (function frame() {
-        confetti({ particleCount: 6, startVelocity: 42, spread: 360, ticks: 90, origin: { x: Math.random(), y: Math.random() * 0.4 }, colors });
+        confetti({ particleCount: Quality.isLow() ? 3 : 6, startVelocity: 42, spread: 360, ticks: 90, origin: { x: Math.random(), y: Math.random() * 0.4 }, colors });
         if (Date.now() < end) requestAnimationFrame(frame);
       })();
     } catch (e) {}
@@ -356,6 +365,107 @@ const Fx = {
       setTimeout(() => flash.remove(), 700);
     } catch (e) {}
   }
+};
+
+/* --------------------------------------------------------------------------
+   АДАПТАЦИЯ ПОД УСТРОЙСТВО («аппаратная часть»)
+   Автоматически подбирает качество графики: ядра, память, режим экономии,
+   prefers-reduced-motion и живой замер FPS. Слабые устройства получают
+   лёгкую тему без дорогих blur/анимаций — игра не тормозит и не греется.
+   -------------------------------------------------------------------------- */
+const Quality = {
+  setting: 'auto',
+  tier: 'high',
+  fps: 0,
+  device: {},
+
+  detect() {
+    const nav = (typeof navigator !== 'undefined') ? navigator : {};
+    const cores = nav.hardwareConcurrency || 0;
+    const mem = nav.deviceMemory || 0;
+    const saveData = !!(nav.connection && nav.connection.saveData);
+    const reduced = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+    this.device = {
+      cores, mem, saveData, reduced,
+      dpr: window.devicePixelRatio || 1,
+      w: window.innerWidth, h: window.innerHeight
+    };
+
+    let tier = 'high';
+    if (reduced || saveData || (cores && cores <= 4) || (mem && mem <= 4)) tier = 'low';
+    return tier;
+  },
+
+  init(setting) {
+    this.setting = ['auto', 'high', 'low'].includes(setting) ? setting : 'auto';
+    const detected = this.detect();
+    this.tier = this.setting === 'auto' ? detected : this.setting;
+    this.apply();
+  },
+
+  set(setting) {
+    this.init(setting);
+  },
+
+  apply() {
+    const low = this.tier === 'low';
+    document.body.classList.toggle('quality-low', low);
+    const reduce = (typeof state !== 'undefined' && state.settings) ? !!state.settings.reduceMotion : false;
+    BackgroundFx.toggleByMotionSetting(low || reduce);
+    this.renderLabel();
+  },
+
+  /** Замер реального FPS: если устройство не тянет — тихо снижаем качество (режим «Авто») */
+  probe(onDone) {
+    if (this.setting !== 'auto') return;
+    let frames = 0;
+    const t0 = performance.now();
+    const step = () => {
+      frames += 1;
+      const elapsed = performance.now() - t0;
+      if (elapsed < 1500) { requestAnimationFrame(step); return; }
+      this.fps = Math.max(1, Math.round(frames / (elapsed / 1000)));
+      if (this.fps < 45 && this.tier !== 'low') {
+        this.tier = 'low';
+        this.apply();
+        try { Toast.info(`Устройство выдаёт ${this.fps} FPS — включил облегчённую графику. Можно сменить в настройках ⚙️`, 5000); } catch (e) {}
+      }
+      if (typeof onDone === 'function') onDone(this.fps);
+    };
+    requestAnimationFrame(step);
+  },
+
+  renderLabel() {
+    const label = $('qualityLabel');
+    if (label) {
+      const settingName = { auto: 'АВТО', high: 'ВЫСОКОЕ', low: 'НИЗКОЕ' }[this.setting] || 'АВТО';
+      label.textContent = this.setting === 'auto'
+        ? `${settingName} · сейчас ${this.tier === 'low' ? 'низкое' : 'высокое'}`
+        : settingName;
+      label.className = this.tier === 'low'
+        ? 'text-[10px] font-mono text-amber-300'
+        : 'text-[10px] font-mono text-emerald-300';
+    }
+
+    const info = $('deviceInfo');
+    if (info) {
+      const d = this.device || {};
+      const parts = [];
+      if (d.cores) parts.push(`${d.cores} ядер`);
+      if (d.mem) parts.push(`${d.mem} ГБ ОЗУ`);
+      if (this.fps) parts.push(`${this.fps} FPS`);
+      parts.push(`${window.innerWidth}×${window.innerHeight}`);
+      const notes = [];
+      if (d.saveData) notes.push('экономный режим сети');
+      if (d.reduced) notes.push('система просит меньше анимаций');
+      info.textContent = `Устройство: ${parts.join(' · ')} — выбрано ${this.tier === 'low' ? 'низкое' : 'высокое'} качество${notes.length ? ' (' + notes.join(', ') + ')' : ''}`;
+    }
+  },
+
+  isLow() { return this.tier === 'low'; },
+  particleScale() { return this.isLow() ? 0.4 : 1; },
+  canvasDpr() { return this.isLow() ? 1 : Math.min(window.devicePixelRatio || 1, 2); }
 };
 
 /* ---------- Фоновые эффекты (звёздное поле) ---------- */
@@ -392,7 +502,8 @@ const BackgroundFx = {
     this.canvas.width = w * dpr;
     this.canvas.height = h * dpr;
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const count = clamp(Math.round((w * h) / 22000), 24, 90);
+    const base = (typeof Quality !== 'undefined' && Quality.isLow()) ? 42000 : 22000;
+    const count = clamp(Math.round((w * h) / base), 18, 90);
     this.stars = Array.from({ length: count }, () => ({
       x: Math.random() * w,
       y: Math.random() * h,

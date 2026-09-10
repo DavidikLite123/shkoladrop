@@ -4,7 +4,7 @@
    уровни, награды, промокоды, апгрейды дежурства.
    ========================================================================== */
 
-const APP_VERSION = '2.0.0';
+const APP_VERSION = '2.0.1';
 const SAVE_VERSION = 8;
 
 /* ---------- Редкости ---------- */
@@ -306,7 +306,8 @@ const DEFAULT_SETTINGS = {
   volume: 70,
   fastOpen: false,
   reduceMotion: false,
-  accent: 'orange'
+  accent: 'orange',
+  quality: 'auto'   // 'auto' — под возможности устройства, 'high' / 'low' — вручную
 };
 
 /* ---------- Стартовый инвентарь ---------- */

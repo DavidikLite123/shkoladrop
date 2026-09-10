@@ -102,7 +102,7 @@
     }
   </script>
 </head>
-<body class="min-h-screen flex flex-col items-center justify-start pb-28 max-w-md mx-auto relative overflow-x-hidden border-x border-slate-800/40 shadow-2xl bg-schoolDark">
+<body class="app-shell max-w-md mx-auto relative border-x border-slate-800/40 shadow-2xl bg-schoolDark">
 
   <!-- ЖИВОЙ ФОН: анимированные пятна + звёздное поле -->
   <div id="bgLayer" class="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
@@ -157,6 +157,9 @@
     </div>
   </header>
 
+  <!-- ПРОКРУЧИВАЕМАЯ ОБЛАСТЬ КОНТЕНТА (панели + футер) -->
+  <div id="appViewport" class="app-viewport w-full">
+
   <!-- Брендовый баннер с кнопкой перехода на YouTube создателя -->
   <div class="w-full px-3 pt-2">
     <div class="w-full bg-gradient-to-r from-red-600/20 via-orange-600/20 to-amber-500/10 border border-orange-500/40 rounded-2xl p-2.5 flex items-center justify-between shadow-lg relative overflow-hidden">
@@ -181,25 +184,6 @@
       </div>
       <div class="absolute -right-4 -bottom-4 text-6xl opacity-10 select-none">🏆</div>
     </div>
-  </div>
-
-  <!-- Navigation Tabs Bar -->
-  <div class="w-full px-3 pt-2 pb-1 grid grid-cols-5 gap-1">
-    <button onclick="switchTab('upgrade')" id="tabUpgrade" class="nav-tab nav-tab-active">
-      <span>⚡</span><span>Апгрейд</span>
-    </button>
-    <button onclick="switchTab('cases')" id="tabCases" class="nav-tab">
-      <span>📦</span><span>Кейсы</span>
-    </button>
-    <button onclick="switchTab('inventory')" id="tabInv" class="nav-tab">
-      <span>🎒</span><span>Рюкзак (<span id="invCountBadge">0</span>)</span>
-    </button>
-    <button onclick="switchTab('farm')" id="tabFarm" class="nav-tab">
-      <span>🎮</span><span>Фарм</span>
-    </button>
-    <button onclick="switchTab('shop')" id="tabShop" class="nav-tab">
-      <span>🏪</span><span>Лавка</span>
-    </button>
   </div>
 
   <!-- ================= TAB 1: UPGRADER ================= -->
@@ -362,6 +346,12 @@
         <span class="text-xs font-bold text-slate-300 uppercase tracking-wider">Выбор кейса</span>
         <span id="casesCountLabel" class="text-[10px] text-slate-500 font-mono">0 кейсов</span>
       </div>
+      <div class="flex space-x-1.5 text-xs overflow-x-auto pb-1">
+        <button onclick="setCaseFilter('all')" id="caseFltAll" class="filter-chip filter-chip-active">Все (<span id="caseCountAll">0</span>)</button>
+        <button onclick="setCaseFilter('affordable')" id="caseFltAffordable" class="filter-chip">Доступные (<span id="caseCountAffordable">0</span>)</button>
+        <button onclick="setCaseFilter('top')" id="caseFltTop" class="filter-chip">Топовые</button>
+        <button onclick="setCaseFilter('secret')" id="caseFltSecret" class="filter-chip">🐱 Секретные</button>
+      </div>
       <div class="grid grid-cols-2 gap-2.5" id="casesGrid">
         <!-- Injected via JS -->
       </div>
@@ -434,7 +424,7 @@
       </select>
     </div>
 
-    <div id="inventoryGrid" class="grid grid-cols-2 gap-2.5 min-h-[300px] max-h-[520px] overflow-y-auto pr-0.5"></div>
+    <div id="inventoryGrid" class="grid grid-cols-2 gap-2.5 min-h-[240px]"></div>
   </main>
 
   <!-- ================= TAB 3: FARM (MINI GAME + IDLE + DAILY + PROMO) ================= -->
@@ -501,7 +491,7 @@
         </button>
       </div>
 
-      <div id="idleUpgradeList" class="space-y-1.5 max-h-[220px] overflow-y-auto pr-0.5"></div>
+      <div id="idleUpgradeList" class="space-y-1.5"></div>
     </div>
 
     <!-- DAILY REWARD -->
@@ -553,9 +543,112 @@
         <span class="text-xs font-bold text-slate-300 uppercase tracking-wider">Ассортимент школьных предметов</span>
         <span id="shopCountLabel" class="text-[10px] text-slate-500 font-mono">0</span>
       </div>
-      <div id="shopList" class="space-y-2 max-h-[420px] overflow-y-auto pr-0.5"></div>
+      <div id="shopList" class="space-y-2"></div>
     </div>
   </main>
+
+  <!-- ОФИЦИАЛЬНЫЙ ФУТЕР, ЮРИДИЧЕСКИЙ ДИСКЛЕЙМЕР И КОНТАКТЫ СТУДИИ -->
+  <footer class="w-full px-4 py-6 mt-8 border-t border-slate-800/80 bg-slate-950 text-center space-y-3.5">
+
+    <!-- Плашка студии разработчиков и YouTube канала -->
+    <div class="flex flex-col sm:flex-row items-center justify-center gap-2">
+      <a href="https://www.youtube.com/@DavidliteYT" target="_blank" rel="noopener noreferrer" class="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-red-950/60 hover:bg-red-900/80 border border-red-600/50 text-[11px] text-white transition active:scale-95">
+        <span class="text-red-500 font-bold">▶</span>
+        <span>YouTube канал: <b>@DavidliteYT</b></span>
+      </a>
+      <button onclick="openAuthorModal()" class="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-slate-900 border border-slate-800 text-[10px] text-slate-300 hover:text-white transition">
+        <span>🚀</span>
+        <span>Студия <b>David Lite Studio</b></span>
+      </button>
+    </div>
+
+    <!-- Быстрые юридические ссылки -->
+    <div class="flex flex-wrap justify-center gap-x-3 gap-y-1 text-[10px] text-orange-400">
+      <button onclick="openTermsModal()" class="hover:underline">Пользовательское соглашение</button>
+      <span class="text-slate-700">•</span>
+      <button onclick="openCookiePolicyModal()" class="hover:underline">Политика cookie</button>
+      <span class="text-slate-700">•</span>
+      <button onclick="openCookieSettingsModal()" class="hover:underline">Настройка cookie</button>
+      <span class="text-slate-700">•</span>
+      <button onclick="openAuthorModal()" class="hover:underline">О создателе</button>
+      <span class="text-slate-700">•</span>
+      <button onclick="openProfileModal()" class="hover:underline">Личный кабинет</button>
+    </div>
+
+    <!-- Полный отказ от ответственности и подтверждение некоммерческого статуса -->
+    <div class="text-[10px] text-slate-400 leading-relaxed text-left bg-slate-900/60 p-3.5 rounded-2xl border border-slate-800/70 space-y-2">
+      <div class="font-bold text-slate-300 uppercase tracking-wide text-[9px] flex items-center space-x-1.5">
+        <span>⚖️</span>
+        <span>Отказ от ответственности и товарные знаки:</span>
+      </div>
+      <p class="text-[9.5px] leading-normal text-slate-400">
+        Веб-проект «ШКОЛА ДРОП 2.0» (shkoladrop.vercel.app) создан автором <b>David Lite</b> и инди-студией <b>David Lite Studio</b> как полностью <b>некоммерческий фановый симулятор</b> и сатирическая интерактивная игра. Проект не осуществляет азартных игр, лотерей или приема финансовых средств. Все внутриигровые ценности являются виртуальными и не подлежат монетизации.
+      </p>
+      <ul class="list-disc list-inside text-[9px] text-slate-400 space-y-0.5 pl-1">
+        <li><b>Google LLC</b> и проекту <b>Gemini AI</b>;</li>
+        <li><b>Valve Corporation</b> (Counter-Strike 2, Dota 2, TF2);</li>
+        <li><b>Mojang Studios / Microsoft Corporation</b> (Minecraft);</li>
+        <li><b>Facepunch Studios</b> (Rust).</li>
+      </ul>
+      <p class="text-[9px] text-slate-500">
+        Кошачьи предметы «Кот-Хранитель» и его свита — авторские шутки проекта. Любые совпадения с реальными домашними котами случайны 🐾
+      </p>
+    </div>
+
+    <!-- Блок связи для правообладателей и идей игроков -->
+    <div class="bg-gradient-to-br from-slate-900 via-slate-900 to-slate-850 p-3.5 rounded-2xl border border-slate-800 text-left space-y-2">
+      <div class="flex items-center justify-between">
+        <div class="text-[11px] font-bold text-amber-400 uppercase tracking-wider flex items-center space-x-1">
+          <span>📬</span>
+          <span>Официальный контакт студии</span>
+        </div>
+        <span class="text-[9px] px-2 py-0.5 bg-slate-800 text-slate-300 rounded font-mono">SUPPORT &amp; DMCA</span>
+      </div>
+
+      <p class="text-[10px] text-slate-300 leading-normal">
+        По вопросам авторских прав, предложений и сотрудничества пишите автору напрямую:
+      </p>
+
+      <!-- Интерактивная плашка почты с возможностью копирования -->
+      <div class="pt-1 flex items-center justify-between bg-slate-950 p-2.5 rounded-xl border border-slate-800">
+        <div class="flex items-center space-x-2 overflow-hidden">
+          <span class="text-base">✉️</span>
+          <a id="projectContactEmail" href="mailto:shkoladrop.contact@gmail.com" class="text-xs font-mono font-bold text-orange-400 hover:underline truncate">
+            shkoladrop.contact@gmail.com
+          </a>
+        </div>
+        <button onclick="copyContactEmail()" id="btnCopyEmail" class="flex-shrink-0 ml-2 px-2.5 py-1 text-[10px] font-bold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition active:scale-95">
+          Скопировать
+        </button>
+      </div>
+    </div>
+
+    <div class="text-[9px] text-slate-600">
+      © David Lite Studio / Давид Лайт, 2026. Официальный YouTube: @DavidliteYT. Все права на упоминаемые видеоигры принадлежат их законным правообладателям.
+    </div>
+  </footer>
+
+  </div><!-- /appViewport -->
+
+  <!-- НИЖНЯЯ НАВИГАЦИЯ (всегда на экране) -->
+  <nav id="tabbar" class="tabbar">
+  
+    <button onclick="switchTab('upgrade')" id="tabUpgrade" class="nav-tab nav-tab-active">
+      <span>⚡</span><span>Апгрейд</span>
+    </button>
+    <button onclick="switchTab('cases')" id="tabCases" class="nav-tab">
+      <span>📦</span><span>Кейсы</span>
+    </button>
+    <button onclick="switchTab('inventory')" id="tabInv" class="nav-tab">
+      <span>🎒</span><span>Рюкзак (<span id="invCountBadge">0</span>)</span>
+    </button>
+    <button onclick="switchTab('farm')" id="tabFarm" class="nav-tab">
+      <span>🎮</span><span>Фарм</span>
+    </button>
+    <button onclick="switchTab('shop')" id="tabShop" class="nav-tab">
+      <span>🏪</span><span>Лавка</span>
+    </button>
+  </nav>
 
   <!-- ================= MODAL: AUTHOR & CREATOR INFO (DAVID LITE) ================= -->
   <div id="authorModal" class="app-modal hidden">
@@ -778,6 +871,21 @@
             <div class="text-[10px] text-slate-500">Пропустить анимацию рулетки (экономит время)</div>
           </div>
           <button id="setFastToggle" onclick="toggleFastSetting()" class="toggle-pill">ВЫКЛ</button>
+        </div>
+
+        <div class="setting-row">
+          <div class="w-full">
+            <div class="flex items-center justify-between">
+              <span class="text-[11px] font-bold text-slate-200">Графическое качество</span>
+              <span id="qualityLabel" class="text-[10px] font-mono text-emerald-300">АВТО</span>
+            </div>
+            <div class="grid grid-cols-3 gap-1.5 mt-1.5" id="qualitySwitcher">
+              <button onclick="setQuality('auto')" data-quality="auto" class="quality-btn">Авто</button>
+              <button onclick="setQuality('high')" data-quality="high" class="quality-btn">Высокое</button>
+              <button onclick="setQuality('low')" data-quality="low" class="quality-btn">Низкое</button>
+            </div>
+            <div id="deviceInfo" class="text-[9.5px] text-slate-500 mt-1.5 leading-relaxed">Определяем возможности устройства…</div>
+          </div>
         </div>
 
         <div class="setting-row">
@@ -1153,87 +1261,6 @@
 
   <!-- ================= TOASTS ================= -->
   <div id="toastContainer" class="fixed top-16 right-3 left-3 sm:left-auto sm:w-80 z-[80] flex flex-col items-end space-y-2 pointer-events-none"></div>
-
-  <!-- ОФИЦИАЛЬНЫЙ ФУТЕР, ЮРИДИЧЕСКИЙ ДИСКЛЕЙМЕР И КОНТАКТЫ СТУДИИ -->
-  <footer class="w-full px-4 py-6 mt-8 border-t border-slate-800/80 bg-slate-950 text-center space-y-3.5">
-
-    <!-- Плашка студии разработчиков и YouTube канала -->
-    <div class="flex flex-col sm:flex-row items-center justify-center gap-2">
-      <a href="https://www.youtube.com/@DavidliteYT" target="_blank" rel="noopener noreferrer" class="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-red-950/60 hover:bg-red-900/80 border border-red-600/50 text-[11px] text-white transition active:scale-95">
-        <span class="text-red-500 font-bold">▶</span>
-        <span>YouTube канал: <b>@DavidliteYT</b></span>
-      </a>
-      <button onclick="openAuthorModal()" class="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-slate-900 border border-slate-800 text-[10px] text-slate-300 hover:text-white transition">
-        <span>🚀</span>
-        <span>Студия <b>David Lite Studio</b></span>
-      </button>
-    </div>
-
-    <!-- Быстрые юридические ссылки -->
-    <div class="flex flex-wrap justify-center gap-x-3 gap-y-1 text-[10px] text-orange-400">
-      <button onclick="openTermsModal()" class="hover:underline">Пользовательское соглашение</button>
-      <span class="text-slate-700">•</span>
-      <button onclick="openCookiePolicyModal()" class="hover:underline">Политика cookie</button>
-      <span class="text-slate-700">•</span>
-      <button onclick="openCookieSettingsModal()" class="hover:underline">Настройка cookie</button>
-      <span class="text-slate-700">•</span>
-      <button onclick="openAuthorModal()" class="hover:underline">О создателе</button>
-      <span class="text-slate-700">•</span>
-      <button onclick="openProfileModal()" class="hover:underline">Личный кабинет</button>
-    </div>
-
-    <!-- Полный отказ от ответственности и подтверждение некоммерческого статуса -->
-    <div class="text-[10px] text-slate-400 leading-relaxed text-left bg-slate-900/60 p-3.5 rounded-2xl border border-slate-800/70 space-y-2">
-      <div class="font-bold text-slate-300 uppercase tracking-wide text-[9px] flex items-center space-x-1.5">
-        <span>⚖️</span>
-        <span>Отказ от ответственности и товарные знаки:</span>
-      </div>
-      <p class="text-[9.5px] leading-normal text-slate-400">
-        Веб-проект «ШКОЛА ДРОП 2.0» (shkoladrop.vercel.app) создан автором <b>David Lite</b> и инди-студией <b>David Lite Studio</b> как полностью <b>некоммерческий фановый симулятор</b> и сатирическая интерактивная игра. Проект не осуществляет азартных игр, лотерей или приема финансовых средств. Все внутриигровые ценности являются виртуальными и не подлежат монетизации.
-      </p>
-      <ul class="list-disc list-inside text-[9px] text-slate-400 space-y-0.5 pl-1">
-        <li><b>Google LLC</b> и проекту <b>Gemini AI</b>;</li>
-        <li><b>Valve Corporation</b> (Counter-Strike 2, Dota 2, TF2);</li>
-        <li><b>Mojang Studios / Microsoft Corporation</b> (Minecraft);</li>
-        <li><b>Facepunch Studios</b> (Rust).</li>
-      </ul>
-      <p class="text-[9px] text-slate-500">
-        Кошачьи предметы «Кот-Хранитель» и его свита — авторские шутки проекта. Любые совпадения с реальными домашними котами случайны 🐾
-      </p>
-    </div>
-
-    <!-- Блок связи для правообладателей и идей игроков -->
-    <div class="bg-gradient-to-br from-slate-900 via-slate-900 to-slate-850 p-3.5 rounded-2xl border border-slate-800 text-left space-y-2">
-      <div class="flex items-center justify-between">
-        <div class="text-[11px] font-bold text-amber-400 uppercase tracking-wider flex items-center space-x-1">
-          <span>📬</span>
-          <span>Официальный контакт студии</span>
-        </div>
-        <span class="text-[9px] px-2 py-0.5 bg-slate-800 text-slate-300 rounded font-mono">SUPPORT &amp; DMCA</span>
-      </div>
-
-      <p class="text-[10px] text-slate-300 leading-normal">
-        По вопросам авторских прав, предложений и сотрудничества пишите автору напрямую:
-      </p>
-
-      <!-- Интерактивная плашка почты с возможностью копирования -->
-      <div class="pt-1 flex items-center justify-between bg-slate-950 p-2.5 rounded-xl border border-slate-800">
-        <div class="flex items-center space-x-2 overflow-hidden">
-          <span class="text-base">✉️</span>
-          <a id="projectContactEmail" href="mailto:shkoladrop.contact@gmail.com" class="text-xs font-mono font-bold text-orange-400 hover:underline truncate">
-            shkoladrop.contact@gmail.com
-          </a>
-        </div>
-        <button onclick="copyContactEmail()" id="btnCopyEmail" class="flex-shrink-0 ml-2 px-2.5 py-1 text-[10px] font-bold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition active:scale-95">
-          Скопировать
-        </button>
-      </div>
-    </div>
-
-    <div class="text-[9px] text-slate-600">
-      © David Lite Studio / Давид Лайт, 2026. Официальный YouTube: @DavidliteYT. Все права на упоминаемые видеоигры принадлежат их законным правообладателям.
-    </div>
-  </footer>
 
   <!-- ЛОГИКА ИГРЫ (модульная структура v2.0) -->
   <script defer src="js/config.js"></script>

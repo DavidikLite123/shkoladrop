@@ -33,6 +33,7 @@ const state = {
   adminClicks: 0,
   tempRegAvatar: '🎒',
   selectedCase: null,
+  caseFilter: 'all',
   isOpeningCase: false,
   lastResultItem: null,
   lastResultIsWin: false,
@@ -611,7 +612,7 @@ function startUpgradeRoll() {
   const totalAngularDistance = fullSpins + forwardDelta;
 
   const startAngle = state.currentAngle;
-  const duration = state.settings.reduceMotion ? 700 : 5200;
+  const duration = state.settings.reduceMotion ? 700 : (Quality.isLow() ? 3600 : 5200);
   const startTime = performance.now();
   let lastTickAngle = startAngle;
 
@@ -749,6 +750,7 @@ function showResult(isWin, item, meta, missPercent = 0) {
 
   overlay.classList.remove('hidden');
   overlay.classList.add('pointer-events-auto');
+  syncModalState();
   requestAnimationFrame(() => {
     overlay.classList.remove('opacity-0');
     overlay.classList.add('opacity-100');
@@ -764,7 +766,7 @@ function closeResultOverlay() {
   const overlay = $('resultOverlay');
   overlay.classList.add('opacity-0');
   overlay.classList.remove('pointer-events-auto');
-  setTimeout(() => overlay.classList.add('hidden'), 200);
+  setTimeout(() => { overlay.classList.add('hidden'); syncModalState(); }, 200);
 }
 
 function sellResultItem() {
@@ -834,8 +836,34 @@ function renderCasesUI() {
     openX5.textContent = state.selectedCase.secret ? 'x5 🔒' : `x5 · ${shortMoney(x5Cost)}₽`;
   }
 
+  const affordableList = CASES_LIST.filter(c => state.balance >= c.price);
+  const topList = CASES_LIST.filter(c => !c.secret && c.price >= 45000);
+  const secretList = CASES_LIST.filter(c => c.secret);
+
+  let visibleCases = CASES_LIST;
+  if (state.caseFilter === 'affordable') visibleCases = affordableList;
+  else if (state.caseFilter === 'top') visibleCases = topList;
+  else if (state.caseFilter === 'secret') visibleCases = secretList;
+
+  $('caseCountAll').textContent = CASES_LIST.length;
+  $('caseCountAffordable').textContent = affordableList.length;
+
+  // если выбранный кейс скрыт фильтром — переключаемся на первый доступный
+  if (visibleCases.length && !visibleCases.some(c => c.id === state.selectedCase.id)) {
+    state.selectedCase = visibleCases[0];
+    setupCaseTape();
+  }
+
   grid.innerHTML = '';
-  CASES_LIST.forEach(c => {
+
+  if (!visibleCases.length) {
+    grid.innerHTML = `
+      <div class="col-span-2 py-8 text-center text-xs text-slate-500">
+        Здесь пока пусто — копи монеты, и кейсы появятся! 🪙
+      </div>`;
+  }
+
+  visibleCases.forEach(c => {
     const selected = c.id === state.selectedCase.id;
     const affordable = state.balance >= c.price;
     const card = document.createElement('div');
@@ -862,6 +890,28 @@ function renderCasesUI() {
       : `Секретный кейс стоит 10 000 000 ₽ · не хватает ${fmt(Math.max(0, secret.price - state.balance))} ₽`);
 
   renderDropHistory();
+}
+
+function setCaseFilter(filter) {
+  state.caseFilter = filter;
+  const map = { all: 'caseFltAll', affordable: 'caseFltAffordable', top: 'caseFltTop', secret: 'caseFltSecret' };
+  Object.values(map).forEach(id => { const el = $(id); if (el) el.className = 'filter-chip'; });
+  const active = $(map[filter]);
+  if (active) active.className = 'filter-chip filter-chip-active';
+  audio.playTick();
+  renderCasesUI();
+}
+
+/** Плавно возвращаем область контента к началу при смене вкладки */
+function scrollViewportTop() {
+  const vp = $('appViewport');
+  if (!vp) return;
+  try {
+    if (typeof vp.scrollTo === 'function') vp.scrollTo({ top: 0, behavior: 'auto' });
+    else vp.scrollTop = 0;
+  } catch (e) {
+    vp.scrollTop = 0;
+  }
 }
 
 function renderDropHistory() {
@@ -996,16 +1046,22 @@ function openSelectedCase() {
   setupCaseTape(winner);
   const translate = computeTapeTranslate();
 
-  requestAnimationFrame(() => {
-    track.style.transition = 'transform 5.2s cubic-bezier(0.12, 0.85, 0.18, 1)';
-    track.style.transform = `translateX(${translate}px)`;
-  });
+  // На слабых устройствах крутим кейс быстрее: меньше нагрузки и ожидания
+  const spinMs = Quality.isLow() ? 3300 : 5200;
+  const track = $('caseRouletteTrack');
+
+  if (track) {
+    requestAnimationFrame(() => {
+      track.style.transition = `transform ${spinMs}ms cubic-bezier(0.12, 0.85, 0.18, 1)`;
+      track.style.transform = `translateX(${translate}px)`;
+    });
+  }
 
   const tickInterval = setInterval(() => audio.playCaseTick(1), 150);
-  setTimeout(() => clearInterval(tickInterval), 4200);
+  setTimeout(() => clearInterval(tickInterval), Math.max(800, spinMs - 1000));
 
   uiUpdate();
-  setTimeout(() => awardCaseDrop(winner, caseObj), 5400);
+  setTimeout(() => awardCaseDrop(winner, caseObj), spinMs + 200);
 }
 
 function openSelectedCaseMulti(count = 5) {
@@ -1349,7 +1405,7 @@ function openItemPicker(type) {
   }
 
   modal.classList.remove('hidden');
-  document.body.style.overflow = 'hidden';
+  syncModalState();
   renderModalItems();
 }
 
@@ -1536,7 +1592,7 @@ let mLastGameLoopTime = 0;
 function initMiniGameCanvas() {
   if (!mCanvas) return;
   const rect = mCanvas.getBoundingClientRect();
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const dpr = Quality.canvasDpr();
   mCanvas.width = Math.max(200, rect.width * dpr);
   mCanvas.height = Math.max(200, rect.height * dpr);
   mPlayerX = mCanvas.width / 2;
@@ -2162,6 +2218,7 @@ function applySettingsToUI() {
   });
   document.body.classList.toggle('no-motion', !!s.reduceMotion);
   audio.applySettings(s);
+  applyQualityToUI();
   $('settingsVersion').textContent = `v${APP_VERSION}`;
   $('aboutVersion').textContent = APP_VERSION;
   $('versionBadge').textContent = `v${APP_VERSION}`;
@@ -2197,7 +2254,25 @@ function toggleMotionSetting() {
   state.settings.reduceMotion = !state.settings.reduceMotion;
   applySettingsToUI();
   saveSettings();
-  BackgroundFx.toggleByMotionSetting(state.settings.reduceMotion);
+  Quality.apply();
+}
+
+function setQuality(mode) {
+  if (!['auto', 'high', 'low'].includes(mode)) return;
+  state.settings.quality = mode;
+  Quality.set(mode);
+  applyQualityToUI();
+  saveSettings();
+  audio.playTick();
+  const text = { auto: 'Авто: качество подстроится под устройство', high: 'Высокое: максимум эффектов', low: 'Низкое: максимальная плавность и экономия батареи' };
+  Toast.info(text[mode]);
+}
+
+function applyQualityToUI() {
+  document.querySelectorAll('#qualitySwitcher .quality-btn').forEach(btn => {
+    btn.classList.toggle('quality-btn-active', btn.dataset.quality === state.settings.quality);
+  });
+  Quality.renderLabel();
 }
 
 function setAccent(accent) {
@@ -2430,7 +2505,7 @@ function closeWelcomeDisclaimer() {
   const modal = $('welcomeDisclaimerModal');
   if (modal) {
     modal.classList.add('opacity-0', 'pointer-events-none');
-    setTimeout(() => modal.remove(), 300);
+    setTimeout(() => { modal.remove(); syncModalState(); }, 300);
   }
   MetaStore.write(Object.assign(MetaStore.read(), { welcomeSeen: true }));
   showCookieBannerIfNeeded();
@@ -2530,6 +2605,7 @@ function switchTab(tab) {
   audio.init();
   audio.playTick();
   if (mGameRunning && tab !== 'farm') stopMiniGame();
+  scrollViewportTop();
 
   const views = {
     upgrade: $('viewUpgrade'),
@@ -2649,6 +2725,7 @@ function initGame() {
   renderProfile();
   applyCookieCategoriesToUI();
   updateDailyIndicator();
+  syncModalState();   // приветственное окно открыто — контент под ним не скроллится
 
   renderAll();
 
@@ -2657,6 +2734,7 @@ function initGame() {
   addFeedItem(true, ITEMS_BY_ID['sch_chewed_pen'], ITEMS_BY_ID['gm_mc_pickaxe']);
   addFeedItem(false, ITEMS_BY_ID['sch_eraser'], ITEMS_BY_ID['cs_ak_vulcan']);
 
+  scrollViewportTop();
   applyOfflineIdleIncome();
   startIdleTicker();
   checkAchievements();

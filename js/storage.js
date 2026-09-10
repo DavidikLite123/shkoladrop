@@ -191,6 +191,7 @@ const SettingsStore = {
       if (typeof raw.fastOpen === 'boolean') out.fastOpen = raw.fastOpen;
       if (typeof raw.reduceMotion === 'boolean') out.reduceMotion = raw.reduceMotion;
       if (typeof raw.accent === 'string' && ['orange', 'cyan', 'violet', 'emerald'].includes(raw.accent)) out.accent = raw.accent;
+      if (typeof raw.quality === 'string' && ['auto', 'high', 'low'].includes(raw.quality)) out.quality = raw.quality;
     }
     return out;
   },
