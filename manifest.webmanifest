@@ -1,0 +1,28 @@
+{
+  "name": "ШКОЛА ДРОП 2.0 — кейсы и апгрейдер от David Lite",
+  "short_name": "ШКОЛА ДРОП",
+  "description": "Симулятор школьных кейсов и честный CS2 апгрейдер. Сезон 2: коты-предметы, достижения, дежурство и секретный Кот-Хранитель.",
+  "lang": "ru",
+  "dir": "ltr",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b0e14",
+  "theme_color": "#0b0e14",
+  "categories": ["games", "entertainment"],
+  "icons": [
+    {
+      "src": "assets/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/secret-cat.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
