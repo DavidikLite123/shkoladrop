@@ -66,6 +66,7 @@ function loadGame() {
 
   if (!state.stats.createdAt) state.stats.createdAt = Date.now();
   state.stats.sessions = (state.stats.sessions || 0) + 1;
+  state.prevLastSeen = state.stats.lastSeen || 0;   // до перезаписи — для оффлайн-дохода
   state.stats.lastSeen = Date.now();
   state.stats.balanceMax = Math.max(state.stats.balanceMax || 0, state.balance);
 
@@ -317,7 +318,7 @@ function renderAll() {
   if (viewVisible('viewCases')) renderCasesUI();
   if (viewVisible('viewInventory')) renderInventory();
   if (viewVisible('viewShop')) renderShop();
-  renderFarm();
+  if (viewVisible('viewFarm')) renderFarm();
 
   if (Modal.isOpen('profileModal')) renderProfile();
 
@@ -566,7 +567,6 @@ function startUpgradeRoll() {
   audio.init();
   state.isRolling = true;
   state.inventory.splice(wagerIndex, 1);
-  state.stats.upgradesLost === undefined && (state.stats.upgradesLost = 0);
   addXp(XP_REWARDS.upgradeAttempt);
   uiUpdate();
   persist();
@@ -1728,7 +1728,7 @@ function handleGameInput(e) {
    ДЕЖУРСТВО ПО ШКОЛЕ (IDLE)
    -------------------------------------------------------------------------- */
 function idleAps() {
-  const lvl = state.stats.idle.level || 0;
+  const lvl = clamp(state.stats.idle.level || 0, 0, IDLE_LEVELS.length);
   if (!lvl) return 0;
   const cfg = IDLE_LEVELS[Math.min(lvl, IDLE_LEVELS.length) - 1];
   return cfg ? cfg.aps : 0;
@@ -1841,7 +1841,7 @@ function startIdleTicker() {
 function applyOfflineIdleIncome() {
   const aps = idleAps();
   if (!aps) return;
-  const lastSeen = state.stats.lastSeen || Date.now();
+  const lastSeen = state.prevLastSeen || state.stats.lastSeen || Date.now();
   const elapsed = Math.max(0, Math.min((Date.now() - lastSeen) / 1000, IDLE_OFFLINE_CAP_H * 3600));
   if (elapsed < 60) return;
   const earned = Math.floor(aps * elapsed * IDLE_OFFLINE_RATE);
