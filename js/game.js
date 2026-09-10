@@ -902,16 +902,12 @@ function setCaseFilter(filter) {
   renderCasesUI();
 }
 
-/** Плавно возвращаем область контента к началу при смене вкладки */
+/** Возвращаем страницу к началу при смене вкладки */
 function scrollViewportTop() {
+  try { window.scrollTo(0, 0); } catch (e) {}
+  try { document.documentElement.scrollTop = 0; } catch (e) {}
   const vp = $('appViewport');
-  if (!vp) return;
-  try {
-    if (typeof vp.scrollTo === 'function') vp.scrollTo({ top: 0, behavior: 'auto' });
-    else vp.scrollTop = 0;
-  } catch (e) {
-    vp.scrollTop = 0;
-  }
+  if (vp) vp.scrollTop = 0;
 }
 
 function renderDropHistory() {
@@ -2199,6 +2195,7 @@ function openSettingsModal() {
   audio.init();
   audio.playTick();
   applySettingsToUI();
+  updateLegacyRestoreButton();
   Modal.open('settingsModal');
 }
 
@@ -2280,6 +2277,45 @@ function setAccent(accent) {
   applySettingsToUI();
   saveSettings();
   audio.playTick();
+}
+
+/** Прогресс старой версии в localStorage ещё жив? Показываем кнопку возврата */
+function updateLegacyRestoreButton() {
+  const btn = $('btnRestoreLegacy');
+  if (!btn) return;
+  const legacy = SaveManager.readLegacy();
+  const hasData = !!(legacy && ((legacy.balance && legacy.balance > 2000) || (legacy.inventory && legacy.inventory.length > 4) || legacy.user));
+  btn.classList.toggle('hidden', !hasData);
+}
+
+async function restoreLegacySave() {
+  const legacy = SaveManager.readLegacy();
+  if (!legacy) {
+    Toast.info('Прогресс версии 1.0 в этом браузере не найден');
+    updateLegacyRestoreButton();
+    return;
+  }
+
+  const invValue = (legacy.inventory || []).reduce((sum, i) => sum + (i.price || 0), 0);
+  const ok = await ConfirmDialog.ask({
+    icon: '↩️',
+    title: 'Вернуть прогресс 1.0?',
+    text: `Найдено: баланс <b class="text-amber-300">${fmt(legacy.balance || 0)} ₽</b>, предметов <b>${(legacy.inventory || []).length}</b> на ${fmt(invValue)} ₽${legacy.user ? `, профиль «${escapeHtml(legacy.user.nick)}»` : ''}.<br>Текущий прогресс будет заменён.`,
+    okText: 'Вернуть'
+  });
+  if (!ok) return;
+
+  const normalized = SaveManager.normalize(legacy);
+  state.balance = normalized.balance;
+  state.inventory = normalized.inventory;
+  state.user = normalized.user;
+  state.selectedDeposit = state.inventory[0] || null;
+  state.selectedTarget = state.selectedTarget || ITEMS_BY_ID['cs_usp_torque'];
+  auditInventory();
+  persist(true);
+  uiUpdate();
+  Toast.success('Прогресс версии 1.0 восстановлен! 🎒');
+  Modal.close('settingsModal');
 }
 
 async function askResetProgress() {
@@ -2528,14 +2564,45 @@ function handleAdminTrigger() {
   if (state.adminClicks === 3) Toast.info('Ещё пара кликов... 👀', 1200);
   if (state.adminClicks >= 5) {
     state.adminClicks = 0;
-    const code = (window.prompt('🔐 Код разработчика ШКОЛА ДРОП:') || '').trim();
-    if (code === ADMIN_CODE) {
-      state.rigReady = true;
-      openAdminModal();
-      Toast.success('Панель разработчика открыта. Тише! 🤫');
-    } else if (code) {
-      Toast.error('Неверный код');
-    }
+    openAdminCodeModal();
+  }
+}
+
+/** Окно ввода кода: работает и в iframe, где window.prompt заблокирован */
+function openAdminCodeModal() {
+  const modal = $('adminCodeModal');
+  if (!modal) return;
+  const input = $('adminCodeInput');
+  const error = $('adminCodeError');
+  if (input) input.value = '';
+  if (error) error.classList.add('hidden');
+  Modal.open('adminCodeModal');
+  setTimeout(() => { if (input) input.focus(); }, 80);
+}
+
+function closeAdminCodeModal() {
+  Modal.close('adminCodeModal');
+}
+
+function submitAdminCode() {
+  const input = $('adminCodeInput');
+  const error = $('adminCodeError');
+  const code = ((input && input.value) || '').trim().toUpperCase();
+
+  // принимаем 1337 и удобные варианты записи
+  const accepted = [ADMIN_CODE, 'SHKOLA' + ADMIN_CODE, 'ADMIN' + ADMIN_CODE, 'КОТ' + ADMIN_CODE];
+
+  if (accepted.includes(code)) {
+    state.rigReady = true;
+    closeAdminCodeModal();
+    openAdminModal();
+    audio.playLevelUp();
+    Fx.burst(80, ['#10b981', '#fbbf24']);
+    Toast.success('Панель разработчика открыта. Тише! 🤫');
+  } else {
+    if (error) error.classList.remove('hidden');
+    audio.playLoss();
+    if (input) input.select();
   }
 }
 
@@ -2725,6 +2792,7 @@ function initGame() {
   renderProfile();
   applyCookieCategoriesToUI();
   updateDailyIndicator();
+  updateLegacyRestoreButton();
   syncModalState();   // приветственное окно открыто — контент под ним не скроллится
 
   renderAll();

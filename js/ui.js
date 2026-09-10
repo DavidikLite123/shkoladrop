@@ -202,9 +202,12 @@ function anyOverlayOpen() {
   return !!document.querySelector('.app-modal:not(.hidden), #itemModal:not(.hidden), #resultOverlay:not(.hidden), #welcomeDisclaimerModal');
 }
 
-/** Единая точка правды: прокрутка контента блокируется, пока открыт любой оверлей */
+/** Единая точка правды: пока открыт любой оверлей — фон не прокручивается.
+    Блокируем через <html>, поэтому обычная прокрутка документа продолжает работать. */
 function syncModalState() {
-  document.body.classList.toggle('modal-open', anyOverlayOpen());
+  const open = anyOverlayOpen();
+  document.body.classList.toggle('modal-open', open);
+  document.documentElement.classList.toggle('scroll-locked', open);
 }
 
 const Modal = {

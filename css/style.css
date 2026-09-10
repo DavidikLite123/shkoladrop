@@ -50,41 +50,35 @@ body {
   overscroll-behavior-y: none;
 }
 
-/* ---------- Каркас приложения (как в мобильной игре) ----------
-   Шапка и нижняя навигация всегда на экране, контент скроллится между ними.
-   Так прокрутка работает даже внутри iframe предпросмотра и на любом «железе». */
-body.app-shell {
-  height: 100vh;
-  height: 100dvh;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.app-viewport {
-  flex: 1 1 auto;
-  min-height: 0;                     /* без этого flex-ребёнок не сжимается и скролл ломается */
-  overflow-y: auto;
+/* ---------- Каркас приложения ----------
+   Прокрутка — обычная, документом (работает в любом браузере и внутри iframe
+   предпросмотра). Шапка «прилипает» сверху, нижнее меню закреплено снизу. */
+body.shkola-app {
+  min-height: 100vh;
   overflow-x: hidden;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior-y: contain;
-  scrollbar-width: thin;
-  contain: paint;
+  padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px));
 }
 
 header {
-  flex: 0 0 auto;
   padding-top: calc(0.75rem + env(safe-area-inset-top, 0px));
+  position: sticky;
+  top: 0;
 }
 
-/* ---------- Нижний таббар ---------- */
+/* ---------- Нижнее меню (всегда на экране) ---------- */
 .tabbar {
-  flex: 0 0 auto;
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 28rem;
+  z-index: 45;
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 0.25rem;
   padding: 0.4rem 0.6rem calc(0.4rem + env(safe-area-inset-bottom, 0px));
-  background: rgba(9, 12, 18, 0.94);
+  background: rgba(9, 12, 18, 0.95);
   border-top: 1px solid rgba(51, 65, 85, 0.65);
   box-shadow: 0 -10px 30px -18px rgba(0, 0, 0, 0.95);
 }
@@ -92,11 +86,11 @@ header {
   .tabbar { backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
 }
 
-/* Панель вкладки не должна «залипать» в собственный скролл */
+/* Панель вкладки */
 .view-panel { padding-bottom: 1rem; }
 
-/* Модалки блокируют прокрутку контента под ними */
-body.modal-open .app-viewport { overflow: hidden; }
+/* Пока открыто модальное окно — фон не прокручивается */
+html.scroll-locked, html.scroll-locked body { overflow: hidden; }
 
 .font-cs { font-family: 'Chakra Petch', sans-serif; }
 
@@ -678,7 +672,7 @@ body.quality-low .itm-box[data-rarity="gold"],
 body.quality-low .itm-box[data-rarity="secret"] { animation: none !important; }
 body.quality-low .case-aura { animation: none !important; }
 body.quality-low header { background: rgba(15, 23, 42, 0.97) !important; }
-body.quality-low .tabbar { background: #0a0d14 !important; }
+body.quality-low .tabbar { background: #0a0d14 !important; box-shadow: none !important; }
 body.quality-low .app-modal {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
@@ -717,11 +711,13 @@ body.quality-low .bg-grid { display: none; }
   border-color: rgba(16, 185, 129, 0.6);
 }
 
-/* Плавность прокрутки анимируем только на «железе» с запасом */
+/* Плавность прокрутки — только если система не просит меньше анимаций */
 @media (prefers-reduced-motion: no-preference) {
-  .app-viewport { scroll-behavior: smooth; }
+  html { scroll-behavior: smooth; }
 }
-body.quality-low .app-viewport { scroll-behavior: auto; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
 
 /* Тап-зоны не меньше 44px по высоте — палец попадает всегда */
 .nav-tab { min-height: 46px; }

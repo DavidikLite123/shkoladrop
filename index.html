@@ -73,8 +73,58 @@
 
   <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="assets/icon.svg">
-  <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="manifest" href="manifest.webmanifest?v=2.0.2">
+  <!-- КРИТИЧЕСКИЙ CSS: прокрутка и нижнее меню работают всегда, даже если внешний файл не загрузился -->
+  <style>
+    html { -webkit-text-size-adjust: 100%; }
+    body.shkola-app {
+      --accent: #ff5500;
+      margin: 0;
+      min-height: 100vh;
+      overflow-x: hidden;
+      padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+    }
+    body.shkola-app > header { position: sticky; top: 0; z-index: 30; }
+    body.shkola-app .tabbar {
+      position: fixed;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 100%;
+      max-width: 28rem;
+      z-index: 45;
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 0.25rem;
+      padding: 0.4rem 0.6rem calc(0.4rem + env(safe-area-inset-bottom, 0px));
+      background: rgba(9, 12, 18, 0.96);
+      border-top: 1px solid rgba(51, 65, 85, 0.65);
+    }
+    body.shkola-app .nav-tab {
+      min-height: 46px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1px;
+      border-radius: 0.75rem;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      background: rgba(30, 41, 59, 0.85);
+      color: #cbd5e1;
+      border: 1px solid rgba(51, 65, 85, 0.5);
+    }
+    body.shkola-app .nav-tab-active {
+      background: linear-gradient(135deg, var(--accent), #f59e0b);
+      color: #06070a;
+      border-color: transparent;
+    }
+    html.scroll-locked, html.scroll-locked body { overflow: hidden; }
+  </style>
+
+  <link rel="stylesheet" href="css/style.css?v=2.0.2">
 
   <script>
     window.tailwind = window.tailwind || {};
@@ -102,7 +152,7 @@
     }
   </script>
 </head>
-<body class="app-shell max-w-md mx-auto relative border-x border-slate-800/40 shadow-2xl bg-schoolDark">
+<body class="shkola-app max-w-md mx-auto relative border-x border-slate-800/40 shadow-2xl bg-schoolDark">
 
   <!-- ЖИВОЙ ФОН: анимированные пятна + звёздное поле -->
   <div id="bgLayer" class="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
@@ -158,7 +208,7 @@
   </header>
 
   <!-- ПРОКРУЧИВАЕМАЯ ОБЛАСТЬ КОНТЕНТА (панели + футер) -->
-  <div id="appViewport" class="app-viewport w-full">
+  <div id="appViewport" class="w-full">
 
   <!-- Брендовый баннер с кнопкой перехода на YouTube создателя -->
   <div class="w-full px-3 pt-2">
@@ -930,6 +980,10 @@
           </div>
         </div>
 
+        <button id="btnRestoreLegacy" onclick="restoreLegacySave()" class="hidden w-full py-2.5 rounded-xl bg-emerald-950/60 hover:bg-emerald-900/70 border border-emerald-700/60 text-emerald-300 font-bold text-[11px] transition active:scale-95">
+          ↩️ Вернуть прогресс из версии 1.0
+        </button>
+
         <button onclick="askResetProgress()" class="w-full py-2.5 rounded-xl bg-rose-950/60 hover:bg-rose-900/70 border border-rose-800/60 text-rose-300 font-bold text-[11px] transition active:scale-95">
           Полный сброс прогресса
         </button>
@@ -1113,6 +1167,24 @@
     </div>
   </div>
 
+  <!-- ================= MODAL: DEV CODE (вход в админку) ================= -->
+  <div id="adminCodeModal" class="app-modal hidden">
+    <div class="modal-card max-w-xs w-full text-center">
+      <div class="text-4xl mb-2">🔐</div>
+      <h3 class="font-cs text-sm font-bold uppercase text-white mb-1">Панель разработчика</h3>
+      <p class="text-[11px] text-slate-400 mb-3">Введи код доступа, чтобы открыть подкрутку рандома и dev-начисления.</p>
+      <input type="text" id="adminCodeInput" inputmode="numeric" maxlength="20" placeholder="Код"
+             onkeydown="if(event.key==='Enter') submitAdminCode()"
+             class="w-full text-center bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-sm font-mono text-white tracking-widest focus:outline-none focus:border-emerald-500">
+      <div id="adminCodeError" class="text-[11px] text-rose-400 mt-2 hidden">Неверный код. Попробуй ещё раз.</div>
+      <div class="grid grid-cols-2 gap-2 mt-3">
+        <button onclick="closeAdminCodeModal()" class="py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-[11px] transition">Отмена</button>
+        <button onclick="submitAdminCode()" class="py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] transition">Войти</button>
+      </div>
+      <div class="text-[9.5px] text-slate-500 mt-2.5">Подсказка автора: код — <span class="font-mono text-slate-400">1337</span> (латинские цифры)</div>
+    </div>
+  </div>
+
   <!-- ================= MODAL: CASE ODDS ================= -->
   <div id="caseOddsModal" class="app-modal hidden">
     <div class="modal-card max-w-sm w-full">
@@ -1263,10 +1335,10 @@
   <div id="toastContainer" class="fixed top-16 right-3 left-3 sm:left-auto sm:w-80 z-[80] flex flex-col items-end space-y-2 pointer-events-none"></div>
 
   <!-- ЛОГИКА ИГРЫ (модульная структура v2.0) -->
-  <script defer src="js/config.js"></script>
-  <script defer src="js/storage.js"></script>
-  <script defer src="js/ui.js"></script>
-  <script defer src="js/game.js"></script>
-  <script defer src="js/main.js"></script>
+  <script defer src="js/config.js?v=2.0.2"></script>
+  <script defer src="js/storage.js?v=2.0.2"></script>
+  <script defer src="js/ui.js?v=2.0.2"></script>
+  <script defer src="js/game.js?v=2.0.2"></script>
+  <script defer src="js/main.js?v=2.0.2"></script>
 </body>
 </html>
