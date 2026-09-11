@@ -229,6 +229,11 @@ const CASES_LIST = [
     items: [ { id: 'yt_creator_award', w: 32 }, { id: 'yt_diamond_award', w: 8 }, { id: 'cat_keeper', w: 20 }, { id: 'sch_timetable_relic', w: 20 }, { id: 'cs_karambit_dop', w: 20 } ]
   },
   {
+    id: 'case_billion_school', name: 'КЕЙС МИЛЛИАРДЕРА: ШКОЛЬНАЯ КОМАНДА', price: 1000000000, icon: '💎', image: 'assets/season3-billion-case.jpg', color: '#f8fafc',
+    season: 3, ultra: true, desc: 'Самый дорогой кейс сезона. Ультра-легендарный дроп для настоящей команды',
+    items: [ { id: 'yt_diamond_award', w: 10 }, { id: 'cat_keeper', w: 22 }, { id: 'cs_karambit_dop', w: 22 }, { id: 'sch_timetable_relic', w: 18 }, { id: 'yt_creator_award', w: 28 } ]
+  },
+  {
     id: 'case_cat_secret', name: 'СЕКРЕТНЫЙ КЕЙС: КОТ-ХРАНИТЕЛЬ', price: 10000000, icon: '🐱', color: '#00f0ff',
     secret: true,
     desc: 'Легендарный кейс за 10 000 000 ₽. Внутри живёт Кот и вся его школьная свита',

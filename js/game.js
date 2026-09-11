@@ -296,6 +296,7 @@ function viewVisible(id) {
 }
 
 function renderAll() {
+  if (state.user) leaderboardSyncCurrent();
   checkHardModeNotice();
   // Баланс и шапка
   animateNumber($('headerBalance'), state.balance, 420, v => `${fmt(v)} ₽`);
@@ -884,7 +885,7 @@ function renderCasesUI() {
     const card = document.createElement('div');
     card.className = `case-card ${selected ? 'case-card-selected' : ''} ${c.secret ? 'case-card-secret' : ''} ${!affordable && c.secret ? 'case-card-locked' : ''}`;
     card.innerHTML = `
-      <div class="text-3xl mb-1 relative z-10">${c.secret && !affordable ? '🔒' : c.icon}</div>
+      <div class="text-3xl mb-1 relative z-10">${c.image ? `<img src="${escapeHtml(c.image)}" alt="${escapeHtml(c.name)}" class="case-cover" onerror="this.style.display='none';this.nextElementSibling.style.display='block';"><span style="display:none">${c.icon}</span>` : (c.secret && !affordable ? '🔒' : c.icon)}</div>
       <div class="text-xs font-bold font-cs ${c.secret ? 'secret-shine' : 'text-white'} leading-tight relative z-10">${escapeHtml(c.name)}</div>
       <div class="text-[10px] text-slate-400 line-clamp-1 my-1 relative z-10">${escapeHtml(c.desc)}</div>
       <div class="text-xs font-cs font-bold relative z-10" style="color:${c.color}">${fmt(casePrice(c))} ₽</div>
@@ -2105,6 +2106,49 @@ function selectRegAvatar(emoji) {
   audio.playTick();
 }
 
+/* ---------- Локальная таблица лидеров ----------
+   В статической игре нет серверной базы, поэтому таблица честно хранится
+   локально. Она показывает зарегистрированные профили на этом устройстве.
+*/
+const LEADERBOARD_KEY = 'shkola_drop_leaderboard_v1';
+function leaderboardRead() {
+  try { const list = JSON.parse(localStorage.getItem(LEADERBOARD_KEY) || '[]'); return Array.isArray(list) ? list : []; }
+  catch (e) { return []; }
+}
+function leaderboardScore(user) {
+  const invValue = state.inventory.reduce((sum, item) => sum + (Number(item.price) || 0), 0);
+  return Math.round((state.stats.level || 1) * 1000 + (state.stats.casesOpened || 0) * 25 + invValue / 1000);
+}
+function leaderboardSyncCurrent() {
+  if (!state.user) return;
+  const list = leaderboardRead();
+  const id = state.user.id || `${state.user.nick.toLowerCase()}_${state.user.joinedAt || ''}`;
+  const record = { id, nick: state.user.nick, avatar: state.user.avatar || '🎒', grade: state.user.grade || 'Ученик школы', score: leaderboardScore(state.user), level: state.stats.level || 1, cases: state.stats.casesOpened || 0, updatedAt: Date.now() };
+  const idx = list.findIndex(item => item.id === id);
+  if (idx >= 0) list[idx] = Object.assign({}, list[idx], record);
+  else list.push(record);
+  try { localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(list.slice(-100))); } catch (e) {}
+}
+function renderLeaderboard() {
+  const box = $('leaderboardList');
+  if (!box) return;
+  leaderboardSyncCurrent();
+  const list = leaderboardRead().sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, 20);
+  $('leaderboardCount').textContent = `${list.length} профилей на этом устройстве`;
+  if (!list.length) { box.innerHTML = '<div class="text-center text-xs text-slate-500 py-5">Пока никто не зарегистрирован. Создай профиль первым! 🎒</div>'; return; }
+  box.innerHTML = list.map((item, index) => `
+    <div class="leaderboard-row ${state.user && item.id === state.user.id ? 'leaderboard-current' : ''}">
+      <span class="leaderboard-place">${index === 0 ? '👑' : `#${index + 1}`}</span>
+      <span class="text-xl">${escapeHtml(item.avatar || '🎒')}</span>
+      <span class="flex-1 min-w-0"><b class="block truncate text-[11px] text-white">${escapeHtml(item.nick)}</b><small class="text-[9px] text-slate-500">${escapeHtml(item.grade || 'Ученик')} · ур. ${item.level || 1}</small></span>
+      <span class="text-right"><b class="block text-[11px] text-amber-300">${fmt(item.score || 0)}</b><small class="text-[9px] text-slate-500">очков</small></span>
+    </div>`).join('');
+}
+function openExtrasModal() { renderLeaderboard(); Modal.open('extrasModal'); }
+function closeExtrasModal() { Modal.close('extrasModal'); }
+function openLeaderboard() { renderLeaderboard(); Modal.open('leaderboardModal'); }
+function closeLeaderboard() { Modal.close('leaderboardModal'); }
+
 function submitRegistration() {
   const nick = ($('regNicknameInput').value || '').trim();
   const grade = ($('regGradeInput').value || '').trim();
@@ -2117,6 +2161,7 @@ function submitRegistration() {
   audio.init();
   audio.playWin();
   state.user = {
+    id: RNG.uid('player'),
     nick: nick.slice(0, 18),
     avatar: state.tempRegAvatar || '🎒',
     grade: grade || 'Ученик школы',

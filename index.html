@@ -190,8 +190,8 @@
         <span id="dailyDot" class="hidden absolute -top-1 -right-1 w-3 h-3 rounded-full bg-rose-500 border border-slate-950 animate-ping-slow"></span>
       </button>
 
-      <button onclick="openSettingsModal()" id="btnSettings" title="Настройки" class="w-9 h-9 rounded-lg bg-slate-800/90 hover:bg-slate-700 border border-slate-700/70 flex items-center justify-center text-base transition active:scale-95">
-        ⚙️
+      <button onclick="openExtrasModal()" id="btnExtras" title="Дополнительно" class="w-9 h-9 rounded-lg bg-slate-800/90 hover:bg-slate-700 border border-slate-700/70 flex items-center justify-center text-base transition active:scale-95">
+        ⋮
       </button>
 
       <button onclick="openProfileModal()" id="btnHeaderProfile" class="bg-slate-800/90 border border-slate-700/70 px-2 py-1.5 rounded-lg flex items-center space-x-1.5 transition active:scale-95">
@@ -221,7 +221,7 @@
           <div class="text-[10px] font-black text-amber-300 uppercase tracking-widest font-cs flex items-center space-x-1">
             <span>🔥 ОФИЦИАЛЬНЫЙ ПРОЕКТ DAVID LITE</span>
           </div>
-          <div class="text-[11px] font-extrabold text-white leading-tight">ШКОЛА ДРОП: СЕЗОН 2 🐱</div>
+          <div class="text-[11px] font-extrabold text-white leading-tight">ШКОЛА ДРОП: СЕЗОН 3 🐱</div>
         </div>
       </div>
       <div class="flex items-center space-x-1.5 z-10">
@@ -885,6 +885,35 @@
           Сменить профиль
         </button>
       </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL: EXTRA ================= -->
+  <div id="extrasModal" class="app-modal hidden">
+    <div class="modal-card max-w-sm w-full">
+      <div class="flex items-center justify-between pb-2 mb-3 border-b border-slate-800">
+        <h3 class="font-cs text-sm font-bold uppercase text-white">⋮ Дополнительно</h3>
+        <button onclick="closeExtrasModal()" class="text-slate-400 hover:text-white text-lg leading-none">✕</button>
+      </div>
+      <div class="space-y-2">
+        <button onclick="openLeaderboard()" class="extra-menu-button"><span class="text-xl">🏆</span><span><b>Таблица лидеров</b><small>Самые популярные игроки</small></span><span>›</span></button>
+        <button onclick="openSettingsModal(); closeExtrasModal()" class="extra-menu-button"><span class="text-xl">⚙️</span><span><b>Настройки</b><small>Звук, тема, качество и сохранение</small></span><span>›</span></button>
+        <button onclick="openCookieSettingsModal(); closeExtrasModal()" class="extra-menu-button"><span class="text-xl">🍪</span><span><b>Файлы cookie</b><small>Согласие и конфиденциальность</small></span><span>›</span></button>
+        <button onclick="openAuthorModal(); closeExtrasModal()" class="extra-menu-button"><span class="text-xl">▶️</span><span><b>Об авторе</b><small>David Lite и YouTube</small></span><span>›</span></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL: LEADERBOARD ================= -->
+  <div id="leaderboardModal" class="app-modal hidden">
+    <div class="modal-card max-w-sm w-full">
+      <div class="flex items-center justify-between pb-2 mb-3 border-b border-slate-800">
+        <div><h3 class="font-cs text-sm font-bold uppercase text-white">🏆 Таблица лидеров</h3><div id="leaderboardCount" class="text-[9px] text-slate-500 mt-0.5">0 профилей</div></div>
+        <button onclick="closeLeaderboard()" class="text-slate-400 hover:text-white text-lg leading-none">✕</button>
+      </div>
+      <div class="rounded-xl border border-amber-500/20 bg-amber-950/10 p-2 mb-2 text-[10px] text-slate-300 leading-relaxed">Популярность считается по уровню, открытым кейсам и стоимости рюкзака. Твой профиль подсвечивается.</div>
+      <div id="leaderboardList" class="space-y-1.5 max-h-[55vh] overflow-y-auto"></div>
+      <button onclick="closeLeaderboard(); openExtrasModal()" class="w-full mt-3 py-2 rounded-xl bg-slate-800 text-slate-200 text-[11px] font-bold">← Дополнительно</button>
     </div>
   </div>
 
