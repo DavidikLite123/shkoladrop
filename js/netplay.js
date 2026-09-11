@@ -1,12 +1,13 @@
 /* ==========================================================================
    ШКОЛА ДРОП — js/netplay.js
-   Онлайн-функции: сообщество (чат + уникальные ID + галочки верификации),
+   Онлайн-функции: вход по e-mail+паролю+коду (шлагбаум «введите аккаунт»),
+   сообщество (чат + уникальные ID + галочки верификации),
    облачные сохранения, спонсорство (код автора + 10% автору),
-   подарки и трейдинг.
+   подарки и трейдинг, кнопка «разбудить сервер».
 
    СЕРВЕР СООБЩЕСТВА ЗАШИТ В ИГРУ: https://shkoladrop.onrender.com
-   (лёгкий server/index.js, Node без зависимостей). Если сервер не отвечает,
-   спонсорство работает локально, а чат/подарки/обмен и облако ждут онлайна.
+   (лёгкий server/index.js, Node без зависимостей). Если сервер не отвечает —
+   жёлтая плашка с кнопкой «Включить сервер» и почтой ${SERVER_CONTACT_EMAIL}.
 
    Реестр кодов авторов — файл author-codes.json в корне репозитория (GitHub):
    сайт читает его напрямую, сервер тоже (и админка умеет в него дописывать).
@@ -16,6 +17,7 @@
    БАЗОВЫЙ СЛОЙ: адрес сервера, пинг, запросы
    -------------------------------------------------------------------------- */
 const COMMUNITY_SERVER_URL = 'https://shkoladrop.onrender.com'; // сервер сообщества — зашит
+const SERVER_CONTACT_EMAIL = 'shkoladrop.contact@gmail.com';    // куда писать, если сервер спит
 
 const ServerAPI = {
   _online: null,
@@ -367,6 +369,8 @@ const Community = {
     const tag = hasUser && state.user.tag;
     const el = $('commMyTag');
     if (el) el.textContent = tag || (hasUser ? 'выдаётся…' : '#…');
+    const farm = $('farmMyTag');
+    if (farm) farm.textContent = tag || (hasUser ? 'ID выдаётся сервером…' : 'войди в аккаунт');
     const badge = $('commMyVerified');
     if (badge) {
       badge.classList.toggle('hidden', !(hasUser && state.user.verified));
@@ -916,7 +920,7 @@ function renderServerStatus() {
   const online = ServerAPI.isOnline();
   const statusText = online
     ? `<span class="text-emerald-400">●</span> Сервер онлайн — чат, подарки и обмен работают`
-    : `<span class="text-rose-400">●</span> Сервер оффлайн — сообщество временно недоступно (${COMMUNITY_SERVER_URL.replace('https://', '')})`;
+    : `<span class="text-rose-400">●</span> Сервер не работает — нажми «Включить сервер» (Render просыпается ~минуту) или напиши нам на <b class="text-rose-200">${SERVER_CONTACT_EMAIL}</b> — решим проблему!`;
   const chipCls = online
     ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/40'
     : 'bg-rose-500/15 text-rose-300 border border-rose-500/40';
@@ -944,6 +948,11 @@ function renderServerStatus() {
     mini.textContent = chipText;
     mini.className = 'text-[8px] font-black px-1.5 py-0.5 rounded uppercase border flex-shrink-0 ' + chipCls;
   }
+  // Блоки «сервер спит» с кнопкой пробуждения и почтой поддержки
+  ['commOfflineHelp', 'netOfflineHelp'].forEach(id => {
+    const box = $(id);
+    if (box) box.classList.toggle('hidden', online);
+  });
   CloudSave._renderStatus();
 }
 
@@ -952,6 +961,325 @@ function updateNetBadge(count) {
   if (!dot) return;
   dot.classList.toggle('hidden', !count);
   dot.textContent = count > 9 ? '9+' : count;
+}
+
+/* --------------------------------------------------------------------------
+   БУДИМ СЕРВЕР: бесплатный Render «засыпает», первый запрос поднимает его
+   за 30–90 секунд. Одна кнопка — во всех окнах сообщества.
+   -------------------------------------------------------------------------- */
+async function wakeCommunityServer(btn) {
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.classList.add('opacity-60'); }
+  Toast.info('☕ Бужу сервер сообщества… Render просыпается 30–90 секунд — не закрывай страницу!', 7000);
+  const started = Date.now();
+  while (Date.now() - started < 130000) {
+    try {
+      const on = await ServerAPI.ping(true);
+      renderServerStatus();
+      if (on) {
+        if (btn) { btn.disabled = false; btn.classList.remove('opacity-60'); btn.innerHTML = orig; }
+        Toast.gold('🚀 Сервер проснулся! Аккаунты, чат, подарки и облачные сейвы снова работают — жми дальше!', 8000);
+        if (typeof Community !== 'undefined') Community.refreshChat(true);
+        return true;
+      }
+    } catch (e) {}
+    const sec = Math.round((Date.now() - started) / 1000);
+    if (btn) btn.innerHTML = `☕ Бужу… ${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+    await new Promise(r => setTimeout(r, 5000));
+  }
+  if (btn) { btn.disabled = false; btn.classList.remove('opacity-60'); btn.innerHTML = orig; }
+  Toast.error(`Сервер пока не поднялся. Зайди через пару минут или напиши нам: ${SERVER_CONTACT_EMAIL} — решим проблему!`, 10000);
+  renderServerStatus();
+  return false;
+}
+
+/* --------------------------------------------------------------------------
+   АККАУНТ: E-MAIL + ПАРОЛЬ + КОД (сезон 3.7)
+   Клиентская обёртка над /api/account/*. Код «из письма» в демо-режиме
+   приходит прямо в ответе API и показывается игроку.
+   -------------------------------------------------------------------------- */
+const Account = {
+  /* Шаг 1: e-mail + пароль → режим (login/register) + uid + демо-код */
+  start(email, password) {
+    return ServerAPI.req('POST', '/api/account/start', {
+      email, password,
+      uid: state.user ? state.user.id : null,
+      nick: state.user ? state.user.nick : null
+    }, {}, 15000);
+  },
+  /* Шаг 2: 6-значный код из письма */
+  verify(email, code) {
+    return ServerAPI.req('POST', '/api/account/verify', {
+      email, code,
+      nick: state.user ? state.user.nick : null
+    }, {}, 15000);
+  }
+};
+
+/* --------------------------------------------------------------------------
+   ШЛАГБАУМ ВХОДА «ВВЕДИТЕ АККАУНТ»
+   Показывается при входе, если локального профиля нет. Старые игроки входят
+   по e-mail+паролю+коду, новые регистрируются — тоже через код. Можно отказаться
+   от e-mail, но с честным предупреждением: выйдешь — мы не виноваты.
+   -------------------------------------------------------------------------- */
+const AuthGate = {
+  _locked: false,
+  _email: '',
+  _password: '',
+  _mode: 'login',
+
+  onBoot() {
+    if (state.user) return; // аккаунт уже есть — просто приветствуем
+    this.open(true);
+  },
+
+  onUserRegistered() {
+    if (Modal.isOpen('authModal')) this._finish();
+  },
+
+  open(locked) {
+    this._locked = !!locked;
+    const x = $('authClose');
+    if (x) x.classList.toggle('hidden', !!locked);
+    // Приветственный дисклеймер временно прячем — не наслаиваем окна
+    const wd = $('welcomeDisclaimerModal');
+    if (wd && wd.style.display !== 'none' && !wd.classList.contains('opacity-0')) {
+      wd.style.display = 'none';
+      this._welcomeHidden = true;
+    }
+    Modal.open('authModal');
+    this.showStep('home');
+    this.refreshNetworkState(true);
+  },
+
+  _releaseWelcome() {
+    if (!this._welcomeHidden) return;
+    this._welcomeHidden = false;
+    const wd = $('welcomeDisclaimerModal');
+    if (wd) wd.style.display = '';
+  },
+
+  /* Все пути закрытия шлагбаума идут через это: вернуть приветствие новичку */
+  _finish() {
+    this._locked = false;
+    Modal.close('authModal');
+    this._releaseWelcome();
+  },
+
+  /* Из настроек: «Привязать e-mail» — окно можно закрыть */
+  openLink() {
+    if (!state.user) return;
+    this.open(false);
+    this.showStep('login');
+    setTimeout(() => { const e = $('authEmailInput'); if (e) e.focus(); }, 150);
+  },
+
+  close() {
+    if (this._locked && !state.user) {
+      Toast.error('Сначала введи аккаунт — без профиля прогресс не сохранить! 🎒');
+      return;
+    }
+    this._finish();
+  },
+
+  showStep(step) {
+    [['home', 'authStepHome'], ['login', 'authStepLogin'], ['code', 'authStepCode']].forEach(([s, id]) => {
+      const el = $(id);
+      if (el) el.classList.toggle('hidden', s !== step);
+    });
+    this._err('');
+    if (step === 'login') setTimeout(() => { const e = $('authEmailInput'); if (e) e.focus(); }, 150);
+    if (step === 'code') setTimeout(() => { const c = $('authCodeInput'); if (c) c.focus(); }, 150);
+  },
+
+  async refreshNetworkState(pingIt) {
+    const online = pingIt ? await ServerAPI.ping(true) : ServerAPI.isOnline();
+    const off = $('authOffline');
+    if (off) off.classList.toggle('hidden', !!online);
+    renderServerStatus();
+    return online;
+  },
+
+  _err(text) {
+    const e = $('authError');
+    if (!e) return;
+    e.textContent = text || '';
+    e.classList.toggle('hidden', !text);
+  },
+
+  _status(text) {
+    const e = $('authStatusLine');
+    if (e) e.textContent = text || '';
+  },
+
+  /* Шаг 1: e-mail + пароль → запрашиваем код */
+  async requestCode() {
+    const email = String((($('authEmailInput') || {}).value) || '').trim().toLowerCase();
+    const password = String((($('authPasswordInput') || {}).value) || '');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return this._err('Похоже, в e-mail опечатка. Пример: player@gmail.com');
+    if (password.length < 4) return this._err('Пароль — минимум 4 символа');
+
+    const btn = $('authGetCodeBtn');
+    if (btn) btn.disabled = true;
+    this._status('Связываюсь с сервером…');
+    try {
+      if (!(await this.refreshNetworkState(true))) {
+        this._status('');
+        return this._err('Сервер сейчас оффлайн. Нажми «ВКЛЮЧИТЬ СЕРВЕР» в жёлтой полоске, подожди минутку и повтори.');
+      }
+      const { data } = await Account.start(email, password);
+      if (!data.ok) {
+        this._status('');
+        return this._err(data.error || 'Сервер отклонил запрос — попробуй ещё раз');
+      }
+      this._email = email;
+      this._password = password;
+      this._mode = data.mode || 'login';
+      this._pending = { uid: data.uid, tag: data.tag, nick: data.nick, verified: data.verified, email: data.email || email };
+
+      const ml = $('authModeLabel');
+      if (ml) ml.textContent = this._mode === 'register'
+        ? '✨ Такой e-mail у нас впервые — создаём новый аккаунт'
+        : '👋 Такой аккаунт уже есть — входим обратно';
+      const dm = $('authDemoCode');
+      if (dm) dm.textContent = data.demoCode || '••••••';
+      const em = $('authCodeEmail');
+      if (em) em.textContent = email;
+      this._status('');
+      this.showStep('code');
+      Toast.info('📨 Код «из письма» отправлен! В демо-режиме он показан прямо в жёлтой рамке под полем 🙂', 7000);
+      audio.playCoin();
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  },
+
+  /* Отправить код повторно (тот же e-mail и пароль) */
+  resendCode() {
+    if (!this._email || !this._password) return this.showStep('login');
+    const e = $('authEmailInput'), p = $('authPasswordInput');
+    if (e) e.value = this._email;
+    if (p) p.value = this._password;
+    this.requestCode();
+  },
+
+  /* Шаг 2: вводим код из письма */
+  async confirmCode() {
+    const code = String((($('authCodeInput') || {}).value) || '').replace(/\D/g, '');
+    if (code.length !== 6) return this._err('Код — это 6 цифр из письма');
+    const btn = $('authConfirmBtn');
+    if (btn) btn.disabled = true;
+    this._status('Проверяю код…');
+    try {
+      const { data } = await Account.verify(this._email, code);
+      if (!data.ok) {
+        this._status('');
+        return this._err(data.error || 'Неверный код — глянь внимательнее и попробуй ещё');
+      }
+      this._status('');
+      this._acceptAccount(data);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  },
+
+  /* Код подтверждён: принимаем аккаунт с серверным uid/ID */
+  _acceptAccount(data) {
+    const email = data.email || this._email;
+
+    // РЕЖИМ ПРИВЯЗКИ (из настроек): профиль уже существует
+    if (state.user) {
+      state.user.email = email;
+      if (data.tag && !state.user.tag) state.user.tag = data.tag;
+      if (data.verified) state.user.verified = true;
+      persist(true);
+      if (typeof renderProfile === 'function') renderProfile();
+      NetIdentity.renderEverywhere();
+      this._finish();
+      audio.playSecret();
+      Toast.gold(`🔒 E-mail <b>${escapeHtml(email)}</b> привязан к аккаунту! Теперь прогресс восстановится с любого устройства.`, 8000);
+      NetIdentity.sync();
+      return;
+    }
+
+    // ВОЗВРАЩАЮЩИЙСЯ ИГРОК: сервер знает ник — входим целиком
+    if (data.nick) {
+      state.user = {
+        id: data.uid,
+        nick: data.nick,
+        avatar: '🎒',
+        grade: 'Ученик школы',
+        joinedAt: new Date().toLocaleDateString('ru-RU'),
+        email, tag: data.tag || null, verified: !!data.verified
+      };
+      persist(true);
+      if (typeof renderProfile === 'function') renderProfile();
+      uiUpdate();
+      this._finish();
+      audio.playSecret();
+      Fx.burst(120, ['#22d3ee', '#f59e0b']);
+      Toast.gold(`👋 С возвращением, <b>${escapeHtml(data.nick)}</b>! Почта подтверждена${data.tag ? `, твой ID <b class="font-mono text-amber-300">${escapeHtml(data.tag)}</b> на месте` : ''}. Спрашиваю у облака твой прогресс…`, 9000);
+      NetIdentity.sync();
+      CloudSave.startAutoPush();
+      CloudSave.pullAndRestore(false).then(ok => { if (!ok) CloudSave.push(false); });
+      return;
+    }
+
+    // НОВЫЙ АККАУНТ: ника ещё нет — отдаём серверный uid регистрации
+    state.pendingAuthUid = data.uid;
+    state.pendingAuthEmail = email;
+    state.pendingAuthTag = data.tag || null;
+    state.pendingAuthVerified = !!data.verified;
+    this._finish();
+    audio.playWin();
+    Toast.success('✅ Почта подтверждена и привязана! Осталось придумать ник — пара секунд 🎒', 7000);
+    if (typeof openProfileModal === 'function') openProfileModal();
+  },
+
+  /* Отказ от e-mail: регистрируем локально, но с честным предупреждением */
+  skipEmail() {
+    ConfirmDialog.ask({
+      icon: '⚠️',
+      title: 'Точно без e-mail?',
+      text: 'Аккаунт с e-mail <b class="text-emerald-300">в разы лучше</b>: восстановится с любого устройства за 2 минуты. <b class="text-rose-300">Без e-mail, если выйдешь из аккаунта или очистишь браузер, мы уже не виноваты</b> — прогресс и ID исчезнут навсегда.',
+      okText: 'Всё равно без e-mail',
+      danger: true
+    }).then(ok => {
+      if (!ok) return;
+      state.pendingAuthUid = null;
+      state.pendingAuthEmail = null;
+      state.pendingAuthTag = null;
+      state.pendingAuthVerified = false;
+      this._finish();
+      Toast.info('Ладно 🙂 Придумай ник — а привязать e-mail можно потом: ⚙️ Настройки → «Привязать e-mail».', 8000);
+      if (typeof openProfileModal === 'function') openProfileModal();
+    });
+  }
+};
+
+/* --------------------------------------------------------------------------
+   ПРИВЕТСТВИЕ ПРИ ВХОДЕ (сезон 3.7)
+   «Привет! Загляни в аккаунт — вдруг тебе выдали галочку либо код автора…»
+   Показывается раз в 12 часов (+ сразу после глобального вайпа).
+   -------------------------------------------------------------------------- */
+function maybeShowEntryGreeting() {
+  if (!state.user) return;
+  let last = 0;
+  try { last = Number(localStorage.getItem('shkola_greet_at')) || 0; } catch (e) {}
+  const hadWipe = !!state.seasonWipeToast;
+  if (Date.now() - last < 12 * 3600 * 1000 && !hadWipe) return;
+  try { localStorage.setItem('shkola_greet_at', String(Date.now())); } catch (e) {}
+  state.seasonWipeToast = false;
+  setTimeout(() => {
+    if (hadWipe) {
+      Toast.gold('🧹 <b>СЕЗОН 3.7 — БОЛЬШОЙ ВАЙП!</b> Баланс и рюкзак у всех обнулены до стартовых — честный новый сезон. Ник и уникальный ID остались нетронуты. Жёсткие кейсы, лавка из 4 вещиц и ⚡ 10 предметов, что добываются ТОЛЬКО апгрейдом. Вперёд!', 13000);
+    }
+    setTimeout(() => {
+      if (!state.user) return;
+      const tag = state.user.tag;
+      Toast.info(`👋 Привет, <b>${escapeHtml(state.user.nick)}</b>! Загляни в свой аккаунт (кнопка 👤 снизу): вдруг тебе уже выдали ✔ галочку верификации или 🎁 код автора? ${tag ? `Твой уникальный ID: <b class="font-mono text-amber-300">${escapeHtml(tag)}</b> — он же висит в «💬 Сообществе» и копируется нажатием.` : 'Кнопка «💬 Сообщество» откроет общий чат и твой уникальный ID (копируется нажатием).'}`, 12000);
+    }, hadWipe ? 900 : 400);
+  }, 1000);
 }
 
 /* --------------------------------------------------------------------------
@@ -1071,6 +1399,8 @@ function NetBoot() {
   const urlInput = $('adminServerUrl');
   if (urlInput) urlInput.value = ServerAPI.base(); // показываем зашитый сервер сообщества
   renderAdminAuthorList();
+  // Приветствие при входе: «загляни в аккаунт — галочка или код автора, твой ID тут»
+  maybeShowEntryGreeting();
 
   ServerAPI.ping(true).then(async on => {
     renderServerStatus();

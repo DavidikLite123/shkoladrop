@@ -40,14 +40,20 @@ const state = {
   dropHistory: [],
   profileTab: 'profile',
   rigReady: false,
-  betaArchiveOpen: false
+  betaArchiveOpen: false,
+  // Вход по e-mail (AuthGate): сервер выдал uid/ID — забирает их регистрация
+  pendingAuthUid: null,
+  pendingAuthEmail: null,
+  pendingAuthTag: null,
+  pendingAuthVerified: false,
+  seasonWipeToast: false
 };
 
 /* --------------------------------------------------------------------------
    ЗАГРУЗКА / СОХРАНЕНИЕ
    -------------------------------------------------------------------------- */
 function loadGame() {
-  const { data, migrated, fresh } = SaveManager.load();
+  const { data, migrated, fresh, wiped, carriedUser } = SaveManager.load();
 
   state.balance = data.balance;
   state.inventory = data.inventory;
@@ -84,6 +90,9 @@ function loadGame() {
 
   if (migrated) {
     Toast.success('Старый прогресс из версии 1.0 перенесён — привет в Сезоне 2! 🎒', 5000);
+  }
+  if (wiped && carriedUser) {
+    state.seasonWipeToast = true; // NetBoot покажет после приветствия — чтобы тосты не слиплись
   }
   return data;
 }
@@ -1347,7 +1356,7 @@ function closeCaseOddsModal() { Modal.close('caseOddsModal'); }
    -------------------------------------------------------------------------- */
 function setInvFilter(type) {
   state.invFilter = type;
-  const map = { all: 'fltAll', school: 'fltSchool', cs2: 'fltCs2', games: 'fltGames', cat: 'fltCat' };
+  const map = { all: 'fltAll', school: 'fltSchool', cs2: 'fltCs2', games: 'fltGames', cat: 'fltCat', upgrade: 'fltUpgrade' };
   Object.values(map).forEach(id => {
     const el = $(id);
     if (el) el.className = 'filter-chip';
@@ -1362,12 +1371,14 @@ function inventoryList() {
   const cs2 = state.inventory.filter(i => i.category === 'cs2');
   const games = state.inventory.filter(i => i.category === 'other');
   const cats = state.inventory.filter(i => i.category === 'cat');
+  const upgrades = state.inventory.filter(i => i.category === 'upgrade');
 
   let list = state.inventory;
   if (state.invFilter === 'school') list = school;
   if (state.invFilter === 'cs2') list = cs2;
   if (state.invFilter === 'games') list = games;
   if (state.invFilter === 'cat') list = cats;
+  if (state.invFilter === 'upgrade') list = upgrades;
 
   const search = ($('invSearchInput')?.value || '').trim().toLowerCase();
   if (search) list = list.filter(i => i.name.toLowerCase().includes(search));
@@ -1379,7 +1390,7 @@ function inventoryList() {
   else if (sort === 'rarity') sorted.sort((a, b) => (rarityOf(b).order - rarityOf(a).order) || (b.price - a.price));
   else if (sort === 'name') sorted.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
 
-  return { sorted, counts: { all: state.inventory.length, school: school.length, cs2: cs2.length, games: games.length, cat: cats.length } };
+  return { sorted, counts: { all: state.inventory.length, school: school.length, cs2: cs2.length, games: games.length, cat: cats.length, upgrade: upgrades.length } };
 }
 
 function renderInventory() {
@@ -1393,6 +1404,8 @@ function renderInventory() {
   $('countCs2').textContent = counts.cs2;
   $('countGames').textContent = counts.games;
   $('countCat').textContent = counts.cat;
+  const cu = $('countUpgrade');
+  if (cu) cu.textContent = counts.upgrade;
 
   const totalValue = state.inventory.reduce((sum, i) => sum + i.price, 0);
   $('invTotalValue').textContent = moneyText(totalValue, true);
@@ -1544,7 +1557,7 @@ function openItemPicker(type) {
     filters.classList.add('hidden');
   } else {
     $('modalTitle').textContent = 'Выбери желанную цель';
-    $('modalSubtitle').textContent = 'Скины CS2, топ-предметы школы, лут из игр и котики';
+    $('modalSubtitle').textContent = 'Скины, котики и ⚡ эксклюзивы, которые добываются ТОЛЬКО тут';
     filters.classList.remove('hidden');
   }
 
@@ -1560,7 +1573,7 @@ function closeItemModal() {
 
 function setTargetCategory(cat) {
   state.targetFilter = cat;
-  const map = { all: 'tgtCatAll', cs2: 'tgtCatCs2', school: 'tgtCatSchool', other: 'tgtCatOther', cat: 'tgtCatCat' };
+  const map = { all: 'tgtCatAll', cs2: 'tgtCatCs2', school: 'tgtCatSchool', other: 'tgtCatOther', cat: 'tgtCatCat', upgrade: 'tgtCatUpgrade' };
   Object.values(map).forEach(id => {
     const el = $(id);
     if (el) el.className = 'filter-chip';
@@ -1594,6 +1607,7 @@ function renderModalItems() {
     else if (state.targetFilter === 'school') list = SCHOOL_CATALOG;
     else if (state.targetFilter === 'other') list = OTHER_GAMES_CATALOG;
     else if (state.targetFilter === 'cat') list = CAT_CATALOG;
+    else if (state.targetFilter === 'upgrade') list = UPGRADE_CATALOG;
   }
 
   const filtered = list
@@ -1644,15 +1658,19 @@ function selectItemFromModal(item) {
 
 /* --------------------------------------------------------------------------
    МАГАЗИН + КЛИКЕР
+   Сезон 3.7: в лавке остались только 4 базовые вещицы (SHOP_ITEM_IDS).
+   Всё ценное — из кейсов (жёстко!) или апгрейд-эксклюзивы из апгрейдера.
    -------------------------------------------------------------------------- */
-const SHOP_EXCLUDED = ['sch_golden_diary', 'sch_timetable_relic'];
+function shopCatalog() {
+  return SHOP_ITEM_IDS.map(id => ITEMS_BY_ID[id]).filter(Boolean);
+}
 
 function renderShop() {
   const list = $('shopList');
   if (!list) return;
 
-  const items = SCHOOL_CATALOG.filter(i => !SHOP_EXCLUDED.includes(i.id));
-  $('shopCountLabel').textContent = `${items.length} позиций`;
+  const items = shopCatalog();
+  $('shopCountLabel').textContent = `${items.length} базовых`;
 
   list.innerHTML = items.map(item => {
     const rarity = rarityOf(item);
@@ -1700,7 +1718,11 @@ function handleShopClick(event) {
 }
 
 function buySchoolItem(id) {
-  const proto = SCHOOL_CATALOG.find(i => i.id === id);
+  if (!SHOP_ITEM_IDS.includes(id)) {
+    Toast.info('Такое теперь только из кейсов или из апгрейдера — в лавке не продаётся 😅');
+    return;
+  }
+  const proto = shopCatalog().find(i => i.id === id);
   if (!proto || state.balance < proto.price) return;
   audio.init();
   audio.playCoin();
@@ -2226,13 +2248,22 @@ function submitRegistration() {
 
   audio.init();
   audio.playWin();
+  // Если аккаунт привязался к e-mail (AuthGate) — сохраняем ВЫДАННЫЙ СЕРВЕРОМ uid,
+  // чтобы ID аккаунта и облачный сейв не потерялись
   state.user = {
-    id: RNG.uid('player'),
+    id: state.pendingAuthUid || RNG.uid('player'),
     nick: nick.slice(0, 18),
     avatar: state.tempRegAvatar || '🎒',
     grade: grade || 'Ученик школы',
     joinedAt: new Date().toLocaleDateString('ru-RU')
   };
+  if (state.pendingAuthEmail) state.user.email = state.pendingAuthEmail;
+  if (state.pendingAuthTag) state.user.tag = state.pendingAuthTag;
+  if (state.pendingAuthVerified) state.user.verified = true;
+  state.pendingAuthUid = null;
+  state.pendingAuthEmail = null;
+  state.pendingAuthTag = null;
+  state.pendingAuthVerified = false;
 
   // Если профиль создаётся при включённой 3.6 Beta — ник сразу становится «Тест»
   if (typeof BetaMode !== 'undefined') BetaMode.onUserCreated();
@@ -2246,20 +2277,27 @@ function submitRegistration() {
 
   // Онлайн: сервер сразу выдаёт аккаунту уникальный ID (и галочку, если уже выдана)
   if (typeof NetIdentity !== 'undefined') NetIdentity.sync();
+  // Закрываем шлагбаум входа — новичок теперь зарегистрирован
+  if (typeof AuthGate !== 'undefined') AuthGate.onUserRegistered();
 }
 
 function logoutProfile() {
+  const hasEmail = !!(state.user && state.user.email);
   ConfirmDialog.ask({
     icon: '👤',
-    title: 'Сменить профиль?',
-    text: 'Аккаунт не удаляется, но прогресс останется привязан к текущему сохранению.',
-    okText: 'Сменить'
+    title: hasEmail ? 'Выйти из аккаунта?' : '⚠️ Выйти БЕЗ e-mail?',
+    text: hasEmail
+      ? 'Прогресс сохранён в облаке и привязан к твоему e-mail — вернёшься за пару кликов по коду из письма.'
+      : 'Твой аккаунт <b class="text-rose-300">НЕ привязан к e-mail</b>! После выхода ID и прогресс восстановить будет <b class="text-rose-300">невозможно</b> — мы уже не виноваты. Лучше сначала привяжи почту в окне аккаунта.',
+    okText: hasEmail ? 'Выйти' : 'Выйти на свой страх и риск'
   }).then(ok => {
     if (!ok) return;
     state.user = null;
     persist(true);
     uiUpdate();
     openProfileModal();
+    // Шлагбаум входа возвращается — без аккаунта дальше никак
+    if (typeof AuthGate !== 'undefined') AuthGate.onBoot();
   });
 }
 
@@ -2349,7 +2387,6 @@ function openSettingsModal() {
   audio.init();
   audio.playTick();
   applySettingsToUI();
-  updateLegacyRestoreButton();
   Modal.open('settingsModal');
 }
 
@@ -2435,44 +2472,8 @@ function setAccent(accent) {
   audio.playTick();
 }
 
-/** Прогресс старой версии в localStorage ещё жив? Показываем кнопку возврата */
-function updateLegacyRestoreButton() {
-  const btn = $('btnRestoreLegacy');
-  if (!btn) return;
-  const legacy = SaveManager.readLegacy();
-  const hasData = !!(legacy && ((legacy.balance && legacy.balance > 2000) || (legacy.inventory && legacy.inventory.length > 4) || legacy.user));
-  btn.classList.toggle('hidden', !hasData);
-}
-
-async function restoreLegacySave() {
-  const legacy = SaveManager.readLegacy();
-  if (!legacy) {
-    Toast.info('Прогресс версии 1.0 в этом браузере не найден');
-    updateLegacyRestoreButton();
-    return;
-  }
-
-  const invValue = (legacy.inventory || []).reduce((sum, i) => sum + (i.price || 0), 0);
-  const ok = await ConfirmDialog.ask({
-    icon: '↩️',
-    title: 'Вернуть прогресс 1.0?',
-    text: `Найдено: баланс <b class="text-amber-300">${fmt(legacy.balance || 0)} ₽</b>, предметов <b>${(legacy.inventory || []).length}</b> на ${fmt(invValue)} ₽${legacy.user ? `, профиль «${escapeHtml(legacy.user.nick)}»` : ''}.<br>Текущий прогресс будет заменён.`,
-    okText: 'Вернуть'
-  });
-  if (!ok) return;
-
-  const normalized = SaveManager.normalize(legacy);
-  state.balance = normalized.balance;
-  state.inventory = normalized.inventory;
-  state.user = normalized.user;
-  state.selectedDeposit = state.inventory[0] || null;
-  state.selectedTarget = state.selectedTarget || ITEMS_BY_ID['cs_usp_torque'];
-  auditInventory();
-  persist(true);
-  uiUpdate();
-  Toast.success('Прогресс версии 1.0 восстановлен! 🎒');
-  Modal.close('settingsModal');
-}
+// Кнопка «Вернуть прогресс из версии 1.0» убрана в сезоне 3.7:
+// прогресс теперь живёт в облаке, а локальный вайп обнуляет старую экономику.
 
 async function askResetProgress() {
   const ok = await ConfirmDialog.ask({
@@ -2894,7 +2895,6 @@ function initGame() {
   renderProfile();
   applyCookieCategoriesToUI();
   updateDailyIndicator();
-  updateLegacyRestoreButton();
   syncModalState();   // приветственное окно открыто — контент под ним не скроллится
 
   renderAll();
@@ -2914,6 +2914,9 @@ function initGame() {
 
   // Онлайн-функции: спонсорство, подарки, трейдинг (js/netplay.js)
   if (typeof NetBoot === 'function') NetBoot();
+
+  // Шлагбаум «введите аккаунт» — если профиля ещё нет (js/netplay.js)
+  if (typeof AuthGate !== 'undefined') AuthGate.onBoot();
 
   // Первое сохранение нового формата
   persist(true);

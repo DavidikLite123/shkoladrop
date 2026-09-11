@@ -8,7 +8,7 @@
   <meta name="color-scheme" content="dark" />
 
   <!-- Основные поисковые теги (SEO) -->
-  <title>ШКОЛА ДРОП 3.5 — Кейсы ютуберов и Бриллиантовая кнопка | David Lite</title>
+  <title>ШКОЛА ДРОП 3.7 — Вайп сезона, жёсткие кейсы, апгрейд-эксклюзивы | David Lite</title>
   <meta name="description" content="ШКОЛА ДРОП 3.0 (shkoladrop.vercel.app) — официальный интерактивный симулятор школьных кейсов и честный CS2 апгрейдер от David Lite Studio. Новые кейсы, коты-предметы, достижения, ежедневные награды, секретный кейс с Котом-Хранителем за 10 000 000 ₽!" />
   <meta name="keywords" content="школа дроп, школа дроп 3.0, david lite, давид лайт, davidlite, школа дроп кейсы, школа дроп апгрейдер, честный апгрейд кс2, школьный симулятор, секретный кот, кот хранитель, david lite studio, shkola drop" />
   <meta name="author" content="David Lite (Давид Лайт) / David Lite Studio" />
@@ -191,7 +191,7 @@
       <div class="pre-track"><div id="preloaderBar"></div></div>
       <div id="preloaderPercent" class="pre-percent">0%</div>
       <div id="preloaderStatus" class="pre-status">Проверяем сменку на входе...</div>
-      <div class="pre-ver">v3.5 Stable · David Lite Studio</div>
+      <div class="pre-ver">v3.7 Season Stable · David Lite Studio</div>
     </div>
   </div>
 
@@ -208,13 +208,13 @@
   <header class="w-full px-3.5 pt-3 pb-2.5 flex items-center justify-between gap-2 border-b border-slate-800/80 bg-slate-900/80 backdrop-blur-md sticky top-0 z-30">
     <div class="flex items-center space-x-2.5 min-w-0 flex-1">
       <!-- Logo Button: 5 кликов = скрытая панель разработчика -->
-      <button id="btnLogo" onclick="handleAdminTrigger()" title="🎒 ШКОЛА ДРОП 3.5 by David Lite" class="w-10 h-10 rounded-xl bg-gradient-to-tr from-orange-600 to-amber-500 flex items-center justify-center text-xl shadow-lg shadow-orange-500/25 active:scale-90 transition flex-shrink-0">
+      <button id="btnLogo" onclick="handleAdminTrigger()" title="🎒 ШКОЛА ДРОП 3.7 by David Lite" class="w-10 h-10 rounded-xl bg-gradient-to-tr from-orange-600 to-amber-500 flex items-center justify-center text-xl shadow-lg shadow-orange-500/25 active:scale-90 transition flex-shrink-0">
         🎒
       </button>
       <div class="min-w-0">
         <div class="flex items-center space-x-1.5 min-w-0">
           <h1 class="text-xs font-black uppercase tracking-wider text-orange-400 font-cs truncate">ШКОЛА ДРОП</h1>
-          <span id="versionBadge" class="text-[8px] bg-orange-500/20 text-orange-300 font-bold px-1.5 py-0.5 rounded border border-orange-500/40 font-cs flex-shrink-0">v3.5 Stable</span>
+          <span id="versionBadge" class="text-[8px] bg-orange-500/20 text-orange-300 font-bold px-1.5 py-0.5 rounded border border-orange-500/40 font-cs flex-shrink-0">v3.7 Season</span>
         </div>
         <!-- Клик по автору открывает карточку создателя -->
         <button onclick="openAuthorModal()" class="hidden text-[10px] text-slate-400 hover:text-amber-300 font-medium transition items-center space-x-1 max-w-full truncate">
@@ -514,6 +514,7 @@
       <button onclick="setInvFilter('cs2')" id="fltCs2" class="filter-chip">CS2 (<span id="countCs2">0</span>)</button>
       <button onclick="setInvFilter('games')" id="fltGames" class="filter-chip">Игры (<span id="countGames">0</span>)</button>
       <button onclick="setInvFilter('cat')" id="fltCat" class="filter-chip">🐱 Коты (<span id="countCat">0</span>)</button>
+      <button onclick="setInvFilter('upgrade')" id="fltUpgrade" class="filter-chip">⚡ Апгрейд (<span id="countUpgrade">0</span>)</button>
     </div>
 
     <div class="flex items-center space-x-1.5">
@@ -548,6 +549,10 @@
           </div>
         </div>
         <span id="communityMiniStatus" class="text-[8px] font-black px-1.5 py-0.5 rounded uppercase bg-slate-800 text-slate-300 border border-slate-700 flex-shrink-0">…</span>
+      </div>
+      <div class="mt-2 pt-2 border-t border-cyan-500/20 flex items-center justify-between gap-2">
+        <span class="text-[9.5px] text-slate-400">🆔 Твой ID: <span id="farmMyTag" class="font-mono font-bold text-amber-300">…</span></span>
+        <span class="text-[9px] text-cyan-300/80">жми карточку — чат и копируемый ID откроются 👆</span>
       </div>
     </button>
 
@@ -687,8 +692,11 @@
 
     <div class="space-y-2">
       <div class="flex items-center justify-between">
-        <span class="text-xs font-bold text-slate-300 uppercase tracking-wider">Ассортимент школьных предметов</span>
+        <span class="text-xs font-bold text-slate-300 uppercase tracking-wider">Лавка: 4 базовые вещицы</span>
         <span id="shopCountLabel" class="text-[10px] text-slate-500 font-mono">0</span>
+      </div>
+      <div class="text-[10px] text-slate-500 leading-relaxed bg-slate-900/60 border border-slate-800/70 rounded-xl px-2.5 py-2">
+        🎒 Сезон 3.7: дорогого в лавке больше нет — годнота падает из кейсов <b class="text-amber-300">с удачей</b>, а ⚡ эксклюзивы заносятся <b class="text-orange-300">только в апгрейдере</b>.
       </div>
       <div id="shopList" class="space-y-2"></div>
     </div>
@@ -815,8 +823,9 @@
           </div>
         </div>
         <p class="text-[11px] text-slate-300 leading-relaxed">
-          «ШКОЛА ДРОП» — фановый симулятор школьных кейсов и честного апгрейдера. Сезон 3 принёс кейсы ютуберов,
-          котов-предметов, достижения, пассивный фарм и секретный кейс с Котом-Хранителем школы.
+          «ШКОЛА ДРОП» — фановый симулятор школьных кейсов и честного апгрейдера. Сезон 3.7 «Большой вайп»:
+          e-mail аккаунты с входом по коду, вайп экономики (ник и уникальный ID — на месте!), жёсткие кейсы,
+          лавка из 4 базовых вещиц и 10 предметов, которые добываются только в апгрейдере.
         </p>
         <div class="flex flex-col space-y-2">
           <a href="https://www.youtube.com/@DavidliteYT" target="_blank" rel="noopener noreferrer" class="w-full py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-cs font-bold text-[11px] uppercase tracking-wider text-center transition active:scale-95">
@@ -1034,6 +1043,12 @@
         <div id="netServerStatus" class="text-[9.5px] text-slate-400 leading-relaxed">Проверяю сервер…</div>
         <span id="netServerChip" class="text-[8px] font-black px-1.5 py-0.5 rounded uppercase bg-slate-700 text-slate-300">…</span>
       </div>
+      <div id="netOfflineHelp" class="hidden mb-2 rounded-xl border border-amber-500/40 bg-amber-950/30 p-2.5 space-y-1.5">
+        <div class="text-[10px] text-amber-200/90 leading-relaxed">
+          😴 <b>Сервер не работает</b> — разбуди его кнопкой или напишите нам на <b class="text-amber-100 select-all">shkoladrop.contact@gmail.com</b> — решим проблему!
+        </div>
+        <button onclick="wakeCommunityServer(this)" class="w-full py-2 rounded-lg bg-amber-500 hover:brightness-110 text-slate-950 font-cs font-bold text-xs uppercase tracking-wider transition active:scale-95">⚡ Включить сервер</button>
+      </div>
       <div class="text-[9px] text-slate-500 mb-2">Мой уникальный ID: <button onclick="navigator.clipboard && navigator.clipboard.writeText(document.getElementById('netMyTag').textContent); Toast.info('Уникальный ID скопирован!')" class="font-mono text-amber-300 hover:text-amber-200" title="Нажми, чтобы скопировать"><span id="netMyTag">—</span> 📋</button> · id аккаунта: <button onclick="navigator.clipboard && navigator.clipboard.writeText(document.getElementById('netMyUid').textContent); Toast.info('id скопирован!')" class="font-mono text-cyan-300 hover:text-cyan-200" title="Нажми, чтобы скопировать"><span id="netMyUid">—</span> 📋</button></div>
 
       <!-- Вкладки -->
@@ -1087,6 +1102,14 @@
       <div class="flex items-center justify-between gap-2 mb-2">
         <div id="commServerStatus" class="text-[9.5px] text-slate-400 leading-relaxed">Проверяю сервер…</div>
         <span id="commServerChip" class="text-[8px] font-black px-1.5 py-0.5 rounded uppercase bg-slate-700 text-slate-300 flex-shrink-0">…</span>
+      </div>
+
+      <!-- СЕРВЕР СПИТ: кнопка пробуждения + почта поддержки -->
+      <div id="commOfflineHelp" class="hidden mb-2 rounded-xl border border-amber-500/40 bg-amber-950/30 p-2.5 space-y-1.5">
+        <div class="text-[10px] text-amber-200/90 leading-relaxed">
+          😴 <b>Сервер не работает</b> — бесплатный хостинг уснул. Нажми кнопку ниже, и сервер проснётся за ~минуту. Или напишите нам на почту <b class="text-amber-100 select-all">shkoladrop.contact@gmail.com</b> — решим проблему!
+        </div>
+        <button onclick="wakeCommunityServer(this)" class="w-full py-2 rounded-lg bg-amber-500 hover:brightness-110 text-slate-950 font-cs font-bold text-xs uppercase tracking-wider transition active:scale-95">⚡ Включить сервер</button>
       </div>
 
       <!-- Мой уникальный ID -->
@@ -1233,11 +1256,8 @@
           <div class="text-[9.5px] text-slate-500 leading-relaxed">Прогресс сам уходит на сервер сообщества и <b class="text-slate-300">автоматически восстанавливается</b> после входа — ручной JSON-бэкап больше не нужен.</div>
           <div id="cloudSaveStatus" class="text-[9.5px] font-mono text-slate-400">Синхронизация проверяется…</div>
           <button onclick="CloudSave.pullAndRestore(true)" class="w-full py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-bold transition">Восстановить прогресс с сервера</button>
+          <button onclick="AuthGate.openLink()" class="w-full py-2 rounded-lg bg-emerald-950/60 hover:bg-emerald-900/70 border border-emerald-700/60 text-emerald-300 text-[10px] font-bold transition">🔒 Привязать e-mail (надёжный вход по коду)</button>
         </div>
-
-        <button id="btnRestoreLegacy" onclick="restoreLegacySave()" class="hidden w-full py-2.5 rounded-xl bg-emerald-950/60 hover:bg-emerald-900/70 border border-emerald-700/60 text-emerald-300 font-bold text-[11px] transition active:scale-95">
-          ↩️ Вернуть прогресс из версии 1.0
-        </button>
 
         <button onclick="askResetProgress()" class="w-full py-2.5 rounded-xl bg-rose-950/60 hover:bg-rose-900/70 border border-rose-800/60 text-rose-300 font-bold text-[11px] transition active:scale-95">
           Полный сброс прогресса
@@ -1536,6 +1556,7 @@
         <button onclick="setTargetCategory('school')" id="tgtCatSchool" class="filter-chip">Школа</button>
         <button onclick="setTargetCategory('other')" id="tgtCatOther" class="filter-chip">Minecraft / Dota / Rust</button>
         <button onclick="setTargetCategory('cat')" id="tgtCatCat" class="filter-chip">🐱 Коты</button>
+        <button onclick="setTargetCategory('upgrade')" id="tgtCatUpgrade" class="filter-chip">⚡ Только апгрейд</button>
       </div>
 
       <div class="pb-2">
@@ -1655,6 +1676,62 @@
 
   <!-- ================= TOASTS ================= -->
   <div id="toastContainer" class="fixed top-16 right-3 left-3 sm:left-auto sm:w-80 z-[80] flex flex-col items-end space-y-2 pointer-events-none"></div>
+
+  <!-- ================= AUTH GATE: «ВВЕДИТЕ АККАУНТ» (сезон 3.7) ================= -->
+  <div id="authModal" class="hidden fixed inset-0 z-[95] flex items-center justify-center bg-slate-950/95 backdrop-blur-sm p-4 overflow-y-auto">
+    <div class="w-full max-w-sm my-auto bg-gradient-to-b from-slate-900 to-slate-950 border border-cyan-500/40 rounded-2xl p-5 shadow-2xl space-y-3 relative">
+      <button id="authClose" onclick="AuthGate.close()" class="hidden absolute top-3 right-3 text-slate-400 hover:text-white text-lg leading-none">✕</button>
+
+      <div class="text-center space-y-1">
+        <div class="text-4xl">🔐</div>
+        <div class="font-cs text-lg font-bold uppercase tracking-wider text-white">Введи аккаунт</div>
+        <div class="text-[10px] text-slate-400">Сезон 3.7 · надёжный вход по e-mail и коду</div>
+      </div>
+
+      <!-- сервер спит -->
+      <div id="authOffline" class="hidden rounded-xl border border-amber-500/40 bg-amber-950/40 p-2.5 space-y-1.5">
+        <div class="text-[10px] text-amber-200 leading-relaxed">😴 <b>Сервер не работает</b> — напиши нам на почту <b class="select-all text-amber-100">shkoladrop.contact@gmail.com</b> — решим проблему! Или нажми кнопку «включить сервер» — Render просыпается примерно за минуту.</div>
+        <button onclick="wakeCommunityServer(this).then(function(ok){ AuthGate.refreshNetworkState(false); })" class="w-full py-2 rounded-lg bg-amber-500 hover:brightness-110 text-slate-950 font-cs font-bold text-xs uppercase tracking-wider transition active:scale-95">⚡ Включить сервер</button>
+      </div>
+
+      <!-- ШАГ «ДОМОЙ»: выбор пути -->
+      <div id="authStepHome" class="space-y-2.5">
+        <div class="text-[11px] text-slate-300 leading-relaxed bg-slate-900/70 border border-slate-800 rounded-xl p-2.5">
+          👋 Привет! Потом загляни в свой аккаунт (кнопка 👤 внизу) — вдруг тебе уже выдали ✔ галочку верификации либо 🎁 код автора. Твой уникальный ID живёт там же и копируется нажатием, а кнопка «💬 Сообщество» открывает общий чат школы.
+        </div>
+        <button onclick="AuthGate.showStep('login')" class="btn-shine w-full py-3 rounded-xl font-cs font-bold text-sm uppercase tracking-wider bg-gradient-to-r from-cyan-500 to-sky-500 text-slate-950 hover:brightness-110 active:scale-[0.98] transition shadow-lg">📧 Ввести e-mail аккаунт</button>
+        <button onclick="AuthGate.skipEmail()" class="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-[11px] font-bold transition active:scale-95">Продолжить без e-mail</button>
+        <div class="text-[9px] text-slate-500 leading-relaxed text-center">Аккаунт на e-mail <b class="text-slate-300">НАМНОГО лучше</b>: вернётся с любого устройства по коду из письма. Выйдет игрок без e-mail — мы уже не виноваты 🙈</div>
+      </div>
+
+      <!-- ШАГ «ВХОД»: e-mail + пароль -->
+      <div id="authStepLogin" class="hidden space-y-2.5">
+        <div id="authModeLabel" class="text-[10px] text-cyan-300 text-center font-bold">Вход и регистрация — сервер различит сам</div>
+        <input id="authEmailInput" type="email" placeholder="Твой e-mail: player@gmail.com" autocomplete="email" class="w-full bg-slate-950 border border-slate-700 focus:border-cyan-500 rounded-xl px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none">
+        <input id="authPasswordInput" type="password" placeholder="Пароль (минимум 4 символа)" autocomplete="current-password" onkeydown="if(event.key==='Enter')AuthGate.requestCode()" class="w-full bg-slate-950 border border-slate-700 focus:border-cyan-500 rounded-xl px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none">
+        <button id="authGetCodeBtn" onclick="AuthGate.requestCode()" class="btn-shine w-full py-3 rounded-xl font-cs font-bold text-sm uppercase tracking-wider bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 hover:brightness-110 active:scale-[0.98] transition disabled:opacity-40 shadow-lg">📨 Получить код на почту</button>
+        <button onclick="AuthGate.showStep('home')" class="w-full py-1.5 text-slate-400 hover:text-slate-200 text-[10px] transition">← выбрать другой путь</button>
+      </div>
+
+      <!-- ШАГ «КОД»: 6 цифр из письма -->
+      <div id="authStepCode" class="hidden space-y-2.5">
+        <div class="text-[10px] text-slate-400 text-center">Код отправлен на <span id="authCodeEmail" class="text-cyan-300 font-bold">…</span></div>
+        <input id="authCodeInput" type="text" inputmode="numeric" maxlength="6" placeholder="••••••" onkeydown="if(event.key==='Enter')AuthGate.confirmCode()" class="w-full bg-slate-950 border border-slate-700 focus:border-cyan-500 rounded-xl px-3 py-3 text-center font-mono text-xl tracking-[0.5em] text-white placeholder-slate-600 focus:outline-none">
+        <div class="rounded-xl border border-amber-500/40 bg-amber-950/30 p-2.5 text-center space-y-0.5">
+          <div class="text-[9px] uppercase tracking-wider text-amber-400/80 font-bold">Демо-режим: письма настоящего нет — код прямо тут 😅</div>
+          <div id="authDemoCode" class="font-mono font-black text-2xl text-amber-300 tracking-[0.4em] select-all">••••••</div>
+        </div>
+        <button id="authConfirmBtn" onclick="AuthGate.confirmCode()" class="btn-shine w-full py-3 rounded-xl font-cs font-bold text-sm uppercase tracking-wider bg-gradient-to-r from-cyan-500 to-sky-500 text-slate-950 hover:brightness-110 active:scale-[0.98] transition disabled:opacity-40 shadow-lg">✅ Войти в аккаунт</button>
+        <div class="flex items-center justify-between">
+          <button onclick="AuthGate.resendCode()" class="text-cyan-300 hover:text-cyan-200 text-[10px] font-bold transition">↻ выслать код ещё раз</button>
+          <button onclick="AuthGate.showStep('login')" class="text-slate-400 hover:text-slate-200 text-[10px] transition">← назад</button>
+        </div>
+      </div>
+
+      <div id="authError" class="hidden text-[10px] text-rose-300 bg-rose-950/50 border border-rose-700/50 rounded-xl px-2.5 py-1.5 leading-relaxed"></div>
+      <div id="authStatusLine" class="text-[9.5px] text-slate-400 text-center min-h-[12px]"></div>
+    </div>
+  </div>
 
   <!-- ЛОГИКА ИГРЫ (модульная структура v2.0) -->
   <script defer src="js/preloader.js?v=3.7"></script>

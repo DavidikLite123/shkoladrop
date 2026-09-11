@@ -12,6 +12,11 @@
    • Подарки: игрок → игрок по id аккаунта или нику, с выдачей предмета.
    • Трейдинг: «комната обмена» по коду — создать, вступить, атомарный обмен
      и выдача предметов обеим сторонам.
+   • Аккаунты (сезон 3.7): e-mail + пароль + код подтверждения (возврат
+     к своему uid/ID с любого устройства). Демо-режим: код возвращается
+     в ответе API и показывается в игре, настоящего SMTP нет.
+   • Одноразовый вайп экономики 3.7 при первом запуске этой версии:
+     чистит сохранения/подарки/трейды, аккаунты и ID остаются.
 
    Запуск:  node server/index.js        (порт 3377, сменить: PORT=xxxx)
    Секрет админки:  ADMIN_SECRET=мой-секрет node server/index.js
@@ -31,22 +36,26 @@ const REPO_ROOT = path.resolve(__dirname, '..');
 const REGISTRY_FILE = process.env.SHKOLA_REGISTRY_FILE || path.join(REPO_ROOT, 'author-codes.json'); // список кодов авторов (в GitHub)
 const DATA_DIR = process.env.SHKOLA_DATA_DIR || path.join(__dirname, 'data');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
-const SERVER_VERSION = '1.1.0'; // +сообщество: уникальные ID, галочки, чат, облачные сейвы
+const SERVER_VERSION = '1.2.0'; // +сезон 3.7: e-mail-аккаунты с кодом, одноразовый вайп экономики
 const MAX_BODY = 512 * 1024; // 512 КБ на запрос
 const MAX_ITEM_PRICE = 100000000000; // защита от абсурдных предметов (100 млрд)
+const AUTH_CODE_TTL = 10 * 60 * 1000;  // код из «письма» живёт 10 минут
+const AUTH_CODE_TRIES = 6;             // попыток на один код
 
 /* ------------------------------- БАЗА ДАННЫХ ------------------------------ */
 /* Всё хранится в одном JSON-файле server/data/db.json.
    Структура — простая и чинится руками при необходимости. */
 const dbEmpty = () => ({
   players: {},      // uid -> { uid, nick, tag, verified, firstSeen, lastSeen }
+  accounts: {},     // email -> { email, salt, passHash, uid, code, codeExp, codeTries, createdAt, verifiedAt }
   supporters: {},   // uid игрока -> код автора, который он ввёл
   earnings: {},     // код автора -> { earned, withdrawn }
   gifts: [],        // { id, fromUid, fromNick, toUid, toNick, item, createdAt, claimed }
   trades: [],       // { code, fromUid, fromNick, offer, wantNote, createdAt, status, joined? }
   deliveries: [],   // { id, toUid, toNick, item, source, createdAt, claimed }
   chat: [],         // { id, uid, nick, tag, text, at, kind } — общий чат сообщества
-  saves: {}         // uid -> { save, updatedAt } — облачный бэкап прогресса
+  saves: {},        // uid -> { save, updatedAt } — облачный бэкап прогресса
+  meta: {}          // служебные флаги (например, одноразовый вайп сезона)
 });
 
 const CHAT_MAX = 200;      // сколько сообщений чата хранить
@@ -123,6 +132,19 @@ function royaltyPct() {
 /* -------------------------------- УТИЛИТЫ --------------------------------- */
 function uid(prefix) {
   return prefix + '-' + Date.now().toString(36) + crypto.randomBytes(3).toString('hex');
+}
+
+/* ---------- Аккаунты: пароль с солью, код подтверждения ---------- */
+function isEmail(v) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(v || ''));
+}
+
+function hashPassword(password, salt) {
+  return crypto.createHash('sha256').update('shkoladrop:' + salt + ':' + String(password)).digest('hex');
+}
+
+function genAuthCode() {
+  return String(crypto.randomInt(100000, 1000000)); // 6 цифр
 }
 
 function roomCode() {
@@ -264,6 +286,90 @@ const routes = {
     const p = upsertPlayer(pUid, nick);
     dbSave();
     send(res, 200, { ok: true, nick, tag: p ? p.tag : null, verified: !!(p && p.verified) });
+  },
+
+  /* -------------------- АККАУНТЫ: E-MAIL + ПАРОЛЬ + КОД --------------------
+     Шаг 1 — /start: e-mail+пароль. Если почты нет — регистрируем аккаунт
+     (при необходимости привязываем к уже выданному uid, чтобы ID не менялся).
+     Если почта есть — проверяем пароль. В любом случае шлём код подтверждения.
+     Шаг 2 — /verify: 6-значный код «из письма».
+     ДЕМО-РЕЖИМ: настоящего SMTP нет, поэтому код возвращается прямо в ответе
+     (demoCode) и показывается игроку прямо в игре. */
+  'POST /api/account/start': async (req, res, body) => {
+    const email = cleanStr(body.email, 80).toLowerCase();
+    const password = String(body.password == null ? '' : body.password);
+    const uidIn = cleanStr(body.uid, 80) || null;
+    const nickIn = cleanStr(body.nick, 24) || null;
+    if (!isEmail(email)) return send(res, 400, { ok: false, error: 'Некорректный e-mail — пример: player@gmail.com' });
+    if (password.length < 4 || password.length > 60) return send(res, 400, { ok: false, error: 'Пароль должен быть от 4 до 60 символов' });
+
+    let acc = db.accounts[email];
+    const isNew = !acc;
+    if (acc) {
+      if (acc.passHash !== hashPassword(password, acc.salt)) {
+        return send(res, 403, { ok: false, mode: 'login', error: 'Неверный пароль. Если это твоя почта — проверь пароль и попробуй ещё раз.' });
+      }
+    } else {
+      // Регистрация: привязываем почту к текущему игровому uid (или создаём игрока)
+      const p = upsertPlayer(uidIn || uid('user'), nickIn);
+      const salt = crypto.randomBytes(8).toString('hex');
+      acc = {
+        email, salt,
+        passHash: hashPassword(password, salt),
+        uid: p ? p.uid : uidIn,
+        createdAt: Date.now()
+      };
+      db.accounts[email] = acc;
+    }
+    acc.code = genAuthCode();
+    acc.codeExp = Date.now() + AUTH_CODE_TTL;
+    acc.codeTries = 0;
+    dbSave();
+    const p = db.players[acc.uid];
+    send(res, 200, {
+      ok: true,
+      mode: isNew ? 'register' : 'login',
+      uid: acc.uid,
+      tag: p ? p.tag : null,
+      nick: p && p.nick ? p.nick : null,
+      verified: !!(p && p.verified),
+      demoCode: acc.code, // ДЕМО: вместо настоящего письма
+      email
+    });
+  },
+
+  /* Шаг 2 — подтверждение кода. Возвращает uid/ник/ID — клиент принимает аккаунт. */
+  'POST /api/account/verify': async (req, res, body) => {
+    const email = cleanStr(body.email, 80).toLowerCase();
+    const code = cleanStr(body.code, 12);
+    const nickIn = cleanStr(body.nick, 24) || null;
+    const acc = db.accounts[email];
+    if (!acc) return send(res, 404, { ok: false, error: 'Аккаунт не найден — запроси код заново' });
+    if (!acc.code || !acc.codeExp) return send(res, 400, { ok: false, error: 'Код не был запрошен — сначала нажми «Получить код»' });
+    if (Date.now() > acc.codeExp) return send(res, 410, { ok: false, error: 'Код просрочен — запроси новый' });
+    acc.codeTries = (acc.codeTries || 0) + 1;
+    if (acc.codeTries > AUTH_CODE_TRIES) {
+      acc.code = null; acc.codeExp = 0; dbSave();
+      return send(res, 429, { ok: false, error: 'Слишком много попыток — запроси новый код' });
+    }
+    if (code !== acc.code) { dbSave(); return send(res, 403, { ok: false, error: 'Неверный код, попробуй ещё раз' }); }
+    acc.code = null; acc.codeExp = 0; acc.codeTries = 0;
+    const p = upsertPlayer(acc.uid, nickIn); // обновит ник, если игрок его только что придумал
+    acc.verifiedAt = Date.now();
+    dbSave();
+    send(res, 200, {
+      ok: true, uid: acc.uid,
+      tag: p ? p.tag : null,
+      nick: p && p.nick ? p.nick : nickIn,
+      verified: !!(p && p.verified),
+      email
+    });
+  },
+
+  /* Подсказка клиенту: есть ли уже аккаунт на эту почту (показываем «Вход» или «Регистрация») */
+  'GET /api/account/exists': (req, res, body, url) => {
+    const email = cleanStr(url.searchParams.get('email'), 80).toLowerCase();
+    send(res, 200, { ok: true, exists: !!(email && db.accounts[email]) });
   },
 
   /* Найти uid по нику (для подарков «по нику») */
@@ -480,11 +586,13 @@ const routes = {
     send(res, 200, {
       ok: true,
       players: Object.keys(db.players).length,
+      accounts: Object.keys(db.accounts || {}).length,
       supporters: Object.keys(db.supporters).length,
       earnings: db.earnings,
       giftsPending: db.gifts.filter(g => !g.claimed).length,
       tradesOpen: db.trades.filter(t => t.status === 'open').length,
-      deliveriesPending: db.deliveries.filter(d => !d.claimed).length
+      deliveriesPending: db.deliveries.filter(d => !d.claimed).length,
+      seasonWipe: db.meta ? db.meta.seasonWipe : null
     });
   },
 
@@ -639,6 +747,27 @@ function serveStatic(req, res, pathname) {
 
 /* -------------------------------- ЗАПУСК ---------------------------------- */
 dbLoad();
+
+/* ---------- ОДНОРАЗОВЫЙ ВАЙП ЭКОНОМИКИ СЕЗОНА 3.7 ----------
+   Удаляем облачные сейвы, подарки, трейды и очередь выдачи — это старый
+   прогресс. БЕРЕЖНО СОХРАНЯЕМ аккаунты: players (ник + уникальный ID + галочка),
+   accounts (e-mail + пароль), supporters, earnings, chat. Выполняется один раз —
+   флаг meta.seasonWipe не даёт повторному запуску стереть новый прогресс. */
+if (!db.meta) db.meta = {};
+if (db.meta.seasonWipe !== '3.7') {
+  const wipedCount =
+    Object.keys(db.saves || {}).length +
+    (db.gifts || []).filter(g => !g.claimed).length +
+    (db.trades || []).filter(t => t.status === 'open').length +
+    (db.deliveries || []).filter(d => !d.claimed).length;
+  db.saves = {};
+  db.gifts = [];
+  db.trades = [];
+  db.deliveries = [];
+  db.meta.seasonWipe = '3.7';
+  dbSave();
+  console.log(`[вайп 3.7] прогресс сезона обнулён (${wipedCount} записей). Аккаунты, ники, ID и галочки сохранены.`);
+}
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');

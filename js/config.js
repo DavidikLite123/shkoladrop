@@ -4,12 +4,22 @@
    уровни, награды, промокоды, апгрейды дежурства.
    ========================================================================== */
 
-const APP_VERSION = '3.5';
+const APP_VERSION = '3.7';
 const BETA_VERSION = '3.6';   // тестовая ветка «3.6 Beta» (Лаборатория)
-const SAVE_VERSION = 11;
+const SAVE_VERSION = 12;      // v12 = вайп экономики сезона 3.7 (аккаунты/ID сохраняются)
 const SEASON_NUMBER = 3;
 const HARD_MODE_THRESHOLD = 100000000;
 const HARD_MODE_CASE_DISCOUNT = 0.9;
+
+/* ---------- ЖЁСТКИЕ КЕЙСЫ сезона 3.7 ----------
+   Кейсы открываются ВСЕГДА, но «годнота» (предмет дороже самого кейса)
+   дополнительно придавлена воротами удачи, а топовые редкости режутся сильнее.
+   Штрафы зашиты в casePool(), поэтому таблица «Шансы» показывает честные цифры. */
+const CASE_LUCK_GATE = {
+  ratio: 1.5, factor: 0.35,       // дороже кейса в 1.5+ раза — режем почти в 3 раза
+  hugeRatio: 6, hugeFactor: 0.12, // в 6+ раз — это уже почти чудо
+  megaRatio: 25, megaFactor: 0.05 // в 25+ раз — легендарная удача, как золотой мел
+};
 
 /* ---------- «Налог миллионера»: чем больше баланс, тем сложнее хороший дроп ----------
    Идея: пока у игрока мало монет — шансы как в таблице кейса. Чем жирнее баланс,
@@ -29,10 +39,11 @@ const RICH_TAX_SENSITIVITY = {
   covert: 0.9, gold: 1.15, secret: 0.5
 };
 
-/* Базовый штраф по редкости (был зашит в casePool) */
+/* Базовый штраф по редкости (зашит в casePool).
+   Сезон 3.7: сильно ужесточён — годнота из кейсов падает, но редко. */
 const RARITY_WEIGHT_PENALTY = {
-  consumer: 1, milspec: 0.55, restricted: 0.22, classified: 0.08,
-  covert: 0.025, gold: 0.01, secret: 0.004
+  consumer: 1, milspec: 0.45, restricted: 0.16, classified: 0.045,
+  covert: 0.012, gold: 0.0045, secret: 0.0012
 };
 
 /** 0..1 — насколько «раскулачен» игрок с таким балансом (лог-шкала: важно «во сколько раз», а не «на сколько») */
@@ -83,7 +94,8 @@ const CATEGORIES = {
   cs2:    { label: 'CS2',   short: 'CS2',   badge: 'bg-cyan-950 text-cyan-300 border-cyan-800' },
   other:  { label: 'Игры',  short: 'Игра',  badge: 'bg-violet-950 text-violet-300 border-violet-800' },
   cat:    { label: '🐱 Коты', short: 'Кот', badge: 'bg-fuchsia-950 text-fuchsia-300 border-fuchsia-800' },
-  beta:   { label: '🧪 Бета 3.6', short: 'Бета', badge: 'bg-cyan-950 text-cyan-200 border-cyan-700' }
+  beta:   { label: '🧪 Бета 3.6', short: 'Бета', badge: 'bg-cyan-950 text-cyan-200 border-cyan-700' },
+  upgrade:{ label: '⚡ Только апгрейд', short: 'Апгр.', badge: 'bg-orange-950 text-orange-300 border-orange-800' }
 };
 
 /* ---------- Школьный каталог ---------- */
@@ -191,6 +203,26 @@ const SEASON3_CATALOG = [
   { id: 'yt_stream_deck', name: 'Пульт стримера', price: 700000, icon: '🎛️', badgeBg: 'from-fuchsia-500/50 to-purple-900/60', rarity: 'classified', category: 'other', game: 'YouTube', desc: 'Одна кнопка — и весь класс в прямом эфире' }
 ];
 
+/* ---------- ⚡ АПГРЕЙД-ЭКСКЛЮЗИВЫ (сезон 3.7) ----------
+   Эти предметы НЕЛЬЗЯ выбить из кейсов и НЕЛЬЗЯ купить в лавке —
+   только занести в честном апгрейдере. Целая лестница целей. */
+const UPGRADE_CATALOG = [
+  { id: 'upg_pero_zavuch',   name: 'Перо завуча (трофейное)',       price: 3300,    icon: '🪶', badgeBg: 'from-violet-600/30 to-purple-900/40',  rarity: 'restricted', category: 'upgrade', upgradeExclusive: true, desc: 'Им подписывали лучшие характеристики школы. Только апгрейд!' },
+  { id: 'upg_silver_whistle', name: 'Серебряный свисток физрука',   price: 7700,    icon: '🥈', badgeBg: 'from-slate-400/30 to-slate-800/40',    rarity: 'classified', category: 'upgrade', upgradeExclusive: true, desc: 'Прозвенит — и эстафета считается выигранной. Только апгрейд!' },
+  { id: 'upg_cabinet_key',   name: 'Запасной ключ от 4 кабинета',   price: 15500,   icon: '🗝️', badgeBg: 'from-amber-600/30 to-yellow-900/40',   rarity: 'covert',     category: 'upgrade', upgradeExclusive: true, desc: 'Там хранятся ответы ВСЕХ контрольных. Только апгрейд!' },
+  { id: 'upg_eagle_badge',   name: 'Значок «Гордость школы»',       price: 42000,   icon: '🦅', badgeBg: 'from-orange-500/30 to-rose-900/40',    rarity: 'covert',     category: 'upgrade', upgradeExclusive: true, desc: 'Выдают раз в 10 лет самому достойному. Только апгрейд!' },
+  { id: 'upg_radio_zavuch',  name: 'Рация завуча с подслушкой',     price: 95000,   icon: '📻', badgeBg: 'from-emerald-600/30 to-teal-900/40',   rarity: 'covert',     category: 'upgrade', upgradeExclusive: true, desc: 'Слышно, что шепчут в учительской. Только апгрейд!' },
+  { id: 'upg_gold_whistle',  name: 'Золотой свисток главного судьи', price: 240000,  icon: '🥇', badgeBg: 'from-amber-300/40 to-yellow-700/40',   rarity: 'gold',       category: 'upgrade', upgradeExclusive: true, desc: 'Судья всех школьных споров. Только апгрейд!' },
+  { id: 'upg_director_seal', name: 'Печать директора школы',        price: 777000,  icon: '🔏', badgeBg: 'from-red-500/40 to-amber-800/40',      rarity: 'gold',       category: 'upgrade', upgradeExclusive: true, desc: 'Один оттиск — и любое «нет» превращается в «да». Только апгрейд!' },
+  { id: 'upg_time_bell',     name: 'Колокол, останавливающий время', price: 2600000, icon: '🕰️', badgeBg: 'from-cyan-400/30 to-indigo-800/40',      rarity: 'gold',       category: 'upgrade', upgradeExclusive: true, desc: 'Прозвенел — и перемена длится вечность. Только апгрейд!' },
+  { id: 'upg_legend_pack',   name: 'Рюкзак Легенды 11 «А»',         price: 8800000, icon: '🎒', badgeBg: 'from-fuchsia-500/40 to-purple-900/50', rarity: 'gold',       category: 'upgrade', upgradeExclusive: true, desc: 'В нём лежал самый первый золотой мел завуча. Только апгрейд!' },
+  { id: 'upg_phoenix_student', name: 'Призрак вечного отличника',   price: 24000000, icon: '👻', badgeBg: 'from-cyan-300/50 to-fuchsia-700/50',  rarity: 'secret',     category: 'upgrade', upgradeExclusive: true, desc: 'Ультимативный трофей апгрейдера. Ходят слухи, он до сих пор делает уроки.' }
+];
+
+/* В лавке теперь продаются ТОЛЬКО 4 базовые вещицы — всё ценное добывается
+   в кейсах (жёстко!) или заносится в апгрейдере (эксклюзивы выше). */
+const SHOP_ITEM_IDS = ['sch_cold_cutlet', 'sch_chewed_pen', 'sch_eraser', 'sch_banana_peel'];
+
 /* ---------- Каталог Лаборатории 3.6 Beta (экспериментальные предметы) ----------
    Предметы физически живут в общем каталоге, чтобы рюкзак и сейвы не ломались
    при выключении беты. Дропаются они только из бета-кейсов тестовой ветки. */
@@ -203,7 +235,7 @@ const BETA_CATALOG = [
   { id: 'beta_cyber_cat',     name: 'Кибер-Кот 3.6',               price: 3600000, icon: '🤖', badgeBg: 'from-cyan-500/40 to-fuchsia-800/40',      rarity: 'secret',     category: 'cat',  desc: 'Хранитель тестовой ветки. Мурлычет на частоте 3.6 ГГц' }
 ];
 
-const ALL_MASTER_ITEMS = [...SCHOOL_CATALOG, ...CS2_CATALOG, ...OTHER_GAMES_CATALOG, ...CAT_CATALOG, ...SEASON3_CATALOG, ...ULTRA_CATALOG, ...BETA_CATALOG];
+const ALL_MASTER_ITEMS = [...SCHOOL_CATALOG, ...CS2_CATALOG, ...OTHER_GAMES_CATALOG, ...CAT_CATALOG, ...SEASON3_CATALOG, ...ULTRA_CATALOG, ...BETA_CATALOG, ...UPGRADE_CATALOG];
 const ITEMS_BY_ID = ALL_MASTER_ITEMS.reduce((acc, it) => { acc[it.id] = it; return acc; }, {});
 
 /* ---------- Кейсы (веса = честные шансы, нормализуются автоматически) ---------- */
@@ -251,27 +283,27 @@ const CASES_LIST = [
   {
     id: 'case_director', name: 'Сейф директора', price: 15000, icon: '💼', color: '#d32ce6',
     desc: 'Сменка, родительские собрания и медали',
-    items: [ { id: 'sch_parent_meet', w: 22 }, { id: 'sch_gym_shoes', w: 20 }, { id: 'sch_medal_sport', w: 22 }, { id: 'sch_gold_medal', w: 24 }, { id: 'sch_director_office', w: 12 } ]
+    items: [ { id: 'sch_teacher_mug', w: 30 }, { id: 'sch_parent_meet', w: 22 }, { id: 'sch_gym_shoes', w: 14 }, { id: 'sch_medal_sport', w: 12 }, { id: 'sch_gold_medal', w: 14 }, { id: 'sch_director_office', w: 8 } ]
   },
   {
     id: 'case_party', name: 'Новогодний утренник', price: 22000, icon: '🎄', color: '#eb4b4b',
     desc: 'Праздник, корона выпускницы и пенный огнетушитель',
-    items: [ { id: 'sch_fire_extinguisher', w: 22 }, { id: 'sch_prom_queen', w: 26 }, { id: 'sch_medal_sport', w: 18 }, { id: 'sch_gold_medal', w: 22 }, { id: 'sch_golden_chalk', w: 12 } ]
+    items: [ { id: 'sch_parent_meet', w: 32 }, { id: 'sch_fire_extinguisher', w: 20 }, { id: 'sch_prom_queen', w: 22 }, { id: 'sch_medal_sport', w: 16 }, { id: 'sch_gold_medal', w: 16 }, { id: 'sch_golden_chalk', w: 8 } ]
   },
   {
     id: 'case_attestat', name: 'Аттестат с отличием', price: 45000, icon: '🎓', color: '#eb4b4b',
     desc: 'Медали, кубки, красный диплом и директор',
-    items: [ { id: 'sch_medal_sport', w: 22 }, { id: 'sch_gold_medal', w: 26 }, { id: 'sch_red_diploma', w: 26 }, { id: 'sch_director_office', w: 20 }, { id: 'sch_golden_chalk', w: 6 } ]
+    items: [ { id: 'sch_prom_queen', w: 30 }, { id: 'sch_gym_shoes', w: 30 }, { id: 'sch_medal_sport', w: 18 }, { id: 'sch_gold_medal', w: 10 }, { id: 'sch_red_diploma', w: 8 }, { id: 'sch_director_office', w: 6 }, { id: 'sch_golden_chalk', w: 3 } ]
   },
   {
     id: 'case_ege', name: 'ЕГЭ на 100 баллов', price: 70000, icon: '📝', color: '#ffd700',
     desc: 'Сотка, кресло профессора и золотой мел',
-    items: [ { id: 'sch_red_diploma', w: 28 }, { id: 'sch_director_office', w: 20 }, { id: 'sch_100_points', w: 28 }, { id: 'sch_golden_chalk', w: 18 }, { id: 'sch_professor_chair', w: 6 } ]
+    items: [ { id: 'sch_medal_sport', w: 26 }, { id: 'sch_100_points', w: 26 }, { id: 'sch_gold_medal', w: 18 }, { id: 'sch_red_diploma', w: 16 }, { id: 'sch_director_office', w: 8 }, { id: 'sch_golden_chalk', w: 9 }, { id: 'sch_professor_chair', w: 4 } ]
   },
   {
     id: 'case_legend', name: 'Тайник завуча №1337', price: 120000, icon: '👑', color: '#ffd700',
     desc: 'Школа целиком и секретный Золотой Дневник!',
-    items: [ { id: 'sch_red_diploma', w: 20 }, { id: 'sch_school_bus', w: 16 }, { id: 'sch_director_office', w: 18 }, { id: 'sch_entire_school', w: 22 }, { id: 'sch_golden_diary', w: 20 }, { id: 'sch_professor_chair', w: 4 } ]
+    items: [ { id: 'sch_100_points', w: 30 }, { id: 'sch_gold_medal', w: 26 }, { id: 'sch_golden_chalk', w: 18 }, { id: 'sch_red_diploma', w: 12 }, { id: 'sch_school_bus', w: 10 }, { id: 'sch_director_office', w: 10 }, { id: 'sch_entire_school', w: 10 }, { id: 'sch_golden_diary', w: 6 }, { id: 'sch_professor_chair', w: 4 } ]
   },
   {
     id: 'case_professor', name: 'Коллекция профессора', price: 650000, icon: '🧪', color: '#00f0ff',
@@ -619,7 +651,14 @@ function casePool(caseObj, opts) {
       // 2) Плюс «налог миллионера»: богатые проворачивают кейс заметно хуже.
       const base = entry.w * (RARITY_WEIGHT_PENALTY[rarity] != null ? RARITY_WEIGHT_PENALTY[rarity] : 0.01);
       const sens = RICH_TAX_SENSITIVITY[rarity] != null ? RICH_TAX_SENSITIVITY[rarity] : 1;
-      const weight = base * Math.pow(factor, sens);
+      let weight = base * Math.pow(factor, sens);
+      // ЖЁСТКИЕ КЕЙСЫ 3.7: «годнота» (предмет заметно дороже кейса) дополнительно
+      // режется ярусными воротами удачи — кейс открывается всегда, но окупается редко.
+      const cp  = (caseObj.price || 0) * (opts && opts.discount ? 1 : 1);
+      const rel = cp > 0 ? item.price / cp : 0;
+      if (rel >= CASE_LUCK_GATE.megaRatio)      weight *= CASE_LUCK_GATE.megaFactor;
+      else if (rel >= CASE_LUCK_GATE.hugeRatio) weight *= CASE_LUCK_GATE.hugeFactor;
+      else if (rel >= CASE_LUCK_GATE.ratio)     weight *= CASE_LUCK_GATE.factor;
       return { item: item, weight: weight > 0 ? weight : base * 1e-6 };
     })
     .filter(e => e.item);

@@ -1,14 +1,17 @@
 /* ==========================================================================
    ШКОЛА ДРОП 2.0 — js/storage.js
    Файлы cookie (согласие, категории, настройки, метаданные, бэкап прогресса),
-   localStorage-сохранение, миграция с версии 1.0 и экспорт/импорт.
+   localStorage-сохранение и ВАЙП СЕЗОНА 3.7 (прогресс обнуляется,
+   ник и уникальный ID аккаунта переносятся).
    ========================================================================== */
 
 /* --------------------------------------------------------------------------
    1. СХЕМА СОХРАНЕНИЯ
    -------------------------------------------------------------------------- */
-const SAVE_KEY = 'shkola_drop_save_v11';
+const SAVE_KEY = 'shkola_drop_save_v12';
 const LEGACY_KEYS = ['shkola_drop_save_v10', 'shkola_drop_save_v9', 'shkola_drop_save_v8', 'shkola_drop_save_v7', 'shkola_drop_save_v6'];
+/* Все ключи предыдущих версий — из них вайп 3.7 вытаскивает только ник/ID */
+const OLD_SAVE_KEYS = ['shkola_drop_save_v11'].concat(LEGACY_KEYS);
 
 const DEFAULT_STATS = {
   casesOpened: 0,
@@ -326,10 +329,11 @@ const SaveManager = {
     return data;
   },
 
-  /** Чтение: localStorage → cookie-бэкап → миграция со старой версии */
+  /** Чтение: localStorage (v12) → cookie-бэкап v12 → ВАЙП СЕЗОНА 3.7.
+      Старые версии (v11 и ниже) НЕ переносим: инвентарь и баланс сбрасываются
+      до стартовых, а ник и уникальный ID аккаунта сохраняются. */
   load() {
     let raw = null;
-    let fresh = false;
 
     try {
       const ls = localStorage.getItem(SAVE_KEY);
@@ -337,28 +341,55 @@ const SaveManager = {
     } catch (e) {}
 
     if (!raw) {
+      // cookie-бэкап принимается ТОЛЬКО текущей версии (см. readCookieBackup),
+      // чтобы бэкап v11 не воскресил вайпнутый прогресс
       const cookieBackup = this.readCookieBackup();
       if (cookieBackup) raw = cookieBackup;
     }
 
-    if (!raw) {
-      raw = this.readLegacy();
-      if (raw) {
-        const migrated = this.normalize(raw);
-        try {
-          localStorage.setItem(SAVE_KEY, JSON.stringify(migrated));
-        } catch (e) {}
-        MetaStore.write(Object.assign(MetaStore.read(), { migratedFrom: 'v1', migrationTs: Date.now() }));
-        return { data: migrated, migrated: true, fresh: false };
-      }
-      fresh = true;
-      return { data: this.defaultData(), migrated: false, fresh: true };
-    }
+    if (raw) return { data: this.normalize(raw), migrated: false, fresh: false, wiped: false };
 
-    return { data: this.normalize(raw), migrated: false, fresh: fresh };
+    // ---------- ВАЙП СЕЗОНА 3.7 ----------
+    // Переносим только личность (ник + ID + галочка). Всё остальное — с нуля.
+    const carriedUser = this.readCarriedUser();
+    const data = this.defaultData();
+    if (carriedUser) data.user = carriedUser;
+    return { data: data, migrated: false, fresh: true, wiped: true, carriedUser: !!carriedUser };
   },
 
-  /** Данные старой версии (ключ shkola_drop_save_v7) */
+  /** Вытащить личность (ник/id/галочку) из сохранений старых версий — для вайпа 3.7.
+      Возвращает профиль в актуальном виде: обязательно с полем .id (боевой uid аккаунта). */
+  _carriedFrom(u) {
+    if (!u || !u.nick) return null;
+    const out = Object.assign({}, u);
+    out.id = u.id || u.uid || null;
+    delete out.uid;
+    out.tag = u.tag || null;
+    out.verified = !!u.verified;
+    out.email = u.email || null;
+    return out;
+  },
+
+  readCarriedUser() {
+    for (const key of OLD_SAVE_KEYS) {
+      try {
+        const raw = localStorage.getItem(key);
+        if (!raw) continue;
+        const parsed = JSON.parse(raw);
+        const carried = this._carriedFrom(parsed && parsed.user);
+        if (carried) return carried;
+      } catch (e) {}
+    }
+    // Проверим ещё и старый cookie-бэкап v11 — вдруг там сохранились ник/ID
+    try {
+      const compact = this.readCookieJson();
+      const carried = this._carriedFrom(compact && compact.u);
+      if (carried) return carried;
+    } catch (e) {}
+    return null;
+  },
+
+  /** Данные старой версии (используется кнопкой «восстановить старое сохранение», если она ещё присутствует) */
   readLegacy() {
     for (const key of LEGACY_KEYS) {
       try {
@@ -451,7 +482,8 @@ const SaveManager = {
     return true;
   },
 
-  readCookieBackup() {
+  /** Сырой JSON cookie-бэкапа (любой версии) — для вайп-переноса ника/ID */
+  readCookieJson() {
     const count = parseInt(CookieStore.get(this.chunkPrefix + 'count') || '0', 10);
     if (!count || count < 1 || count > COOKIE_MAX_CHUNKS) return null;
     let json = '';
@@ -461,7 +493,19 @@ const SaveManager = {
       json += part;
     }
     try {
-      const compact = JSON.parse(json);
+      return JSON.parse(json);
+    } catch (e) {
+      return null;
+    }
+  },
+
+  readCookieBackup() {
+    const compact = this.readCookieJson();
+    if (!compact) return null;
+    // Принимаем бэкап ТОЛЬКО актуальной версии — иначе после вайпа
+    // старый бэкап вернёт игроку весь сброшенный прогресс
+    if (compact.v !== SAVE_VERSION) return null;
+    try {
       return {
         version: compact.v || SAVE_VERSION,
         balance: compact.b,
@@ -497,7 +541,7 @@ const SaveManager = {
   clearAll() {
     try {
       localStorage.removeItem(SAVE_KEY);
-      LEGACY_KEYS.forEach(k => localStorage.removeItem(k));
+      OLD_SAVE_KEYS.forEach(k => localStorage.removeItem(k));
     } catch (e) {}
     this.clearCookieBackup();
     CookieStore.remove(MetaStore.COOKIE_META);
