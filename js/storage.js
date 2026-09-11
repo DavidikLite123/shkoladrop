@@ -38,6 +38,7 @@ const DEFAULT_STATS = {
   lastSeen: 0,
   sessions: 0,
   hardModeNotified: false,
+  richTaxNotified: false,
   tapFarmClosed: false
 };
 
@@ -364,8 +365,10 @@ const SaveManager = {
 
     this.writeCookieBackup(data);
 
-    // Метаданные — всегда, они крошечные и относятся к обязательным
-    MetaStore.write({
+    // Метаданные — всегда, они крошечные и относятся к обязательным.
+    // ВАЖНО: пишем поверх уже сохранённого, иначе теряются флаги вроде welcomeSeen
+    // (из-за этого приветственное окно показывалось каждый заход и блокировало прокрутку).
+    MetaStore.write(Object.assign(MetaStore.read(), {
       version: APP_VERSION,
       saveVersion: SAVE_VERSION,
       lastSeen: Date.now(),
@@ -376,7 +379,7 @@ const SaveManager = {
       promosUsed: data.stats.promosUsed,
       catFound: !!data.stats.catFound,
       balanceHint: data.balance
-    });
+    }));
 
     return lsOk;
   },

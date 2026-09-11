@@ -20,8 +20,12 @@ function bootShkolaDrop() {
     const welcome = $('welcomeDisclaimerModal');
     if (welcome && meta.welcomeSeen) {
       welcome.remove();
+      // Обязательно пересинхронизируемся: initGame() успел заблокировать прокрутку
+      // под приветствием, и без этого страница осталась бы нескроллящейся навсегда.
+      if (typeof resyncModalState === 'function') resyncModalState();
       showCookieBannerIfNeeded();
     } else if (!welcome) {
+      if (typeof resyncModalState === 'function') resyncModalState();
       showCookieBannerIfNeeded();
     }
 

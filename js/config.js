@@ -4,11 +4,64 @@
    уровни, награды, промокоды, апгрейды дежурства.
    ========================================================================== */
 
-const APP_VERSION = '3.0.0';
+const APP_VERSION = '3.0.1';
 const SAVE_VERSION = 9;
 const SEASON_NUMBER = 3;
 const HARD_MODE_THRESHOLD = 100000000;
 const HARD_MODE_CASE_DISCOUNT = 0.9;
+
+/* ---------- «Налог миллионера»: чем больше баланс, тем сложнее хороший дроп ----------
+   Идея: пока у игрока мало монет — шансы как в таблице кейса. Чем жирнее баланс,
+   тем сильнее режется вес дорогих редкостей (и в кейсах, и в колесе апгрейдера).
+   Штраф учитывается в casePool()/calculateChance() — то есть в окне «Шансы»
+   и на полосе заноса показывается ровно тот шанс, по которому реально крутится рандом. */
+const RICH_TAX = {
+  freeFrom: 100000,             // до 100 000 ₽ — штрафа нет вообще
+  fullAt: HARD_MODE_THRESHOLD,  // к 100 000 000 ₽ — штраф достигает максимума
+  maxCut: 0.85,                 // кейсы: вес топовых редкостей падает почти в 7 раз
+  wheelMaxCut: 0.45             // колесо апгрейдера: шанс заноса режут максимум на 45%
+};
+
+/* Чем редче предмет, тем сильнее на него действует штраф (0 — не действует) */
+const RICH_TAX_SENSITIVITY = {
+  consumer: 0, milspec: 0.05, restricted: 0.35, classified: 0.65,
+  covert: 0.9, gold: 1.15, secret: 0.5
+};
+
+/* Базовый штраф по редкости (был зашит в casePool) */
+const RARITY_WEIGHT_PENALTY = {
+  consumer: 1, milspec: 0.55, restricted: 0.22, classified: 0.08,
+  covert: 0.025, gold: 0.01, secret: 0.004
+};
+
+/** 0..1 — насколько «раскулачен» игрок с таким балансом (лог-шкала: важно «во сколько раз», а не «на сколько») */
+function richTaxProgress(balance) {
+  const bal = Number.isFinite(balance) ? Math.max(0, balance) : 0;
+  if (bal <= RICH_TAX.freeFrom) return 0;
+  const span = Math.log(RICH_TAX.fullAt / RICH_TAX.freeFrom);
+  if (!(span > 0)) return 1;
+  return Math.min(1, Math.max(0, Math.log(bal / RICH_TAX.freeFrom) / span));
+}
+
+/** Множитель для кейсов: 1 — штрафа нет, 0.15 — максимальный */
+function richTaxFactor(balance) {
+  return 1 - RICH_TAX.maxCut * richTaxProgress(richTaxBalanceOf(balance));
+}
+
+/** Множитель для колеса апгрейдера (мягче) */
+function richTaxWheelFactor(balance) {
+  return 1 - RICH_TAX.wheelMaxCut * richTaxProgress(richTaxBalanceOf(balance));
+}
+
+/** Переданный баланс или текущий (чтобы casePool() можно было вызывать без аргументов) */
+function richTaxBalanceOf(balance) {
+  return Number.isFinite(balance) ? balance : richTaxBalance();
+}
+
+/** Текущий баланс для расчёта штрафа (state появляется позже config.js — поэтому с проверкой) */
+function richTaxBalance() {
+  return (typeof state !== 'undefined' && state && Number.isFinite(state.balance)) ? state.balance : 0;
+}
 
 /* ---------- Редкости ---------- */
 const RARITIES = {
@@ -369,28 +422,62 @@ const COOKIE_MAX_CHUNK = 3500;   // безопасный размер одног
 const COOKIE_MAX_CHUNKS = 3;     // максимум блоков резервной копии
 
 /* ---------- Хелперы данных ---------- */
-function casePool(caseObj) {
+/** Взвешенный пул кейса.
+ *  opts = { ignoreRichTax: true }  — таблица «как в описании кейса», без налога миллионера
+ *  opts = { balance: 5000000 }     — посчитать для произвольного баланса                        */
+function casePool(caseObj, opts) {
   if (!caseObj) return [];
+  const o = opts || {};
+  const factor = o.ignoreRichTax ? 1 : richTaxFactor(o.balance);
   return caseObj.items
-    .map(entry => ({
-      item: ITEMS_BY_ID[entry.id],
-      // Чем выше редкость, тем сильнее штраф к шансу. Хороший дроп теперь действительно редкий.
-      weight: entry.w * ({ consumer: 1, milspec: 0.55, restricted: 0.22, classified: 0.08, covert: 0.025, gold: 0.01, secret: 0.004 }[(ITEMS_BY_ID[entry.id] || {}).rarity] || 0.01)
-    }))
+    .map(entry => {
+      const item = ITEMS_BY_ID[entry.id];
+      if (!item) return { item: null, weight: 0 };
+      const rarity = item.rarity || 'consumer';
+      // 1) Чем выше редкость, тем сильнее базовый штраф — хороший дроп и так редкий.
+      // 2) Плюс «налог миллионера»: богатые проворачивают кейс заметно хуже.
+      const base = entry.w * (RARITY_WEIGHT_PENALTY[rarity] != null ? RARITY_WEIGHT_PENALTY[rarity] : 0.01);
+      const sens = RICH_TAX_SENSITIVITY[rarity] != null ? RICH_TAX_SENSITIVITY[rarity] : 1;
+      const weight = base * Math.pow(factor, sens);
+      return { item: item, weight: weight > 0 ? weight : base * 1e-6 };
+    })
     .filter(e => e.item);
 }
 
-function caseTotalWeight(caseObj) {
-  return casePool(caseObj).reduce((sum, e) => sum + e.weight, 0);
+function caseTotalWeight(caseObj, opts) {
+  return casePool(caseObj, opts).reduce((sum, e) => sum + e.weight, 0);
 }
 
-function caseOdds(caseObj) {
-  const total = caseTotalWeight(caseObj) || 1;
-  return casePool(caseObj).map(e => ({
+function caseOdds(caseObj, opts) {
+  const pool = casePool(caseObj, opts);
+  const total = pool.reduce((sum, e) => sum + e.weight, 0) || 1;
+  return pool.map(e => ({
     item: e.item,
     weight: e.weight,
     chance: (e.weight / total) * 100
   }));
+}
+
+/** Как «налог миллионера» подрезал топовые редкости в кейсе:
+ *  { factor, fairShare, topShare, topCut } — доли шансов в % и «насколько режут» */
+function caseRichTaxInfo(caseObj, opts) {
+  const o = opts || {};
+  const factor = o.ignoreRichTax ? 1 : richTaxFactor(o.balance);
+  const TOP_RARITY = { classified: 1, covert: 1, gold: 1, secret: 1 };
+  const topShare = list => {
+    const total = list.reduce((s, e) => s + e.weight, 0) || 1;
+    const top = list.filter(e => TOP_RARITY[(e.item.rarity || 'consumer')])
+      .reduce((s, e) => s + e.weight, 0);
+    return (top / total) * 100;
+  };
+  const fairShare = topShare(casePool(caseObj, Object.assign({}, o, { ignoreRichTax: true })));
+  const topShareNow = topShare(casePool(caseObj, o));
+  return {
+    factor: factor,
+    fairShare: fairShare,
+    topShare: topShareNow,
+    topCut: fairShare > 0 ? Math.max(0, ((fairShare - topShareNow) / fairShare) * 100) : 0
+  };
 }
 
 function itemDisplayCategory(item) {
