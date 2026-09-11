@@ -7,8 +7,8 @@
 /* --------------------------------------------------------------------------
    1. СХЕМА СОХРАНЕНИЯ
    -------------------------------------------------------------------------- */
-const SAVE_KEY = 'shkola_drop_save_v9';
-const LEGACY_KEYS = ['shkola_drop_save_v8', 'shkola_drop_save_v7', 'shkola_drop_save_v6'];
+const SAVE_KEY = 'shkola_drop_save_v11';
+const LEGACY_KEYS = ['shkola_drop_save_v10', 'shkola_drop_save_v9', 'shkola_drop_save_v8', 'shkola_drop_save_v7', 'shkola_drop_save_v6'];
 
 const DEFAULT_STATS = {
   casesOpened: 0,
@@ -30,6 +30,10 @@ const DEFAULT_STATS = {
   dailyStreak: 0,
   lastDailyClaim: 0,
   promosUsed: [],
+  usedVipCodes: [],   // Использованные VIP-коды (чтобы один код не сработал дважды)
+  vipActive: false,   // Активирован ли вечный VIP (отключает налог миллионера)
+  vipActivatedAt: 0,  // Дата активации VIP
+  vipCode: '',        // Какой именно код был активирован
   achievements: [],
   unlockedTitles: [],
   catFound: false,
@@ -278,9 +282,14 @@ const SaveManager = {
 
     const stats = Object.assign(freshStats(), raw.stats || {});
     stats.promosUsed = Array.isArray(stats.promosUsed) ? stats.promosUsed : [];
+    stats.usedVipCodes = Array.isArray(stats.usedVipCodes) ? stats.usedVipCodes : [];
     stats.achievements = Array.isArray(stats.achievements) ? stats.achievements : [];
     stats.unlockedTitles = Array.isArray(stats.unlockedTitles) ? stats.unlockedTitles : [];
     stats.idle = Object.assign({ level: 0, pending: 0, lastCollect: 0 }, stats.idle || {});
+    // Признак VIP-статуса — булево на случай если в старом сохранении его вообще не было
+    if (typeof stats.vipActive !== 'boolean') stats.vipActive = false;
+    if (typeof stats.vipActivatedAt !== 'number') stats.vipActivatedAt = 0;
+    if (typeof stats.vipCode !== 'string') stats.vipCode = '';
     data.stats = stats;
 
     data.createdAt = raw.createdAt || base.createdAt;

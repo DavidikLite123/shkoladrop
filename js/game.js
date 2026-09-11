@@ -302,6 +302,11 @@ function renderAll() {
   animateNumber(headerBalanceEl, state.balance, 420, v => moneyText(v, true));
   if (headerBalanceEl) headerBalanceEl.title = moneyText(state.balance, false);
 
+  // VIP badge в шапке + видимость VIP карточек
+  const vipBadge = $('headerVipBadge');
+  if (vipBadge) vipBadge.classList.toggle('hidden', !state.stats.vipActive);
+  updateVipCardVisibility();
+
   if (!$('invCountBadge').dataset.value || Number($('invCountBadge').dataset.value) !== state.inventory.length) {
     $('invCountBadge').dataset.value = String(state.inventory.length);
     $('invCountBadge').textContent = state.inventory.length;
@@ -751,10 +756,13 @@ function showResult(isWin, item, meta, missPercent = 0) {
 
   const sellBtn = $('btnSellResult');
   const inInventory = state.inventory.some(it => it.uid === state.lastResultItem?.uid);
-  sellBtn.disabled = !inInventory;
-  sellBtn.className = inInventory
+  const isNoSell = !!state.lastResultItem?.noSell;
+  const canSell = inInventory && !isNoSell;
+  sellBtn.disabled = !canSell;
+  sellBtn.className = canSell
     ? 'py-3 rounded-xl font-cs font-bold text-xs uppercase tracking-wider bg-slate-800 border border-slate-700 text-slate-200 hover:bg-slate-700 active:scale-95 transition'
     : 'py-3 rounded-xl font-cs font-bold text-xs uppercase tracking-wider bg-slate-900 border border-slate-800 text-slate-600 cursor-not-allowed';
+  if (isNoSell) sellBtn.textContent = 'НЕЛЬЗЯ ПРОДАТЬ';
 
   overlay.classList.remove('hidden');
   overlay.classList.add('pointer-events-auto');
@@ -780,6 +788,10 @@ function closeResultOverlay() {
 function sellResultItem() {
   const item = state.lastResultItem;
   if (!item) return;
+  if (item.noSell) {
+    Toast.info(`«${escapeHtml(item.name)}» нельзя продать — это легендарный предмет! Его можно только апгрейднуть ⚡`);
+    return;
+  }
   const idx = state.inventory.findIndex(it => it.uid === item.uid);
   if (idx === -1) return;
   const inv = state.inventory[idx];
@@ -820,22 +832,26 @@ function casePrice(caseObj) {
 }
 
 function checkHardModeNotice() {
+  // VIP-игрокам налог не страшен — не спамим им уведомлениями
+  if (state.stats.vipActive) return;
+
   if (state.balance >= HARD_MODE_THRESHOLD && !state.stats.hardModeNotified) {
     state.stats.hardModeNotified = true;
-    Toast.gold('🔥 Сезон 3: режим миллионера активирован! Цены кейсов снижены на 10%, но дропы стали сложнее.', 7000);
+    Toast.gold('🔥 Сезон 3: режим миллионера активирован! Цены кейсов снижены на 10%, но дропы стали сложнее. Отключить налог навсегда можно VIP-статусом (кнопка ⋮ → Промокоды).', 8000);
     persist(true);
     return;
   }
   // Одноразовое предупреждение, как только включается «налог миллионера»
   if (richTaxFactor() < 0.995 && !state.stats.richTaxNotified) {
     state.stats.richTaxNotified = true;
-    Toast.info(`💰 Баланс большой — рандом злится: шансы топовых предметов снижены (налог ×${richTaxFactor().toFixed(2)}).`, 6500);
+    Toast.info(`💰 Баланс большой — рандом злится: шансы топовых предметов снижены (налог ×${richTaxFactor().toFixed(2)}). Отключить налог навсегда можно VIP-статусом (кнопка ⋮ → Промокоды).`, 8000);
     persist(true);
   }
 }
 
-/** Короткая плашка штрафа для UI — пустая строка, если «налога миллионера» нет */
+/** Короткая плашка штрафа для UI — пустая строка, если «налога миллионера» нет, или VIP-метка если VIP активен */
 function richTaxLabel(kind) {
+  if (state.stats.vipActive) return ' · 👑 VIP';
   const factor = kind === 'wheel' ? richTaxWheelFactor() : richTaxFactor();
   if (factor >= 0.995) return '';
   return ` · 🧱 налог ×${factor.toFixed(2)}`;
@@ -1262,12 +1278,15 @@ function openCaseOddsModal() {
   const tax = caseRichTaxInfo(caseObj);
   const note = $('oddsRigNote');
   if (note) {
-    if (tax.factor >= 0.995) {
+    if (state.stats.vipActive) {
+      note.className = 'text-[10px] text-amber-300 mb-2';
+      note.innerHTML = `👑 <b>VIP-статус активен</b> — налог миллионера отключён навсегда! Шансы всегда как при балансе ниже 100 000 ₽. Спасибо за поддержку! 💎`;
+    } else if (tax.factor >= 0.995) {
       note.className = 'text-[10px] text-emerald-400 mb-2';
-      note.innerHTML = `✅ Баланс ${fmt(state.balance)} ₽ — «налог миллионера» ещё не включён, шансы как в описании кейса.`;
+      note.innerHTML = `✅ Баланс ${fmt(state.balance)} ₽ — «налог миллионера» ещё не включён, шансы как в описании кейса. Отключить налог навсегда можно VIP-статусом (⋮ → Промокоды).`;
     } else {
       note.className = 'text-[10px] text-rose-300 mb-2';
-      note.innerHTML = `🧱 <b>Налог миллионера ×${tax.factor.toFixed(2)}</b> — при балансе ${fmt(state.balance)} ₽ шансы топовых редкостей порезаны на ${tax.topCut.toFixed(0)}%. Ниже — уже итоговые шансы, они же участвуют в рандоме.`;
+      note.innerHTML = `🧱 <b>Налог миллионера ×${tax.factor.toFixed(2)}</b> — при балансе ${fmt(state.balance)} ₽ шансы топовых редкостей порезаны на ${tax.topCut.toFixed(0)}%. Отключить налог навсегда можно VIP-статусом (⋮ → Промокоды). Ниже — уже итоговые шансы, они же участвуют в рандоме.`;
     }
   }
   Modal.open('caseOddsModal');
@@ -1346,19 +1365,20 @@ function renderInventory() {
     const rarity = rarityOf(item);
     const cat = CATEGORIES[item.category] || CATEGORIES.other;
     const isCat = item.category === 'cat';
+    const isNoSell = !!item.noSell;
     return `
       <div class="bg-slate-900/80 border rounded-2xl p-2.5 flex flex-col items-center justify-between text-center relative ${
         state.selectedDeposit && state.selectedDeposit.uid === item.uid ? 'item-selected' : 'border-slate-800'
-      }">
+      } ${isNoSell ? 'border-fuchsia-500/40' : ''}">
         <span class="absolute top-2 left-2 text-[9px] px-1.5 py-0.5 rounded font-bold border ${cat.badge}">${escapeHtml(itemDisplayCategory(item))}</span>
-        ${isCat ? '<span class="absolute top-2 right-2 text-[11px]">🐾</span>' : ''}
+        ${isNoSell ? '<span class="absolute top-2 right-2 text-[10px] px-1 py-0.5 rounded bg-fuchsia-950/70 border border-fuchsia-500/50 text-fuchsia-300 font-bold">НЕ ПРОДАТЬ</span>' : (isCat ? '<span class="absolute top-2 right-2 text-[11px]">🐾</span>' : '')}
         <div class="my-1">${renderItemMedia(item, 'w-12 h-12 text-3xl')}</div>
         <span class="text-xs font-bold text-white line-clamp-1 w-full" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</span>
         <span class="text-[11px] font-cs font-bold my-1" style="color:${rarity.color}">${fmt(item.price)} ₽</span>
         <div class="text-[8.5px] text-slate-500 mb-1">${escapeHtml(rarity.short)}</div>
         <div class="w-full grid grid-cols-2 gap-1.5 mt-1">
           <button data-act="dep" data-uid="${item.uid}" class="py-1 rounded-lg bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 border border-orange-500/30 text-[10px] font-bold transition">В деп</button>
-          <button data-act="sell" data-uid="${item.uid}" class="py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold transition">Продать</button>
+          <button data-act="sell" data-uid="${item.uid}" ${isNoSell ? 'disabled' : ''} class="py-1 rounded-lg ${isNoSell ? 'bg-slate-900 text-slate-600 cursor-not-allowed border border-slate-800' : 'bg-slate-800 hover:bg-slate-700 text-slate-300'} text-[10px] font-bold transition">${isNoSell ? 'Нельзя' : 'Продать'}</button>
         </div>
       </div>
     `;
@@ -1386,6 +1406,12 @@ async function sellSingleItem(uid) {
   const idx = state.inventory.findIndex(i => i.uid === uid);
   if (idx === -1) return;
   const item = state.inventory[idx];
+
+  // Предметы с флагом noSell нельзя продавать (например, Гора Богдана)
+  if (item.noSell) {
+    Toast.info(`«${escapeHtml(item.name)}» нельзя продать — это легендарный предмет! Его можно только апгрейднуть ⚡`);
+    return;
+  }
 
   if (item.price >= 1000000) {
     const ok = await ConfirmDialog.ask({
@@ -1417,6 +1443,7 @@ async function sellDuplicates() {
   const seen = new Set();
   const dupes = [];
   state.inventory.forEach(it => {
+    if (it.noSell) return; // Непродаваемые предметы не участвуют в массовой продаже
     if (seen.has(it.id)) dupes.push(it);
     else seen.add(it.id);
   });
@@ -2106,7 +2133,8 @@ function claimDaily() {
    -------------------------------------------------------------------------- */
 function redeemPromo() {
   const input = $('promoInput');
-  const code = (input.value || '').trim().toUpperCase();
+  // Нормализация: убираем пробелы, приводим к верхнему регистру (промокоды не чувствительны к пробелам)
+  const code = (input.value || '').replace(/\s+/g, '').toUpperCase();
   if (!code) {
     Toast.error('Введи промокод');
     return;
@@ -2125,19 +2153,101 @@ function redeemPromo() {
     return;
   }
 
+  // ===== ПРОВЕРКА VIP-КОДОВ (одноразовые, за реальные 150 ₽ на FunPay) =====
+  if (VIP_CODES.includes(code)) {
+    if (state.stats.usedVipCodes && state.stats.usedVipCodes.includes(code)) {
+      Toast.error('Этот VIP-код уже был использован. Каждый код работает только один раз.');
+      return;
+    }
+    if (state.stats.vipActive) {
+      Toast.info('У тебя уже активирован VIP-статус 👑');
+      return;
+    }
+    // Активируем вечный VIP
+    state.stats.vipActive = true;
+    state.stats.vipActivatedAt = Date.now();
+    state.stats.vipCode = code;
+    if (!state.stats.usedVipCodes) state.stats.usedVipCodes = [];
+    state.stats.usedVipCodes.push(code);
+    state.stats.promosUsed.push(code);
+    if (!state.stats.unlockedTitles.includes('👑 VIP Игрок')) {
+      state.stats.unlockedTitles.push('👑 VIP Игрок');
+    }
+    audio.init();
+    audio.playSecret();
+    Fx.secretRain();
+    Fx.gold(300);
+    addXp(1000, { silent: true });
+    Toast.gold('👑 VIP-СТАТУС АКТИВИРОВАН НАВСЕГДА! Налог миллионера отключён — шансы всегда честные, как при маленьком балансе! Спасибо за поддержку! 💎', 9000);
+    input.value = '';
+    checkAchievements();
+    renderPromoList();
+    uiUpdate();
+    persist(true);
+    return;
+  }
+
   const promo = PROMO_CODES[code];
   if (!promo) {
-    Toast.error('Такого промокода нет. Ищи коды в видео David Lite!');
+    Toast.error('Такого промокода нет. Ищи коды в видео David Lite или VIP-код в лоте на FunPay!');
     return;
   }
 
   state.stats.promosUsed.push(code);
   audio.init();
-  audio.playLevelUp();
-  addMoney(promo.money, { silent: true, countEarned: true });
-  addXp(promo.xp, { silent: true });
-  Fx.burst(80);
-  Toast.success(`Промокод <b>${code}</b> активирован: +${fmt(promo.money)} ₽ и ${promo.xp} XP! ${promo.label ? '· ' + promo.label : ''}`, 5000);
+
+  let rewardText = '';
+
+  // Денежная награда
+  if (promo.money && promo.money > 0) {
+    addMoney(promo.money, { silent: true, countEarned: true });
+    rewardText += `+${fmt(promo.money)} ₽`;
+  }
+
+  // Опыт
+  if (promo.xp && promo.xp > 0) {
+    addXp(promo.xp, { silent: true });
+    if (rewardText) rewardText += ' и ';
+    rewardText += `${promo.xp} XP`;
+  }
+
+  // Предметная награда (например, легендарный котик)
+  if (promo.item) {
+    const proto = ITEMS_BY_ID[promo.item];
+    if (proto) {
+      const newItem = Object.assign({}, proto, { uid: RNG.uid('promo'), wonAt: nowTimeLabel() });
+      state.inventory.unshift(newItem);
+      trackBiggestDrop(newItem);
+
+      // Особый случай: Кот Гора Богдана
+      if (promo.item === 'cat_gora_bogdan') {
+        state.stats.catFound = true;
+        if (!state.stats.unlockedTitles.includes('Легенда Горы Богдана')) {
+          state.stats.unlockedTitles.push('Легенда Горы Богдана');
+        }
+        audio.playSecret();
+        Fx.secretRain();
+        Fx.thunder();
+      } else {
+        audio.playWin();
+        Fx.gold(180);
+      }
+
+      if (!state.selectedDeposit) state.selectedDeposit = newItem;
+      if (rewardText) rewardText += ' и ';
+      rewardText += `<b>${escapeHtml(proto.name)}</b> 🎁`;
+    }
+  }
+
+  if (!rewardText) {
+    audio.playLevelUp();
+    Fx.burst(80);
+  } else {
+    audio.playLevelUp();
+    Fx.burst(120);
+  }
+
+  Toast.success(`Промокод <b>${code}</b> активирован: ${rewardText}! ${promo.label ? '· ' + promo.label : ''}`, 6000);
   input.value = '';
   checkAchievements();
   renderPromoList();
@@ -2149,12 +2259,28 @@ function renderPromoList() {
   const box = $('promoList');
   if (!box) return;
   if (!state.stats.promosUsed.length) {
-    box.innerHTML = '<span class="text-[10px] text-slate-500">Пока ни один код не активирован. Подсказка: следи за видео David Lite 🎬</span>';
+    const vipHint = state.stats.vipActive
+      ? '<br><span class="text-amber-400">👑 VIP-статус активен — налог миллионера отключён навсегда!</span>'
+      : `<br><span class="text-fuchsia-400">VIP за ${VIP_PRICE_RUB}₽ отключает налог миллионера навсегда</span>`;
+    box.innerHTML = `<span class="text-[10px] text-slate-500">Пока ни один код не активирован. Подсказка: следи за видео David Lite 🎬<br><span class="text-fuchsia-400">Коды обновления 3.0.2: NEWUPDATE2026, GORABOGDAN5G</span>${vipHint}</span>`;
     return;
   }
   box.innerHTML = state.stats.promosUsed.map(code => {
+    const isVip = code.startsWith('VIP-') && VIP_CODES.includes(code);
+    if (isVip) {
+      return `<span class="text-[9px] px-2 py-0.5 rounded-full bg-amber-950/70 border border-amber-600/60 text-amber-300 font-mono" title="VIP активирован навечно">👑 ${escapeHtml(code)} ✓ · ВЕЧНЫЙ VIP</span>`;
+    }
     const p = PROMO_CODES[code];
-    return `<span class="text-[9px] px-2 py-0.5 rounded-full bg-emerald-950/60 border border-emerald-800 text-emerald-300 font-mono">${escapeHtml(code)} ✓${p ? ' · ' + fmt(p.money) + '₽' : ''}</span>`;
+    let rewardLabel = '';
+    if (p) {
+      if (p.item) {
+        const it = ITEMS_BY_ID[p.item];
+        rewardLabel = ' · ' + (it ? it.name : 'предмет');
+      } else if (p.money) {
+        rewardLabel = ' · ' + fmt(p.money) + '₽';
+      }
+    }
+    return `<span class="text-[9px] px-2 py-0.5 rounded-full bg-emerald-950/60 border border-emerald-800 text-emerald-300 font-mono">${escapeHtml(code)} ✓${rewardLabel}</span>`;
   }).join('');
 }
 
@@ -2191,7 +2317,16 @@ function selectRegAvatar(emoji) {
   audio.playTick();
 }
 
-function openExtrasModal() { Modal.open('extrasModal'); }
+function openExtrasModal() { updateVipCardVisibility(); Modal.open('extrasModal'); }
+
+function updateVipCardVisibility() {
+  const vipStatusCard = $('vipStatusCard');
+  const vipBuyCard = $('vipBuyCard');
+  if (!vipStatusCard || !vipBuyCard) return;
+  const vipActive = !!(state && state.stats && state.stats.vipActive);
+  vipStatusCard.classList.toggle('hidden', !vipActive);
+  vipBuyCard.classList.toggle('hidden', vipActive);
+}
 function closeExtrasModal() { Modal.close('extrasModal'); }
 
 function submitRegistration() {
@@ -2294,6 +2429,8 @@ function renderProfile() {
   $('statMiniGame').textContent = moneyText(state.stats.miniBest || 0, true);
   $('statMiniGame').title = moneyText(state.stats.miniBest || 0, false);
   $('statCatFound').textContent = state.stats.catFound ? '🏆 НАЙДЕН' : 'не найден';
+  const vipEl = $('statVipStatus');
+  if (vipEl) vipEl.textContent = state.stats.vipActive ? '👑 АКТИВЕН' : 'не активен';
 
   if (state.profileTab === 'ach') renderAchievements();
 }

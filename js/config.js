@@ -4,8 +4,8 @@
    уровни, награды, промокоды, апгрейды дежурства.
    ========================================================================== */
 
-const APP_VERSION = '3.0.1';
-const SAVE_VERSION = 9;
+const APP_VERSION = '3.0.2';
+const SAVE_VERSION = 11;
 const SEASON_NUMBER = 3;
 const HARD_MODE_THRESHOLD = 100000000;
 const HARD_MODE_CASE_DISCOUNT = 0.9;
@@ -43,13 +43,15 @@ function richTaxProgress(balance) {
   return Math.min(1, Math.max(0, Math.log(bal / RICH_TAX.freeFrom) / span));
 }
 
-/** Множитель для кейсов: 1 — штрафа нет, 0.15 — максимальный */
+/** Множитель для кейсов: 1 — штрафа нет, 0.15 — максимальный. VIP-игроки всегда получают множитель 1 */
 function richTaxFactor(balance) {
+  if (typeof state !== 'undefined' && state.stats && state.stats.vipActive) return 1;
   return 1 - RICH_TAX.maxCut * richTaxProgress(richTaxBalanceOf(balance));
 }
 
-/** Множитель для колеса апгрейдера (мягче) */
+/** Множитель для колеса апгрейдера (мягче). VIP-игроки всегда получают 1 */
 function richTaxWheelFactor(balance) {
+  if (typeof state !== 'undefined' && state.stats && state.stats.vipActive) return 1;
   return 1 - RICH_TAX.wheelMaxCut * richTaxProgress(richTaxBalanceOf(balance));
 }
 
@@ -166,6 +168,7 @@ const CAT_CATALOG = [
   { id: 'cat_diary_eater',   name: 'Кот, который съел дневник',    price: 2500000, icon: '🙀', badgeBg: 'from-rose-500/50 to-red-950/60', rarity: 'gold', category: 'cat', desc: 'Спас тебя от родительского собрания. Герой!' },
   { id: 'cat_murka',         name: 'Мурка — учительница мурчания', price: 4000000, icon: '🐱', badgeBg: 'from-pink-400/50 to-fuchsia-900/60', rarity: 'gold', category: 'cat', desc: 'Ведёт факультатив по обнимашкам на перемене' },
   { id: 'cat_professor',     name: 'Кот Профессор Алгебры',        price: 6500000, icon: '🐈', badgeBg: 'from-cyan-400/50 to-blue-950/60', rarity: 'secret', category: 'cat', desc: 'Решает уравнения, когда никто не смотрит' },
+  { id: 'cat_gora_bogdan',   name: '🐱 ГОРА БОГДАНА — ЛЕГЕНДАРНЫЙ КОТИК', price: 10000000, icon: '🏔️🐱', badgeBg: 'from-cyan-300/50 to-fuchsia-500/70', rarity: 'secret', category: 'cat', desc: 'Легендарный котик Гора Богдана! Его нельзя продать, но можно апгрейднуть', noSell: true, promoOnly: true },
   { id: 'cat_keeper',        name: 'КОТ-ХРАНИТЕЛЬ ШКОЛЫ ★ СЕКРЕТНЫЙ', price: 10000000, icon: '🐱', img: 'assets/secret-cat.png', badgeBg: 'from-cyan-400/60 to-fuchsia-900/70', rarity: 'secret', category: 'cat', desc: 'Легенда школы. Появляется лишь тем, кто дошёл до секретного кейса' }
 ];
 
@@ -393,15 +396,133 @@ const DAILY_STREAK_RESET_HOURS = 48;
 
 /* ---------- Промокоды ---------- */
 const PROMO_CODES = {
-  SHKOLA2:    { money: 25000,    xp: 50,  label: 'Сезон 2 — стартовый капитал' },
-  PEREMENA:   { money: 50000,    xp: 75,  label: 'Награда за перемену' },
-  DAVIDLITE:  { money: 100000,   xp: 150, label: 'Код от автора проекта' },
-  MURKA1337:  { money: 250000,   xp: 200, label: 'Мурка советует копить на кота' },
-  KOT10M:     { money: 1000000,  xp: 400, label: 'Кот поделился заначкой 🐱' }
+  SHKOLA2:        { money: 25000,    xp: 50,  label: 'Сезон 2 — стартовый капитал' },
+  PEREMENA:       { money: 50000,    xp: 75,  label: 'Награда за перемену' },
+  DAVIDLITE:      { money: 100000,   xp: 150, label: 'Код от автора проекта' },
+  MURKA1337:      { money: 250000,   xp: 200, label: 'Мурка советует копить на кота' },
+  KOT10M:         { money: 1000000,  xp: 400, label: 'Кот поделился заначкой 🐱' },
+  'NEWUPDATE2026':{ money: 2026,     xp: 25,  label: 'Обновление 3.0.2 — приветственные монеты!' },
+  GORABOGDAN5G:   { item: 'cat_gora_bogdan', xp: 500, label: 'ЛЕГЕНДАРНЫЙ КОТИК ГОРА БОГДАНА! 🏔️🐱' }
 };
 
 /* Код для скрытой панели разработчика (5 кликов по логотипу + код) */
 const ADMIN_CODE = '1337';
+
+/* ---------- VIP-коды (для покупки на FunPay за 150 ₽) ----------
+   Схема работы:
+   1. Создаёшь лот на FunPay за 150 ₽ с автовыдачей.
+   2. Каждый покупатель получает УНИКАЛЬНЫЙ код из этого списка
+      (один код = один покупатель, копируешь пачкой в автовыдачу FunPay).
+   3. Игрок вводит код в разделе «Промокоды» — активируется вечный VIP:
+      • «Налог миллионера» полностью отключается навсегда
+      • Шансы в кейсах и апгрейдере всегда как при балансе < 100к
+      • В профиле появляется корона 👑 и статус VIP
+   4. Когда 100 кодов закончатся — выпусти обновление с новой пачкой кодов
+      (старые использованные коды уже не сработают, т.к. сохраняются в stats.usedVipCodes).
+---------------------------------------------------------------------------------- */
+const VIP_PRICE_RUB = 150;
+const VIP_CODES = [
+  'VIP-J5PA-BUPF',
+  'VIP-G3XF-8N22',
+  'VIP-M4AL-K6F4',
+  'VIP-P8JN-WC43',
+  'VIP-NZS7-RE7C',
+  'VIP-YF4Q-N3EB',
+  'VIP-ZZKQ-5LAB',
+  'VIP-4MEV-YP88',
+  'VIP-NYMM-MMMJ',
+  'VIP-2SVH-K9HS',
+  'VIP-86C3-T7AY',
+  'VIP-AC3G-WVHR',
+  'VIP-UQUQ-RMMQ',
+  'VIP-QVVM-7C6T',
+  'VIP-FYGK-6B37',
+  'VIP-Y7G6-GXEF',
+  'VIP-3BGZ-SRL5',
+  'VIP-48J7-G2Z3',
+  'VIP-3ZSN-UFA6',
+  'VIP-FSEE-RXFA',
+  'VIP-7JY3-RV7E',
+  'VIP-63SL-VK4N',
+  'VIP-5ZU2-4Y4H',
+  'VIP-EECM-CVE4',
+  'VIP-HMT2-DQFR',
+  'VIP-BZNP-DRB8',
+  'VIP-TMEK-HTCE',
+  'VIP-WHMS-PG6S',
+  'VIP-TGUB-8X6S',
+  'VIP-N84Y-LRJ8',
+  'VIP-SWFV-CB8G',
+  'VIP-592J-K4CJ',
+  'VIP-MZ32-TZ7J',
+  'VIP-7AJX-Z3JM',
+  'VIP-86L7-TJKD',
+  'VIP-2TA2-6YTE',
+  'VIP-ULNS-9V9S',
+  'VIP-F3K6-3RQP',
+  'VIP-YRD4-9S5G',
+  'VIP-5LL7-NL4U',
+  'VIP-P6S8-8H28',
+  'VIP-RR74-4RYA',
+  'VIP-SP5Z-BD98',
+  'VIP-JX93-LQJH',
+  'VIP-LHQ6-GT56',
+  'VIP-YCSL-KXNM',
+  'VIP-64KW-DMGA',
+  'VIP-RUVX-XDQD',
+  'VIP-KDTK-GV6B',
+  'VIP-KR5W-85BF',
+  'VIP-X6AT-6LS5',
+  'VIP-C7D6-YT5X',
+  'VIP-BSYP-W4WB',
+  'VIP-GF6H-A24N',
+  'VIP-X2B7-32Z3',
+  'VIP-JG7T-C6B7',
+  'VIP-ZWNY-4Z5W',
+  'VIP-UUCD-A364',
+  'VIP-6F97-29LE',
+  'VIP-64B6-V2M8',
+  'VIP-NUCB-N6TE',
+  'VIP-M8AL-72DV',
+  'VIP-PH39-4JG9',
+  'VIP-7GRR-HYL9',
+  'VIP-56R2-DV9M',
+  'VIP-BNPZ-LML9',
+  'VIP-XPRW-9JBW',
+  'VIP-HBY9-LXP8',
+  'VIP-JBNV-SJWM',
+  'VIP-ZYG7-RJMR',
+  'VIP-KWLF-5FXJ',
+  'VIP-2K9L-R78W',
+  'VIP-5E4X-2CPK',
+  'VIP-MF6V-P8KN',
+  'VIP-YNG9-DYJS',
+  'VIP-4JYV-GAFY',
+  'VIP-KZHH-4NTE',
+  'VIP-TBRE-FT2R',
+  'VIP-C83D-74BX',
+  'VIP-QXES-W26P',
+  'VIP-7M9T-G883',
+  'VIP-PQFK-NFSQ',
+  'VIP-DM8E-KNVQ',
+  'VIP-FAVA-PW3X',
+  'VIP-KY67-KKK2',
+  'VIP-MWSV-VJUN',
+  'VIP-YHMZ-SCFF',
+  'VIP-DRMT-LJUR',
+  'VIP-JCKE-3WLF',
+  'VIP-956W-GWTY',
+  'VIP-T8HN-WVUW',
+  'VIP-3DHH-9MJZ',
+  'VIP-N2DN-S9LL',
+  'VIP-XLEL-G6HQ',
+  'VIP-3CB9-73LC',
+  'VIP-YMDB-VBDM',
+  'VIP-H24S-ZFT9',
+  'VIP-L9MF-ND8U',
+  'VIP-ZHFY-3JHG',
+  'VIP-FRHN-RQWW',
+];
 
 /* ---------- Настройки по умолчанию ---------- */
 const DEFAULT_SETTINGS = {
