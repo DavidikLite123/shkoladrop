@@ -40,6 +40,7 @@ const state = {
   dropHistory: [],
   profileTab: 'profile',
   rigReady: false,
+  adminRole: null, // 'owner' | 'admin' | null — роль, с которой открыта админка
   betaArchiveOpen: false,
   // Вход по e-mail (AuthGate): сервер выдал uid/ID — забирает их регистрация
   pendingAuthUid: null,
@@ -1998,11 +1999,10 @@ function redeemPromo() {
     return;
   }
 
-  if (code === 'ADMIN' + ADMIN_CODE) {
+  // Вход в админку через промокод: ADMIN<код> (роль определяется по хешу кода)
+  if (code.startsWith('ADMIN') && resolveAdminRole(code.slice(5))) {
     input.value = '';
-    state.rigReady = true;
-    openAdminModal();
-    Toast.info('Привет, разработчик! Панель открыта 👑');
+    grantAdminRole(resolveAdminRole(code.slice(5)));
     return;
   }
 
@@ -2011,7 +2011,7 @@ function redeemPromo() {
     return;
   }
 
-  // ===== ПРОВЕРКА VIP-КОДОВ (одноразовые, за реальные 150 ₽ на FunPay) =====
+  // ===== ПРОВЕРКА VIP-КОДОВ (одноразовые, за реальные 150 ₽ — покупка через почту) =====
   if (VIP_CODES.includes(code)) {
     if (state.stats.usedVipCodes && state.stats.usedVipCodes.includes(code)) {
       Toast.error('Этот VIP-код уже был использован. Каждый код работает только один раз.');
@@ -2047,7 +2047,7 @@ function redeemPromo() {
 
   const promo = PROMO_CODES[code];
   if (!promo) {
-    Toast.error('Такого промокода нет. Ищи коды в видео David Lite или VIP-код в лоте на FunPay!');
+    Toast.error('Такого промокода нет. Ищи коды в видео David Lite или купи VIP-код, написав нам на почту!');
     return;
   }
 
@@ -2301,6 +2301,56 @@ function logoutProfile() {
   });
 }
 
+/* --------------------------------------------------------------------------
+   СМЕНА НИКА — тот же аккаунт (uid, ID, почта, прогресс), меняется только имя.
+   Новый аккаунт НЕ создаётся. Ник проверяется на сервере на уникальность.
+   -------------------------------------------------------------------------- */
+function openNickChangeModal() {
+  if (!state.user) return;
+  const input = $('nickChangeInput');
+  if (input) input.value = state.user.nick || '';
+  const err = $('nickChangeError');
+  if (err) err.classList.add('hidden');
+  const cur = $('nickChangeCurrent');
+  if (cur) cur.textContent = state.user.nick || '—';
+  Modal.open('nickChangeModal');
+  setTimeout(() => { if (input) { input.focus(); input.select(); } }, 80);
+}
+
+function closeNickChangeModal() { Modal.close('nickChangeModal'); }
+
+async function submitNickChange() {
+  if (!state.user) return;
+  const input = $('nickChangeInput');
+  const err = $('nickChangeError');
+  const showErr = (t) => { if (err) { err.textContent = t; err.classList.remove('hidden'); } audio.playLoss(); };
+  const nick = ((input && input.value) || '').trim().slice(0, 18);
+  if (nick.length < 2) return showErr('Ник — минимум 2 символа');
+  if (nick === state.user.nick) return showErr('Это и так твой текущий ник 🙂');
+  const btn = $('nickChangeBtn');
+  if (btn) btn.disabled = true;
+  try {
+    // Онлайн: сервер проверит уникальность и обновит ник у того же аккаунта
+    if (typeof ServerAPI !== 'undefined' && await ServerAPI.ping(true)) {
+      if (typeof NetIdentity !== 'undefined') NetIdentity.ensureUid();
+      const { data } = await ServerAPI.req('POST', '/api/players/nick', { uid: state.user.id, nick });
+      if (!data.ok) return showErr(data.error || 'Сервер отклонил новый ник');
+    }
+    const old = state.user.nick;
+    state.user.nick = nick;
+    persist(true);
+    closeNickChangeModal();
+    renderProfile();
+    uiUpdate();
+    if (typeof NetIdentity !== 'undefined') NetIdentity.renderEverywhere();
+    if (typeof CloudSave !== 'undefined') CloudSave.push(false);
+    audio.playWin();
+    Toast.success(`Ник изменён: <b>${escapeHtml(old)}</b> → <b>${escapeHtml(nick)}</b>. Аккаунт, ID и прогресс те же 🎒`, 6000);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 function switchProfileTab(tab) {
   state.profileTab = tab;
   ['profile', 'stats', 'ach'].forEach(t => {
@@ -2349,6 +2399,12 @@ function renderProfile() {
   if (vbEl) {
     vbEl.classList.toggle('hidden', !(state.user && state.user.verified));
     if (state.user && state.user.verified && typeof verifiedBadgeHtml === 'function') vbEl.innerHTML = verifiedBadgeHtml();
+  }
+  const rbEl = $('profileRoleBadge');
+  if (rbEl) {
+    const isStaff = !!(state.user && state.user.role === 'admin');
+    rbEl.classList.toggle('hidden', !isStaff);
+    if (isStaff && typeof staffChipHtml === 'function') rbEl.innerHTML = staffChipHtml();
   }
 
   const invValue = state.inventory.reduce((sum, i) => sum + i.price, 0);
@@ -2748,21 +2804,51 @@ function closeAdminCodeModal() {
   Modal.close('adminCodeModal');
 }
 
+/* Определяем роль по введённому коду (сравниваем хеши, коды в открытом виде не храним) */
+function resolveAdminRole(raw) {
+  const code = String(raw || '').trim().toUpperCase();
+  if (!code) return null;
+  // убираем удобные префиксы: SHKOLA1337 / ADMIN1337 / КОТ1337 → 1337
+  const bare = code.replace(/^(SHKOLA|ADMIN|КОТ|OWNER|STAFF)/, '');
+  const candidates = [code, bare];
+  for (const c of candidates) {
+    const h = betaCodeHash(c);
+    if (h === OWNER_CODE_HASH) return 'owner';
+  }
+  for (const c of candidates) {
+    const h = betaCodeHash(c);
+    if (h === ADMIN_CODE_HASH) return 'admin';
+  }
+  return null;
+}
+
+function adminHas(perm) {
+  const role = state.adminRole;
+  if (!role) return false;
+  return (ADMIN_PERMS[role] || []).includes(perm);
+}
+
+function grantAdminRole(role) {
+  state.adminRole = role;
+  state.rigReady = true;
+  // секрет для серверных запросов подбирается под роль
+  try { localStorage.setItem('shkola_admin_secret', role === 'owner' ? OWNER_SERVER_SECRET : ADMIN_SERVER_SECRET); } catch (e) {}
+  closeAdminCodeModal();
+  openAdminModal();
+  audio.playLevelUp();
+  Fx.burst(80, role === 'owner' ? ['#10b981', '#fbbf24'] : ['#38bdf8', '#a78bfa']);
+  Toast.success(role === 'owner'
+    ? 'Панель ВЛАДЕЛЬЦА открыта — доступны все функции. Тише! 🤫'
+    : 'Панель АДМИНИСТРАЦИИ открыта — доступны функции модерации 🛡');
+}
+
 function submitAdminCode() {
   const input = $('adminCodeInput');
   const error = $('adminCodeError');
-  const code = ((input && input.value) || '').trim().toUpperCase();
-
-  // принимаем 1337 и удобные варианты записи
-  const accepted = [ADMIN_CODE, 'SHKOLA' + ADMIN_CODE, 'ADMIN' + ADMIN_CODE, 'КОТ' + ADMIN_CODE];
-
-  if (accepted.includes(code)) {
-    state.rigReady = true;
-    closeAdminCodeModal();
-    openAdminModal();
-    audio.playLevelUp();
-    Fx.burst(80, ['#10b981', '#fbbf24']);
-    Toast.success('Панель разработчика открыта. Тише! 🤫');
+  const code = ((input && input.value) || '').trim();
+  const role = resolveAdminRole(code);
+  if (role) {
+    grantAdminRole(role);
   } else {
     if (error) error.classList.remove('hidden');
     audio.playLoss();
@@ -2771,18 +2857,52 @@ function submitAdminCode() {
 }
 
 function openAdminModal() {
-  if (!state.rigReady) return;
+  if (!state.rigReady || !state.adminRole) return;
+  applyAdminPermissions();
   Modal.open('adminModal');
   updateAdminUI();
   // Онлайн-разделы панели: список игроков с галочками и реестр кодов авторов
   if (typeof adminLoadPlayers === 'function') adminLoadPlayers();
-  if (typeof renderAdminAuthorList === 'function') renderAdminAuthorList();
+  if (adminHas('authorcodes') && typeof renderAdminAuthorList === 'function') renderAdminAuthorList();
+}
+
+/* Показываем только те блоки панели, на которые у роли есть права */
+function applyAdminPermissions() {
+  const role = state.adminRole;
+  document.querySelectorAll('#adminModal [data-admin-perm]').forEach(el => {
+    const perms = String(el.getAttribute('data-admin-perm')).split(/[\s,]+/).filter(Boolean);
+    const allowed = perms.some(p => adminHas(p));
+    el.classList.toggle('hidden', !allowed);
+  });
+  const title = $('adminModalTitle');
+  if (title) title.textContent = role === 'owner' ? '👑 Панель владельца' : '🛡 Панель администрации';
+  const badge = $('adminRoleBadge');
+  if (badge) {
+    badge.textContent = role === 'owner' ? 'OWNER · полный доступ' : 'ADMIN · модерация';
+    badge.className = 'text-[8px] font-black px-1.5 py-0.5 rounded border uppercase ' +
+      (role === 'owner' ? 'bg-amber-500/20 text-amber-300 border-amber-500/50' : 'bg-sky-500/20 text-sky-300 border-sky-500/50');
+  }
+  const card = document.querySelector('#adminModal .modal-card');
+  if (card) {
+    card.classList.toggle('border-emerald-700/60', role === 'owner');
+    card.classList.toggle('border-sky-700/60', role !== 'owner');
+  }
 }
 
 function closeAdminModal() { Modal.close('adminModal'); }
 
+/* Выход из админки: роль сбрасывается, панель снова закрыта */
+function adminLogout() {
+  state.adminRole = null;
+  state.rigReady = false;
+  state.rigMode = 'fair';
+  try { localStorage.removeItem('shkola_admin_secret'); } catch (e) {}
+  closeAdminModal();
+  Toast.info('Вышел из админ-панели');
+}
+
 function setRigMode(mode) {
-  if (!state.rigReady) return;
+  if (!state.rigReady || !adminHas('rig')) return;
   state.rigMode = mode;
   audio.playTick();
   updateAdminUI();
@@ -2802,13 +2922,13 @@ function updateAdminUI() {
 }
 
 function adminAddMoney(amount) {
-  if (!state.rigReady) return;
+  if (!state.rigReady || !adminHas('money')) return;
   addMoney(amount);
   Toast.gold(`Dev-начисление: +${fmt(amount)} ₽`);
 }
 
 function adminGrantCat() {
-  if (!state.rigReady) return;
+  if (!state.rigReady || !adminHas('cat')) return;
   const cat = ITEMS_BY_ID['cat_keeper'];
   const item = Object.assign({}, cat, { uid: RNG.uid('dev'), wonAt: nowTimeLabel() });
   state.inventory.unshift(item);
@@ -2824,7 +2944,7 @@ function adminGrantCat() {
 }
 
 function adminMaxLevel() {
-  if (!state.rigReady) return;
+  if (!state.rigReady || !adminHas('maxlevel')) return;
   state.stats.idle.level = IDLE_LEVELS.length;
   addXp(900000);
   Toast.gold('Максимальное дежурство и опыт выданы');
@@ -2894,7 +3014,7 @@ function bindGlobalEvents() {
   window.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
       ['settingsModal', 'profileModal', 'authorModal', 'termsModal', 'cookieModal', 'cookiePolicyModal',
-        'caseOddsModal', 'dailyModal', 'multiResultModal', 'confirmModal', 'communityModal', 'netplayModal', 'extrasModal', 'whatsNewModal'].forEach(id => {
+        'caseOddsModal', 'dailyModal', 'multiResultModal', 'confirmModal', 'communityModal', 'netplayModal', 'extrasModal', 'whatsNewModal', 'nickChangeModal', 'adminModal', 'adminCodeModal'].forEach(id => {
           if (Modal.isOpen(id)) Modal.close(id);
         });
       if (Modal.isOpen('itemModal')) closeItemModal();

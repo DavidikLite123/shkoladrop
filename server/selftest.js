@@ -27,7 +27,8 @@ fs.writeFileSync(tmpRegistry, JSON.stringify({
 
 const PORT = 38000 + Math.floor(Math.random() * 2000);
 const BASE = `http://127.0.0.1:${PORT}/api`;
-const ADMIN = { 'Content-Type': 'application/json', 'x-admin-secret': 'test-secret' };
+const ADMIN = { 'Content-Type': 'application/json', 'x-admin-secret': 'test-secret' };       // владелец (owner)
+const STAFF = { 'Content-Type': 'application/json', 'x-admin-secret': 'test-staff' };        // администрация (admin)
 const JSONH = { 'Content-Type': 'application/json' };
 
 let passed = 0, failed = 0;
@@ -42,6 +43,7 @@ function startServer() {
     env: Object.assign({}, process.env, {
       PORT: String(PORT), HOST: '127.0.0.1',
       ADMIN_SECRET: 'test-secret',
+      STAFF_SECRET: 'test-staff',
       SHKOLA_REGISTRY_FILE: tmpRegistry, // сервер читает этот путь, если задан
       SHKOLA_DATA_DIR: tmpDataDir        // изолированная база во временной папке
     }),
@@ -163,6 +165,85 @@ async function main() {
   r = await fetch(`${BASE}/admin/chat/delete`, { method: 'POST', headers: ADMIN, body: JSON.stringify({ id: 'msg-nope' }) });
   body = await r.json();
   t('удаление чужого id — 0 удалено', r.ok && body.removed === 0);
+
+  // ---- РОЛИ АДМИНКИ: owner vs admin ----
+  console.log('\n— роли админки (owner / admin), бан, назначение, удаление, смена ника —');
+  let staffList = await j(await fetch(`${BASE}/admin/players`, { headers: STAFF }));
+  t('администрация видит список игроков (role=admin)', staffList.ok && staffList.role === 'admin' && staffList.players.length >= 2);
+  t('администрация НЕ видит почты игроков', staffList.players.every(p => p.email === undefined));
+  t('в списке есть онлайн-статус и lastSeen', staffList.players.every(p => typeof p.online === 'boolean' && typeof p.lastSeen === 'number'));
+  const ownerList = await j(await fetch(`${BASE}/admin/players`, { headers: ADMIN }));
+  t('владелец видит список с role=owner', ownerList.ok && ownerList.role === 'owner');
+  r = await fetch(`${BASE}/admin/players/verify`, { method: 'POST', headers: STAFF, body: JSON.stringify({ uid: 'player-999', verified: false }) });
+  t('администрация НЕ может выдавать/снимать галочки', r.status === 403);
+  r = await fetch(`${BASE}/admin/players/ban`, { method: 'POST', headers: STAFF, body: JSON.stringify({ uid: 'player-999', banned: true }) });
+  t('администрация НЕ может банить', r.status === 403);
+  r = await fetch(`${BASE}/admin/players/role`, { method: 'POST', headers: STAFF, body: JSON.stringify({ uid: 'player-999', role: 'admin' }) });
+  t('администрация НЕ может назначать админов', r.status === 403);
+  r = await fetch(`${BASE}/admin/players/delete`, { method: 'POST', headers: STAFF, body: JSON.stringify({ uid: 'player-999' }) });
+  t('администрация НЕ может удалять аккаунты', r.status === 403);
+  r = await fetch(`${BASE}/admin/author-codes`, { method: 'POST', headers: STAFF, body: JSON.stringify({ ownerUid: 'player-5', ownerName: 'X' }) });
+  t('администрация НЕ может выдавать коды авторов', r.status === 403);
+  r = await fetch(`${BASE}/admin/chat`, { method: 'POST', headers: STAFF, body: JSON.stringify({ text: 'Модератор на связи', nick: 'Модер' }) });
+  t('администрация может писать официально в чат', r.ok);
+  chat = await j(await fetch(`${BASE}/chat`));
+  t('сообщение администрации подписано (АДМИНИСТРАЦИЯ)', chat.messages[chat.messages.length - 1].nick.includes('АДМИНИСТРАЦИЯ'));
+  r = await fetch(`${BASE}/admin/chat/delete`, { method: 'POST', headers: STAFF, body: JSON.stringify({ id: chat.messages[chat.messages.length - 1].id }) });
+  body = await r.json();
+  t('администрация может удалять сообщения', r.ok && body.removed === 1);
+
+  r = await fetch(`${BASE}/admin/players/role`, { method: 'POST', headers: ADMIN, body: JSON.stringify({ uid: 'player-999', role: 'admin' }) });
+  body = await r.json();
+  t('владелец назначил игрока админом', r.ok && body.role === 'admin');
+  body = await j(await fetch(`${BASE}/auth/sync`, { method: 'POST', headers: JSONH, body: JSON.stringify({ uid: 'player-999', nick: 'Вова228' }) }));
+  t('sync отдаёт роль admin игроку', body.role === 'admin' && body.banned === false);
+  chat = await j(await fetch(`${BASE}/chat`));
+  t('в чате у назначенного админа role=admin', chat.messages[0].role === 'admin');
+  pub = await j(await fetch(`${BASE}/players/public?q=player-999`));
+  t('публичная карточка показывает роль и онлайн', pub.ok && pub.player.role === 'admin' && pub.player.online === true);
+
+  // смена ника — тот же аккаунт
+  r = await fetch(`${BASE}/players/nick`, { method: 'POST', headers: JSONH, body: JSON.stringify({ uid: 'player-999', nick: 'НовыйВова' }) });
+  body = await r.json();
+  t('смена ника: uid и ID не изменились', r.ok && body.uid === 'player-999' && body.nick === 'НовыйВова' && body.tag === pub.player.tag);
+  chat = await j(await fetch(`${BASE}/chat`));
+  t('смена ника обновила старые сообщения в чате', chat.messages[0].nick === 'НовыйВова');
+  r = await fetch(`${BASE}/auth/sync`, { method: 'POST', headers: JSONH, body: JSON.stringify({ uid: 'player-111', nick: 'НовыйВова' }) });
+  body = await r.json();
+  t('чужой занятый ник через sync не перехватывается', body.nick !== 'НовыйВова');
+  r = await fetch(`${BASE}/players/nick`, { method: 'POST', headers: JSONH, body: JSON.stringify({ uid: 'player-111', nick: 'новыйвова' }) });
+  t('занятый ник (без учёта регистра) → 409', r.status === 409);
+  r = await fetch(`${BASE}/players/nick`, { method: 'POST', headers: JSONH, body: JSON.stringify({ uid: 'player-111', nick: 'A' }) });
+  t('слишком короткий ник → 400', r.status === 400);
+
+  // бан
+  r = await fetch(`${BASE}/admin/players/ban`, { method: 'POST', headers: ADMIN, body: JSON.stringify({ uid: 'player-999', banned: true }) });
+  body = await r.json();
+  t('владелец забанил игрока', r.ok && body.banned === true);
+  body = await j(await fetch(`${BASE}/auth/sync`, { method: 'POST', headers: JSONH, body: JSON.stringify({ uid: 'player-999' }) }));
+  t('бан снимает роль админа', body.banned === true && body.role === null);
+  r = await fetch(`${BASE}/chat`, { method: 'POST', headers: JSONH, body: JSON.stringify({ uid: 'player-999', nick: 'НовыйВова', text: 'а я пишу' }) });
+  t('забаненный не может писать в чат', r.status === 403);
+  r = await fetch(`${BASE}/players/nick`, { method: 'POST', headers: JSONH, body: JSON.stringify({ uid: 'player-999', nick: 'Хитрец' }) });
+  t('забаненный не может сменить ник', r.status === 403);
+  r = await fetch(`${BASE}/admin/players/ban`, { method: 'POST', headers: ADMIN, body: JSON.stringify({ uid: 'player-999', banned: false }) });
+  t('владелец разбанил', r.ok);
+
+  // удаление аккаунта
+  r = await fetch(`${BASE}/account/start`, { method: 'POST', headers: JSONH, body: JSON.stringify({ email: 'del@gmail.com', password: 'qwerty', uid: 'player-del', nick: 'Удаляемый' }) });
+  t('аккаунт для удаления создан', r.ok);
+  r = await fetch(`${BASE}/account/start`, { method: 'POST', headers: JSONH, body: JSON.stringify({ email: 'second@gmail.com', password: 'qwerty', uid: 'player-del', nick: 'Удаляемый' }) });
+  t('вторая почта на тот же профиль → 409 (один аккаунт = одна почта)', r.status === 409);
+  r = await fetch(`${BASE}/chat`, { method: 'POST', headers: JSONH, body: JSON.stringify({ uid: 'player-del', nick: 'Удаляемый', text: 'прощайте' }) });
+  r = await fetch(`${BASE}/admin/players/delete`, { method: 'POST', headers: ADMIN, body: JSON.stringify({ uid: 'player-del' }) });
+  body = await r.json();
+  t('владелец удалил аккаунт (почта + сообщения)', r.ok && body.removed.emails.includes('del@gmail.com') && body.removed.chatMessages === 1);
+  r = await fetch(`${BASE}/players/public?q=player-del`);
+  t('удалённый игрок больше не находится', r.status === 404);
+  const ex = await j(await fetch(`${BASE}/account/exists?email=del@gmail.com`));
+  t('удалённая почта снова свободна', ex.exists === false);
+  const ov = await j(await fetch(`${BASE}/admin/overview`, { headers: ADMIN }));
+  t('overview отдаёт онлайн и роль', ov.ok && typeof ov.online === 'number' && ov.role === 'owner');
 
   const savePayload = { version: 11, balance: 123456, inventory: [{ id: 'sch_chalk', uid: 'x1', price: 1800 }], user: { id: 'player-999', nick: 'Вова228' }, stats: { level: 5 }, lastSeen: Date.now() };
   const syncBeforeSave = await j(await fetch(`${BASE}/auth/sync`, { method: 'POST', headers: JSONH, body: JSON.stringify({ uid: 'player-999', nick: 'Вова228' }) }));

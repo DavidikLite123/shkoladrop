@@ -95,11 +95,17 @@ function onServerJustCameOnline() {
   CloudSave.startAutoPush();                    // на оффлайн-старте автопуш не стартовал
 }
 
-/* Секрет админки для серверных запросов (совпадает с ADMIN_SECRET на сервере) */
+/* Секрет админки для серверных запросов: подбирается под роль, с которой
+   открыта панель (owner → ADMIN_SECRET, admin → STAFF_SECRET на сервере) */
 function adminSecret() {
-  try { return localStorage.getItem('shkola_admin_secret') || 'david-admin-1337'; }
-  catch (e) { return 'david-admin-1337'; }
+  const role = (typeof state !== 'undefined' && state.adminRole) || null;
+  const fallback = role === 'admin'
+    ? (typeof ADMIN_SERVER_SECRET !== 'undefined' ? ADMIN_SERVER_SECRET : 'david-staff-7331')
+    : (typeof OWNER_SERVER_SECRET !== 'undefined' ? OWNER_SERVER_SECRET : 'david-admin-1337');
+  try { return localStorage.getItem('shkola_admin_secret') || fallback; }
+  catch (e) { return fallback; }
 }
+function adminHeaders() { return { 'x-admin-secret': adminSecret() }; }
 
 /* Галочка верификации — единый вид по всей игре (чат, профиль, списки) */
 function verifiedBadgeHtml(title) {
@@ -109,6 +115,23 @@ function verifiedBadgeHtml(title) {
 
 function adminChipHtml() {
   return `<span title="Официальное сообщение администрации" class="inline-flex items-center px-1 py-px rounded bg-amber-500/20 border border-amber-500/50 text-amber-300 font-black align-middle" style="font-size:8px">🛠 АДМИН</span>`;
+}
+
+/* Значок назначенного администратора (выдаёт владелец в панели) */
+function staffChipHtml() {
+  return `<span title="Администратор проекта — назначен владельцем" class="inline-flex items-center px-1 py-px rounded bg-sky-500/20 border border-sky-500/50 text-sky-300 font-black align-middle" style="font-size:8px">🛡 АДМИН</span>`;
+}
+
+/* Человекочитаемый «последний раз заходил» */
+function lastSeenText(ts, online) {
+  if (online) return 'онлайн сейчас';
+  if (!ts) return 'не заходил';
+  const min = Math.max(0, Math.round((Date.now() - ts) / 60000));
+  if (min < 1) return 'только что';
+  if (min < 60) return `${min} мин назад`;
+  if (min < 60 * 24) return `${Math.round(min / 60)} ч назад`;
+  const d = new Date(ts);
+  return `${Math.round(min / 60 / 24)} дн назад (${d.toLocaleDateString('ru-RU')} ${d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })})`;
 }
 
 /* --------------------------------------------------------------------------
@@ -185,6 +208,15 @@ const NetIdentity = {
         const hadVerified = !!state.user.verified;
         if (res.tag) state.user.tag = res.tag;
         state.user.verified = !!res.verified;
+        const hadRole = state.user.role || null;
+        state.user.role = res.role || null;
+        state.user.banned = !!res.banned;
+        if (res.email && !state.user.email) state.user.email = res.email;
+        if (res.nick && res.nick !== state.user.nick) state.user.nick = res.nick; // ник — как на сервере (уникальность)
+        if (state.user.role === 'admin' && hadRole !== 'admin') {
+          Toast.gold('🛡 Владелец назначил тебя АДМИНИСТРАТОРОМ проекта! Значок виден в чате и профиле.', 8000);
+        }
+        if (state.user.banned) Toast.error('⛔ Твой аккаунт заблокирован администрацией: чат и смена ника недоступны.', 8000);
         if (!hadTag && state.user.tag) {
           // Первая выдача ID после входа в обновлённую версию
           Toast.gold(`🆔 Твоему аккаунту присвоен уникальный ID: <b class="font-mono">${escapeHtml(state.user.tag)}</b>. По нему тебя найдут друзья в «💬 Сообществе»!`, 9000);
@@ -488,8 +520,8 @@ const Community = {
     if (box) box.innerHTML = `
       <div class="net-row">
         <div class="min-w-0">
-          <div class="text-[10.5px] font-bold text-slate-200 truncate flex items-center gap-1">${escapeHtml(p.nick)}${p.verified ? verifiedBadgeHtml() : ''}</div>
-          <div class="text-[10px] text-slate-400 truncate">ID <span class="font-mono text-amber-300">${escapeHtml(p.tag || '—')}</span>${seenText ? ' · ' + seenText : ''}</div>
+          <div class="text-[10.5px] font-bold text-slate-200 truncate flex items-center gap-1">${escapeHtml(p.nick)}${p.verified ? verifiedBadgeHtml() : ''}${p.role === 'admin' ? staffChipHtml() : ''}</div>
+          <div class="text-[10px] text-slate-400 truncate">ID <span class="font-mono text-amber-300">${escapeHtml(p.tag || '—')}</span>${p.online ? ' · <span class="text-emerald-400">● онлайн</span>' : (seenText ? ' · ' + seenText : '')}</div>
         </div>
         <button onclick="Community.giftToFound()" class="net-btn">🎁 Подарить</button>
       </div>`;
@@ -539,7 +571,7 @@ const Community = {
       list.innerHTML = '<div class="net-empty">Пока тихо. Напиши первым — школа ждёт! 🏫</div>';
       return;
     }
-    const canModerate = !!state.rigReady; // админ видит крестики удаления
+    const canModerate = !!state.rigReady && (typeof adminHas !== 'function' || adminHas('chat')); // админ/владелец видит крестики удаления
     list.innerHTML = msgs.map(m => {
       const time = new Date(m.at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
       const isAdmin = m.kind === 'admin';
@@ -551,7 +583,7 @@ const Community = {
           : 'bg-slate-900/70 border-slate-800/70';
       const head = isAdmin
         ? `<span class="font-bold text-amber-300">${escapeHtml(m.nick)}</span> ${adminChipHtml()}`
-        : `<span class="font-bold ${isMe ? 'text-cyan-300' : 'text-slate-200'}">${escapeHtml(m.nick)}</span>${m.verified ? ' ' + verifiedBadgeHtml() : ''}${m.tag ? ` <span class="font-mono text-[8.5px] text-slate-500">${escapeHtml(m.tag)}</span>` : ''}`;
+        : `<span class="font-bold ${isMe ? 'text-cyan-300' : 'text-slate-200'}">${escapeHtml(m.nick)}</span>${m.verified ? ' ' + verifiedBadgeHtml() : ''}${m.role === 'admin' ? ' ' + staffChipHtml() : ''}${m.tag ? ` <span class="font-mono text-[8.5px] text-slate-500">${escapeHtml(m.tag)}</span>` : ''}`;
       const del = canModerate && m.id
         ? `<button onclick="Community.adminDeleteMessage('${m.id}')" title="Удалить сообщение (админ)" class="text-slate-500 hover:text-rose-400 transition text-[10px] leading-none flex-shrink-0">✕</button>`
         : '';
@@ -573,7 +605,7 @@ const Community = {
     if (!state.user) { Toast.error('Создай профиль, чтобы писать в чат'); return; }
     if (!(await this._needOnline())) return;
     const { data } = await ServerAPI.req('POST', '/api/chat', { uid: state.user.id, nick: state.user.nick, text });
-    if (!data.ok) { Toast.error(data.error || 'Сообщение не отправлено'); return; }
+    if (!data.ok) { if (data.banned) state.user.banned = true; Toast.error(data.error || 'Сообщение не отправлено'); return; }
     if (input) input.value = '';
     audio.playCoin();
     this._lastSignature = ''; // принудительно перерисуем
@@ -583,7 +615,7 @@ const Community = {
   /* Модерация: админ удаляет сообщение (кнопка ✕ видна только при rigReady) */
   async adminDeleteMessage(id) {
     if (!state.rigReady) return;
-    const { data } = await ServerAPI.req('POST', '/api/admin/chat/delete', { id }, { 'x-admin-secret': adminSecret() });
+    const { data } = await ServerAPI.req('POST', '/api/admin/chat/delete', { id }, adminHeaders());
     if (!data.ok) { Toast.error(data.error || 'Не удалось удалить'); return; }
     Toast.info('Сообщение удалено из чата');
     this._lastSignature = '';
@@ -1386,7 +1418,19 @@ function adminSaveServerUrl() {
   });
 }
 
-/* Список зарегистрированных игроков + выдача галочек */
+/* Список зарегистрированных игроков: онлайн, последний вход, действия по роли */
+let _adminPlayersCache = [];
+let _adminPlayersFilter = 'all'; // all | online | admins | banned
+
+function adminSetPlayersFilter(f) {
+  _adminPlayersFilter = f;
+  ['all', 'online', 'admins', 'banned'].forEach(k => {
+    const btn = $('adminFilter' + k.charAt(0).toUpperCase() + k.slice(1));
+    if (btn) btn.classList.toggle('bg-slate-600', k === f);
+  });
+  adminRenderPlayers();
+}
+
 async function adminLoadPlayers(manual = false) {
   const box = $('adminPlayersList');
   if (!box) return;
@@ -1395,36 +1439,101 @@ async function adminLoadPlayers(manual = false) {
     box.innerHTML = '<div class="net-empty">Сервер оффлайн — список игроков недоступен.</div>';
     return;
   }
-  const { data } = await ServerAPI.req('GET', '/api/admin/players', null, { 'x-admin-secret': adminSecret() });
+  const { data } = await ServerAPI.req('GET', '/api/admin/players', null, adminHeaders());
   if (!data.ok) {
     box.innerHTML = `<div class="net-empty">${escapeHtml(data.error || 'Не удалось загрузить игроков')}</div>`;
     return;
   }
-  const players = data.players || [];
-  if (ServerAPI._playersCount !== players.length) {
-    ServerAPI._playersCount = players.length;
+  _adminPlayersCache = data.players || [];
+  if (ServerAPI._playersCount !== _adminPlayersCache.length) {
+    ServerAPI._playersCount = _adminPlayersCache.length;
     Community.renderMyId();
   }
+  const onlineEl = $('adminOnlineCount');
+  if (onlineEl) onlineEl.textContent = `${data.online || 0} онлайн · ${_adminPlayersCache.length} всего`;
+  adminRenderPlayers();
+}
+
+function adminRenderPlayers() {
+  const box = $('adminPlayersList');
+  if (!box) return;
+  const q = (($('adminPlayersSearch') || {}).value || '').trim().toLowerCase();
+  const has = (perm) => typeof adminHas === 'function' && adminHas(perm);
+  let players = _adminPlayersCache;
+  if (_adminPlayersFilter === 'online') players = players.filter(p => p.online);
+  if (_adminPlayersFilter === 'admins') players = players.filter(p => p.role === 'admin');
+  if (_adminPlayersFilter === 'banned') players = players.filter(p => p.banned);
+  if (q) players = players.filter(p => [p.nick, p.tag, p.uid, p.email].some(v => v && String(v).toLowerCase().includes(q)));
+
   box.innerHTML = players.map(p => {
-    const agoMin = p.lastSeen ? Math.max(0, Math.round((Date.now() - p.lastSeen) / 60000)) : null;
-    const ago = agoMin == null ? '' : (agoMin < 1 ? 'онлайн сейчас' : agoMin < 60 ? `${agoMin} мин назад` : agoMin < 60 * 24 ? `${Math.round(agoMin / 60)} ч назад` : `${Math.round(agoMin / 60 / 24)} дн назад`);
-    const btn = p.verified
-      ? `<button onclick="adminToggleVerify('${p.uid}', false)" class="net-btn" style="background:linear-gradient(135deg,#f59e0b,#d97706)" title="Снять галочку">✔ убрать</button>`
-      : `<button onclick="adminToggleVerify('${p.uid}', true)" class="net-btn" title="Выдать галочку верификации">✔ выдать</button>`;
-    return `<div class="net-row">
+    const btns = [];
+    if (has('verify')) btns.push(p.verified
+      ? `<button onclick="adminToggleVerify('${p.uid}', false)" class="adm-act" style="background:linear-gradient(135deg,#f59e0b,#d97706)" title="Снять галочку">✔ снять</button>`
+      : `<button onclick="adminToggleVerify('${p.uid}', true)" class="adm-act" title="Выдать галочку верификации">✔ галочка</button>`);
+    if (has('role')) btns.push(p.role === 'admin'
+      ? `<button onclick="adminSetRole('${p.uid}', null)" class="adm-act" style="background:linear-gradient(135deg,#0ea5e9,#0369a1)" title="Снять права администратора">🛡 снять</button>`
+      : `<button onclick="adminSetRole('${p.uid}', 'admin')" class="adm-act" style="background:linear-gradient(135deg,#38bdf8,#6366f1)" title="Назначить администратором (значок 🛡 АДМИН)">🛡 админ</button>`);
+    if (has('ban')) btns.push(p.banned
+      ? `<button onclick="adminToggleBan('${p.uid}', false)" class="adm-act" style="background:linear-gradient(135deg,#22c55e,#15803d)" title="Разбанить">✅ разбан</button>`
+      : `<button onclick="adminToggleBan('${p.uid}', true)" class="adm-act" style="background:linear-gradient(135deg,#f43f5e,#be123c)" title="Забанить (чат и смена ника закрыты)">⛔ бан</button>`);
+    if (has('delete')) btns.push(`<button onclick="adminDeleteAccount('${p.uid}', '${escapeHtml(p.nick).replace(/'/g, '')}')" class="adm-act" style="background:linear-gradient(135deg,#7f1d1d,#450a0a)" title="Удалить аккаунт навсегда">🗑 удалить</button>`);
+
+    const status = p.online
+      ? '<span class="text-emerald-400 font-bold">● онлайн</span>'
+      : `<span class="text-slate-500">○ ${escapeHtml(lastSeenText(p.lastSeen, false))}</span>`;
+    const chips = `${p.verified ? verifiedBadgeHtml() : ''}${p.role === 'admin' ? staffChipHtml() : ''}${p.banned ? '<span class="text-[8px] font-black px-1 rounded bg-rose-500/20 border border-rose-500/50 text-rose-300">⛔ БАН</span>' : ''}`;
+    const email = has('emails') && p.email ? `<div class="text-[8.5px] text-slate-500 truncate">✉ ${escapeHtml(p.email)}</div>` : '';
+    const first = p.firstSeen ? `рег. ${new Date(p.firstSeen).toLocaleDateString('ru-RU')}` : '';
+    return `<div class="bg-slate-900/70 border border-slate-800 rounded-lg px-2 py-1.5 space-y-1">
       <div class="min-w-0">
-        <div class="text-[10.5px] font-bold text-slate-200 truncate flex items-center gap-1">${escapeHtml(p.nick)}${p.verified ? verifiedBadgeHtml() : ''}</div>
-        <div class="text-[9px] text-slate-500 truncate">ID <span class="font-mono text-amber-300">${escapeHtml(p.tag || '—')}</span> · <span class="font-mono">${escapeHtml(p.uid)}</span>${ago ? ' · ' + ago : ''}</div>
-      </div>${btn}
+        <div class="text-[10.5px] font-bold text-slate-200 truncate flex items-center gap-1 flex-wrap">${escapeHtml(p.nick)} ${chips}</div>
+        <div class="text-[9px] text-slate-500 truncate">ID <span class="font-mono text-amber-300">${escapeHtml(p.tag || '—')}</span> · <span class="font-mono">${escapeHtml(p.uid)}</span></div>
+        ${email}
+        <div class="text-[9px] truncate">${status}${first ? ` <span class="text-slate-600">· ${first}</span>` : ''}</div>
+      </div>
+      ${btns.length ? `<div class="flex flex-wrap gap-1">${btns.join('')}</div>` : ''}
     </div>`;
-  }).join('') || '<div class="net-empty">Пока никто не заходил с онлайн-сервером.</div>';
+  }).join('') || '<div class="net-empty">Никого не найдено.</div>';
 }
 
 async function adminToggleVerify(uid, grant) {
-  const { data } = await ServerAPI.req('POST', '/api/admin/players/verify', { uid, verified: grant }, { 'x-admin-secret': adminSecret() });
+  const { data } = await ServerAPI.req('POST', '/api/admin/players/verify', { uid, verified: grant }, adminHeaders());
   if (!data.ok) { Toast.error(data.error || 'Сервер отклонил запрос'); return; }
   audio.playSecret();
   Toast.gold(grant ? '✔ Галочка верификации выдана! Игрок увидит её в профиле и чате.' : 'Галочка снята с аккаунта.');
+  adminLoadPlayers();
+}
+
+async function adminSetRole(uid, role) {
+  const { data } = await ServerAPI.req('POST', '/api/admin/players/role', { uid, role }, adminHeaders());
+  if (!data.ok) { Toast.error(data.error || 'Сервер отклонил запрос'); return; }
+  audio.playSecret();
+  Toast.gold(role === 'admin' ? '🛡 Игрок назначен администратором — у него появился значок АДМИН. Код панели администрации передай ему лично.' : 'Права администратора сняты.');
+  adminLoadPlayers();
+}
+
+async function adminToggleBan(uid, ban) {
+  if (ban) {
+    const ok = await ConfirmDialog.ask({ icon: '⛔', title: 'Забанить игрока?', text: 'Он не сможет писать в чат и менять ник. Прогресс не удаляется — бан можно снять.', okText: 'Забанить', danger: true });
+    if (!ok) return;
+  }
+  const { data } = await ServerAPI.req('POST', '/api/admin/players/ban', { uid, banned: ban }, adminHeaders());
+  if (!data.ok) { Toast.error(data.error || 'Сервер отклонил запрос'); return; }
+  Toast[ban ? 'error' : 'gold'](ban ? '⛔ Игрок забанен.' : '✅ Бан снят.');
+  adminLoadPlayers();
+}
+
+async function adminDeleteAccount(uid, nick) {
+  const ok = await ConfirmDialog.ask({
+    icon: '🗑', title: `Удалить аккаунт «${nick}»?`,
+    text: 'Удалятся <b class="text-rose-300">навсегда</b>: игрок, его уникальный ID, привязанная почта, облачный сейв и сообщения в чате. Отменить нельзя.',
+    okText: 'Удалить навсегда', danger: true
+  });
+  if (!ok) return;
+  const { data } = await ServerAPI.req('POST', '/api/admin/players/delete', { uid }, adminHeaders());
+  if (!data.ok) { Toast.error(data.error || 'Сервер отклонил запрос'); return; }
+  const r = data.removed || {};
+  Toast.info(`🗑 Аккаунт удалён${r.emails && r.emails.length ? ` (почта: ${escapeHtml(r.emails.join(', '))})` : ''}${r.chatMessages ? `, сообщений в чате стёрто: ${r.chatMessages}` : ''}.`, 7000);
   adminLoadPlayers();
 }
 
@@ -1434,7 +1543,7 @@ async function adminSendChat() {
   const text = ((input && input.value) || '').trim();
   if (!text) { Toast.error('Напиши текст сообщения'); return; }
   if (!(await ServerAPI.ping())) { Toast.error('Сервер оффлайн — чат недоступен'); return; }
-  const { data } = await ServerAPI.req('POST', '/api/admin/chat', { text }, { 'x-admin-secret': adminSecret() });
+  const { data } = await ServerAPI.req('POST', '/api/admin/chat', { text, nick: state.user ? state.user.nick : '' }, adminHeaders());
   if (!data.ok) { Toast.error(data.error || 'Не отправлено'); return; }
   if (input) input.value = '';
   audio.playSecret();
@@ -1448,7 +1557,7 @@ async function adminIssueAuthorCode() {
   if (!ownerUid || !ownerName) { Toast.error('Заполни id аккаунта и ник владельца кода'); return; }
 
   if (await ServerAPI.ping(true)) {
-    const { status, data } = await ServerAPI.req('POST', '/api/admin/author-codes', { ownerUid, ownerName, code }, { 'x-admin-secret': adminSecret() });
+    const { status, data } = await ServerAPI.req('POST', '/api/admin/author-codes', { ownerUid, ownerName, code }, adminHeaders());
     if (!data.ok) { Toast.error(data.error || 'Сервер отклонил выдачу кода'); return; }
     Toast.gold(`✅ Код автора <b class="font-mono">${escapeHtml(data.entry.code)}</b> выдан для ${escapeHtml(data.entry.ownerName)} и записан в author-codes.json на сервере!`, 8000);
   } else {

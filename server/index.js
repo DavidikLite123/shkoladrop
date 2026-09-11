@@ -19,7 +19,8 @@
      чистит сохранения/подарки/трейды, аккаунты и ID остаются.
 
    Запуск:  node server/index.js        (порт 3377, сменить: PORT=xxxx)
-   Секрет админки:  ADMIN_SECRET=мой-секрет node server/index.js
+   Секреты админки: ADMIN_SECRET=секрет-владельца STAFF_SECRET=секрет-админов node server/index.js
+   Роли: owner (владелец) — всё; admin (администрация) — модерация чата и просмотр игроков.
    ========================================================================== */
 'use strict';
 
@@ -31,12 +32,14 @@ const crypto = require('crypto');
 /* --------------------------------- КОНФИГ -------------------------------- */
 const PORT = Number(process.env.PORT) || 3377;
 const HOST = process.env.HOST || '0.0.0.0';
-const ADMIN_SECRET = process.env.ADMIN_SECRET || 'david-admin-1337'; // ПОМЕНЯЙ через env!
+const ADMIN_SECRET = process.env.ADMIN_SECRET || 'david-admin-1337'; // секрет ВЛАДЕЛЬЦА (owner) — ПОМЕНЯЙ через env!
+const STAFF_SECRET = process.env.STAFF_SECRET || 'david-staff-7331'; // секрет АДМИНИСТРАЦИИ (admin) — урезанные права
+const ONLINE_WINDOW = 2 * 60 * 1000; // игрок считается «онлайн», если был активен последние 2 минуты
 const REPO_ROOT = path.resolve(__dirname, '..');
 const REGISTRY_FILE = process.env.SHKOLA_REGISTRY_FILE || path.join(REPO_ROOT, 'author-codes.json'); // список кодов авторов (в GitHub)
 const DATA_DIR = process.env.SHKOLA_DATA_DIR || path.join(__dirname, 'data');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
-const SERVER_VERSION = '1.2.0'; // +сезон 3.7: e-mail-аккаунты с кодом, одноразовый вайп экономики
+const SERVER_VERSION = '1.3.0'; // +роли админки (owner/admin), бан, удаление аккаунтов, смена ника, онлайн
 const MAX_BODY = 512 * 1024; // 512 КБ на запрос
 const MAX_ITEM_PRICE = 100000000000; // защита от абсурдных предметов (100 млрд)
 const AUTH_CODE_TTL = 10 * 60 * 1000;  // код из «письма» живёт 10 минут
@@ -46,7 +49,7 @@ const AUTH_CODE_TRIES = 6;             // попыток на один код
 /* Всё хранится в одном JSON-файле server/data/db.json.
    Структура — простая и чинится руками при необходимости. */
 const dbEmpty = () => ({
-  players: {},      // uid -> { uid, nick, tag, verified, firstSeen, lastSeen }
+  players: {},      // uid -> { uid, nick, tag, verified, role, banned, firstSeen, lastSeen }
   accounts: {},     // email -> { email, salt, passHash, uid, code, codeExp, codeTries, createdAt, verifiedAt }
   supporters: {},   // uid игрока -> код автора, который он ввёл
   earnings: {},     // код автора -> { earned, withdrawn }
@@ -184,8 +187,29 @@ function readBody(req) {
   });
 }
 
-function isAdmin(req) {
-  return req.headers['x-admin-secret'] === ADMIN_SECRET;
+/* ---------- РОЛИ АДМИНКИ ----------
+   owner — владелец проекта (секрет ADMIN_SECRET): всё.
+   admin — администрация (секрет STAFF_SECRET): модерация чата, список игроков,
+           онлайн. НЕЛЬЗЯ: банить, удалять аккаунты, выдавать галочки, назначать
+           админов, выдавать коды авторов. */
+function adminRole(req) {
+  const s = req.headers['x-admin-secret'];
+  if (!s) return null;
+  if (s === ADMIN_SECRET) return 'owner';
+  if (s === STAFF_SECRET) return 'admin';
+  return null;
+}
+function isAdmin(req) { return adminRole(req) !== null; }
+function isOwner(req) { return adminRole(req) === 'owner'; }
+function isOnline(p) { return !!(p && p.lastSeen && Date.now() - p.lastSeen < ONLINE_WINDOW); }
+function accountEmailOf(uidValue) {
+  const acc = Object.values(db.accounts || {}).find(a => a.uid === uidValue);
+  return acc ? acc.email : null;
+}
+function nickTakenBy(nick, exceptUid) {
+  const n = cleanStr(nick, 24).toLowerCase();
+  if (!n) return null;
+  return Object.values(db.players).find(p => p.uid !== exceptUid && String(p.nick || '').toLowerCase() === n) || null;
 }
 
 function cleanStr(v, max = 40) {
@@ -228,7 +252,10 @@ function upsertPlayer(uidValue, nick) {
   const isNew = !p;
   if (!p) p = { uid: uidValue, nick: '', verified: false, firstSeen: Date.now() };
   if (typeof p.verified !== 'boolean') p.verified = false; // старые записи
-  if (nick) p.nick = nick;
+  if (typeof p.banned !== 'boolean') p.banned = false;
+  if (!('role' in p)) p.role = null;
+  // Ник обновляем, только если он не занят другим игроком (уникальность ников)
+  if (nick && !nickTakenBy(nick, uidValue)) p.nick = nick;
   if (!p.tag) p.tag = genPlayerTag(); // автовыдача уникального ID при входе в обновлённую версию
   p.lastSeen = Date.now();
   db.players[uidValue] = p;
@@ -285,7 +312,32 @@ const routes = {
     if (!pUid) return send(res, 400, { ok: false, error: 'нет uid' });
     const p = upsertPlayer(pUid, nick);
     dbSave();
-    send(res, 200, { ok: true, nick, tag: p ? p.tag : null, verified: !!(p && p.verified) });
+    send(res, 200, {
+      ok: true, nick: p ? p.nick : nick, tag: p ? p.tag : null,
+      verified: !!(p && p.verified), role: (p && p.role) || null, banned: !!(p && p.banned),
+      email: accountEmailOf(pUid)
+    });
+  },
+
+  /* Смена ника БЕЗ создания нового аккаунта: uid, ID, почта и прогресс остаются.
+     Ник должен быть уникальным среди всех игроков сервера. */
+  'POST /api/players/nick': async (req, res, body) => {
+    const pUid = cleanStr(body.uid, 80);
+    const nick = cleanStr(body.nick, 18);
+    if (!pUid) return send(res, 400, { ok: false, error: 'нет uid' });
+    if (nick.length < 2) return send(res, 400, { ok: false, error: 'Ник — минимум 2 символа' });
+    const p = db.players[pUid];
+    if (!p) return send(res, 404, { ok: false, error: 'аккаунт не найден на сервере' });
+    if (p.banned) return send(res, 403, { ok: false, error: 'аккаунт заблокирован' });
+    const taken = nickTakenBy(nick, pUid);
+    if (taken) return send(res, 409, { ok: false, error: `Ник «${nick}» уже занят другим игроком — придумай другой` });
+    const old = p.nick;
+    p.nick = nick;
+    p.lastSeen = Date.now();
+    // обновляем ник в старых сообщениях чата, чтобы не было «двух людей»
+    db.chat.forEach(m => { if (m.uid === pUid) m.nick = nick; });
+    dbSave();
+    send(res, 200, { ok: true, uid: pUid, nick, oldNick: old, tag: p.tag });
   },
 
   /* -------------------- АККАУНТЫ: E-MAIL + ПАРОЛЬ + КОД --------------------
@@ -310,6 +362,15 @@ const routes = {
         return send(res, 403, { ok: false, mode: 'login', error: 'Неверный пароль. Если это твоя почта — проверь пароль и попробуй ещё раз.' });
       }
     } else {
+      // ОДИН ЧЕЛОВЕК = ОДИН АККАУНТ НА ОДНУ ПОЧТУ: если к этому профилю уже
+      // привязана другая почта — второй аккаунт не создаём, ник меняется отдельно.
+      const boundEmail = uidIn ? accountEmailOf(uidIn) : null;
+      if (boundEmail) {
+        return send(res, 409, { ok: false, mode: 'register', error: `К этому профилю уже привязана почта ${boundEmail}. Один аккаунт = одна почта. Сменить ник можно в профиле кнопкой «Сменить ник».` });
+      }
+      if (nickIn && nickTakenBy(nickIn, uidIn)) {
+        return send(res, 409, { ok: false, mode: 'register', error: `Ник «${nickIn}» уже занят — выбери другой` });
+      }
       // Регистрация: привязываем почту к текущему игровому uid (или создаём игрока)
       const p = upsertPlayer(uidIn || uid('user'), nickIn);
       const salt = crypto.randomBytes(8).toString('hex');
@@ -388,7 +449,7 @@ const routes = {
       ok: true,
       player: {
         uid: p.uid, nick: p.nick || 'Игрок', tag: p.tag,
-        verified: !!p.verified, lastSeen: p.lastSeen
+        verified: !!p.verified, role: p.role || null, online: isOnline(p), lastSeen: p.lastSeen
       }
     });
   },
@@ -403,6 +464,7 @@ const routes = {
       const p = m.uid && db.players[m.uid];
       return Object.assign({}, m, {
         verified: m.kind === 'admin' ? true : !!(p && p.verified),
+        role: (p && p.role) || null,
         tag: (p && p.tag) || m.tag || null
       });
     });
@@ -415,6 +477,7 @@ const routes = {
     const text = cleanStr(body.text, CHAT_TEXT_MAX);
     if (!pUid) return send(res, 400, { ok: false, error: 'нет uid — создай профиль' });
     if (!text) return send(res, 400, { ok: false, error: 'пустое сообщение' });
+    if (db.players[pUid] && db.players[pUid].banned) return send(res, 403, { ok: false, banned: true, error: 'Аккаунт заблокирован администрацией — писать в чат нельзя' });
     const p = upsertPlayer(pUid, cleanStr(body.nick, 24));
     db.chat.push({
       id: uid('msg'), uid: pUid, kind: 'player',
@@ -429,10 +492,13 @@ const routes = {
 
   /* ---- АДМИН: официальное сообщение в чат от имени проекта ---- */
   'POST /api/admin/chat': async (req, res, body) => {
-    if (!isAdmin(req)) return send(res, 403, { ok: false, error: 'нет доступа' });
+    const role = adminRole(req);
+    if (!role) return send(res, 403, { ok: false, error: 'нет доступа' });
     const text = cleanStr(body.text, CHAT_TEXT_MAX);
     if (!text) return send(res, 400, { ok: false, error: 'пустое сообщение' });
-    db.chat.push({ id: uid('msg'), uid: null, kind: 'admin', nick: 'David Lite (АДМИН)', tag: null, text, at: Date.now() });
+    const staffNick = cleanStr(body.nick, 24);
+    const nick = role === 'owner' ? 'David Lite (АДМИН)' : (staffNick ? `${staffNick} (АДМИНИСТРАЦИЯ)` : 'Администрация');
+    db.chat.push({ id: uid('msg'), uid: null, kind: 'admin', adminRole: role, nick, tag: null, text, at: Date.now() });
     if (db.chat.length > CHAT_MAX) db.chat = db.chat.slice(-CHAT_MAX);
     dbSave();
     send(res, 200, { ok: true });
@@ -450,19 +516,72 @@ const routes = {
 
   /* ---- АДМИН: список зарегистрированных игроков (с ID и галочками) ---- */
   'GET /api/admin/players': (req, res) => {
-    if (!isAdmin(req)) return send(res, 403, { ok: false, error: 'нет доступа' });
+    const role = adminRole(req);
+    if (!role) return send(res, 403, { ok: false, error: 'нет доступа' });
     const players = Object.values(db.players)
       .sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0))
       .map(p => ({
         uid: p.uid, nick: p.nick || 'Игрок', tag: p.tag || null,
-        verified: !!p.verified, firstSeen: p.firstSeen || 0, lastSeen: p.lastSeen || 0
+        verified: !!p.verified, role: p.role || null, banned: !!p.banned,
+        online: isOnline(p),
+        firstSeen: p.firstSeen || 0, lastSeen: p.lastSeen || 0,
+        // почту видит только владелец
+        email: role === 'owner' ? accountEmailOf(p.uid) : undefined
       }));
-    send(res, 200, { ok: true, players });
+    send(res, 200, { ok: true, role, players, online: players.filter(p => p.online).length });
   },
 
-  /* ---- АДМИН: выдать / снять галочку верификации ---- */
+  /* ---- ВЛАДЕЛЕЦ: бан / разбан (забаненный не может писать в чат и менять ник) ---- */
+  'POST /api/admin/players/ban': async (req, res, body) => {
+    if (!isOwner(req)) return send(res, 403, { ok: false, error: 'только владелец может банить' });
+    const pUid = cleanStr(body.uid, 80);
+    const p = db.players[pUid];
+    if (!p) return send(res, 404, { ok: false, error: 'игрок не найден' });
+    p.banned = !!body.banned;
+    if (p.banned) p.role = null; // забаненный не может быть админом
+    dbSave();
+    send(res, 200, { ok: true, uid: pUid, banned: p.banned });
+  },
+
+  /* ---- ВЛАДЕЛЕЦ: назначить / снять администратора (значок 🛡 АДМИН у игрока) ---- */
+  'POST /api/admin/players/role': async (req, res, body) => {
+    if (!isOwner(req)) return send(res, 403, { ok: false, error: 'только владелец назначает админов' });
+    const pUid = cleanStr(body.uid, 80);
+    const p = db.players[pUid];
+    if (!p) return send(res, 404, { ok: false, error: 'игрок не найден' });
+    const role = body.role === 'admin' ? 'admin' : null;
+    if (role && p.banned) return send(res, 400, { ok: false, error: 'сначала сними бан' });
+    p.role = role;
+    dbSave();
+    send(res, 200, { ok: true, uid: pUid, role: p.role });
+  },
+
+  /* ---- ВЛАДЕЛЕЦ: удалить аккаунт целиком (игрок, почта, облачный сейв, сообщения) ---- */
+  'POST /api/admin/players/delete': async (req, res, body) => {
+    if (!isOwner(req)) return send(res, 403, { ok: false, error: 'только владелец удаляет аккаунты' });
+    const pUid = cleanStr(body.uid, 80);
+    const p = db.players[pUid];
+    if (!p) return send(res, 404, { ok: false, error: 'игрок не найден' });
+    const removed = { nick: p.nick, tag: p.tag, emails: [] };
+    delete db.players[pUid];
+    for (const [email, acc] of Object.entries(db.accounts || {})) {
+      if (acc.uid === pUid) { removed.emails.push(email); delete db.accounts[email]; }
+    }
+    delete db.saves[pUid];
+    delete db.supporters[pUid];
+    const chatBefore = db.chat.length;
+    db.chat = db.chat.filter(m => m.uid !== pUid);
+    removed.chatMessages = chatBefore - db.chat.length;
+    db.gifts = db.gifts.filter(g => g.toUid !== pUid && g.fromUid !== pUid);
+    db.trades = db.trades.filter(t => t.fromUid !== pUid && !(t.joined && t.joined.uid === pUid));
+    db.deliveries = db.deliveries.filter(d => d.toUid !== pUid);
+    dbSave();
+    send(res, 200, { ok: true, uid: pUid, removed });
+  },
+
+  /* ---- ВЛАДЕЛЕЦ: выдать / снять галочку верификации ---- */
   'POST /api/admin/players/verify': async (req, res, body) => {
-    if (!isAdmin(req)) return send(res, 403, { ok: false, error: 'нет доступа' });
+    if (!isOwner(req)) return send(res, 403, { ok: false, error: 'только владелец выдаёт галочки' });
     const pUid = cleanStr(body.uid, 80);
     const p = db.players[pUid];
     if (!p) return send(res, 404, { ok: false, error: 'игрок не найден' });
@@ -489,7 +608,8 @@ const routes = {
     // (помогает, если стартовый /api/auth/sync не прошёл — сервер спал и т.п.)
     send(res, 200, {
       ok: true, updatedAt: db.saves[pUid].updatedAt,
-      tag: pl ? pl.tag : null, verified: !!(pl && pl.verified)
+      tag: pl ? pl.tag : null, verified: !!(pl && pl.verified),
+      role: (pl && pl.role) || null, banned: !!(pl && pl.banned)
     });
   },
 
@@ -567,7 +687,7 @@ const routes = {
 
   /* ---- АДМИН: выдать код автора (только владелец проекта, по секрету) ---- */
   'POST /api/admin/author-codes': async (req, res, body) => {
-    if (!isAdmin(req)) return send(res, 403, { ok: false, error: 'нет доступа (нужен секрет админа)' });
+    if (!isOwner(req)) return send(res, 403, { ok: false, error: 'нет доступа (нужен секрет владельца)' });
     const ownerUid = cleanStr(body.ownerUid, 80);
     const ownerName = cleanStr(body.ownerName, 60);
     let code = normalizeCode(body.code);
@@ -590,6 +710,8 @@ const routes = {
     if (!isAdmin(req)) return send(res, 403, { ok: false, error: 'нет доступа' });
     send(res, 200, {
       ok: true,
+      role: adminRole(req),
+      online: Object.values(db.players).filter(isOnline).length,
       players: Object.keys(db.players).length,
       accounts: Object.keys(db.accounts || {}).length,
       supporters: Object.keys(db.supporters).length,
@@ -812,7 +934,8 @@ server.listen(PORT, HOST, () => {
   console.log(`  Игра и API:   http://localhost:${PORT}`);
   console.log(`  Коды авторов: ${REGISTRY_FILE}`);
   console.log(`  База данных:  ${DB_FILE}`);
-  console.log(`  Секрет админки: ${ADMIN_SECRET === 'david-admin-1337' ? 'ДЕФОЛТНЫЙ — поменяй через ADMIN_SECRET!' : 'установлен из переменной окружения ✔'}`);
+  console.log(`  Секрет владельца: ${ADMIN_SECRET === 'david-admin-1337' ? 'ДЕФОЛТНЫЙ — поменяй через ADMIN_SECRET!' : 'установлен из переменной окружения ✔'}`);
+  console.log(`  Секрет администрации: ${STAFF_SECRET === 'david-staff-7331' ? 'ДЕФОЛТНЫЙ — поменяй через STAFF_SECRET!' : 'установлен из переменной окружения ✔'}`);
   console.log('==================================================');
 });
 

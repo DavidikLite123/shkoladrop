@@ -73,7 +73,7 @@
 
   <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="assets/icon.svg">
-  <link rel="manifest" href="manifest.webmanifest?v=3.7.1">
+  <link rel="manifest" href="manifest.webmanifest?v=3.8.0">
   <!-- КРИТИЧЕСКИЙ CSS: прокрутка и нижнее меню работают всегда, даже если внешний файл не загрузился -->
   <style>
     /* Прокрутка страницы.
@@ -153,7 +153,7 @@
     @media (prefers-reduced-motion: reduce) { #appPreloader .pre-logo { animation: none; } }
   </style>
 
-  <link rel="stylesheet" href="css/style.css?v=3.7.1">
+  <link rel="stylesheet" href="css/style.css?v=3.8.0">
 
   <script>
     window.tailwind = window.tailwind || {};
@@ -618,9 +618,15 @@
         <div class="text-[11px] font-bold text-fuchsia-300 uppercase tracking-wider flex items-center gap-1.5">
           <span>👑</span><span>VIP-статус (150 ₽)</span>
         </div>
-        <a href="https://funpay.com/" target="_blank" rel="noopener noreferrer" class="text-[10px] font-bold bg-gradient-to-r from-amber-500 to-orange-500 text-black px-2.5 py-1 rounded-lg font-cs active:scale-95 transition">Купить на FunPay</a>
+        <a href="mailto:shkoladrop.contact@gmail.com?subject=Покупка%20VIP%20ШКОЛА%20ДРОП&body=Привет!%20Хочу%20купить%20VIP-статус%20за%20150%20₽.%20Мой%20ник%3A%20...%20Мой%20уникальный%20ID%3A%20..." class="text-[10px] font-bold bg-gradient-to-r from-amber-500 to-orange-500 text-black px-2.5 py-1 rounded-lg font-cs active:scale-95 transition">✉ Написать на почту</a>
       </div>
-      <div class="text-[10px] text-slate-400 leading-relaxed">Отключи «налог миллионера» <b class="text-amber-300">навсегда</b>: шансы в кейсах и апгрейдере всегда будут честными, как при маленьком балансе. После оплаты ты получишь уникальный промокод — введи его ниже.</div>
+      <div class="text-[10px] text-slate-400 leading-relaxed">Отключи «налог миллионера» <b class="text-amber-300">навсегда</b>: шансы в кейсах и апгрейдере всегда будут честными, как при маленьком балансе.</div>
+      <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-2 space-y-1 text-[9.5px] text-slate-300 leading-relaxed">
+        <div class="text-[9px] uppercase tracking-wider text-fuchsia-300 font-bold">Как купить VIP:</div>
+        <div>1. Напиши нам на почту <button onclick="navigator.clipboard && navigator.clipboard.writeText('shkoladrop.contact@gmail.com'); Toast.info('Почта скопирована!')" class="font-mono text-amber-300 hover:text-amber-200" title="Нажми, чтобы скопировать">shkoladrop.contact@gmail.com</button> 📋 — укажи свой ник и уникальный ID.</div>
+        <div>2. Мы ответим реквизитами — переведи 150 ₽ на карту.</div>
+        <div>3. Получи в ответ уникальный VIP-промокод и введи его ниже 👇</div>
+      </div>
     </div>
 
     <!-- PROMO CODES -->
@@ -894,6 +900,8 @@
             <div class="flex items-center gap-1 min-w-0">
               <div id="profileViewNick" class="font-cs text-sm font-bold text-white leading-tight truncate">Ученик</div>
               <span id="profileVerifiedBadge" class="hidden flex-shrink-0"></span>
+              <span id="profileRoleBadge" class="hidden flex-shrink-0"></span>
+              <button onclick="openNickChangeModal()" title="Сменить ник" class="text-slate-500 hover:text-orange-300 transition text-[11px] leading-none flex-shrink-0">✏️</button>
             </div>
             <div id="profileViewGrade" class="text-[10px] text-slate-400">7-Б класс</div>
             <div class="flex items-center space-x-1.5 mt-1">
@@ -1012,9 +1020,15 @@
           <div id="achievementsGrid" class="grid grid-cols-1 gap-1.5 max-h-[300px] overflow-y-auto pr-0.5"></div>
         </div>
 
-        <button onclick="logoutProfile()" class="w-full py-2 rounded-xl bg-slate-800/70 hover:bg-slate-700 text-slate-400 font-bold text-[11px] transition">
-          Сменить профиль
-        </button>
+        <div class="grid grid-cols-2 gap-2">
+          <button onclick="openNickChangeModal()" class="py-2 rounded-xl bg-orange-950/50 hover:bg-orange-900/60 border border-orange-800/60 text-orange-300 font-bold text-[11px] transition">
+            ✏️ Сменить ник
+          </button>
+          <button onclick="logoutProfile()" class="py-2 rounded-xl bg-slate-800/70 hover:bg-slate-700 text-slate-400 font-bold text-[11px] transition">
+            Выйти из аккаунта
+          </button>
+        </div>
+        <div class="text-[9px] text-slate-500 text-center leading-relaxed">Один человек — один аккаунт на одну почту. Хочешь другое имя — просто смени ник, новый аккаунт создавать не нужно.</div>
       </div>
     </div>
   </div>
@@ -1445,15 +1459,24 @@
     </div>
   </div>
 
-  <!-- ================= MODAL: ADMIN (скрытая панель) ================= -->
+  <!-- ================= MODAL: ADMIN (скрытая панель, 2 роли: owner / admin) =================
+       Блоки помечены data-admin-perm="…" — applyAdminPermissions() прячет всё,
+       на что у текущей роли нет прав (см. ADMIN_PERMS в js/config.js). -->
   <div id="adminModal" class="app-modal hidden">
     <div class="modal-card max-w-sm w-full border border-emerald-700/60">
       <div class="flex items-center justify-between pb-2 mb-3 border-b border-slate-800">
-        <h3 class="font-cs text-sm font-bold uppercase text-emerald-400">🛠 Панель разработчика</h3>
-        <button onclick="closeAdminModal()" class="text-slate-400 hover:text-white text-lg leading-none">✕</button>
+        <div class="flex items-center gap-2 min-w-0">
+          <h3 id="adminModalTitle" class="font-cs text-sm font-bold uppercase text-emerald-400 truncate">🛠 Панель</h3>
+          <span id="adminRoleBadge" class="text-[8px] font-black px-1.5 py-0.5 rounded border uppercase bg-amber-500/20 text-amber-300 border-amber-500/50">—</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="adminLogout()" title="Выйти из панели" class="text-[9px] font-bold text-slate-400 hover:text-rose-300 transition">выйти</button>
+          <button onclick="closeAdminModal()" class="text-slate-400 hover:text-white text-lg leading-none">✕</button>
+        </div>
       </div>
       <div class="space-y-2.5 text-[11px]">
-        <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-2.5 space-y-1.5">
+
+        <div data-admin-perm="rig" class="bg-slate-950/70 border border-slate-800 rounded-xl p-2.5 space-y-1.5">
           <div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Подкрутить рандом апгрейдера</div>
           <button onclick="setRigMode('win')" id="rigWinBtn" class="w-full py-2 rounded-xl border border-slate-800 bg-slate-950 text-slate-400 flex items-center justify-between px-3">
             <span>Всегда занос</span><span id="rigWinCheck" class="hidden text-emerald-400">✓</span>
@@ -1468,40 +1491,52 @@
             <span>Честный рандом</span><span id="rigFairCheck" class="hidden text-amber-400">✓</span>
           </button>
         </div>
-        <div class="grid grid-cols-3 gap-1.5">
-          <button onclick="adminAddMoney(100000)" class="py-2 rounded-lg bg-emerald-950/60 border border-emerald-800 text-emerald-300 font-bold text-[10px]">+100K ₽</button>
-          <button onclick="adminAddMoney(1000000)" class="py-2 rounded-lg bg-emerald-950/60 border border-emerald-800 text-emerald-300 font-bold text-[10px]">+1M ₽</button>
-          <button onclick="adminAddMoney(10000000)" class="py-2 rounded-lg bg-emerald-950/60 border border-emerald-800 text-emerald-300 font-bold text-[10px]">+10M ₽</button>
-        </div>
-        <button onclick="adminGrantCat()" class="w-full py-2 rounded-xl bg-fuchsia-950/60 border border-fuchsia-800 text-fuchsia-300 font-bold text-[10px]">Выдать Кота-Хранителя 🐱</button>
-        <button onclick="adminMaxLevel()" class="w-full py-2 rounded-xl bg-slate-800 border border-slate-700 text-slate-200 font-bold text-[10px]">Максимальный уровень и дежурство</button>
 
-        <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-2.5 space-y-1.5">
-          <div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold">👥 Игроки сообщества (ID и галочки)</div>
-          <div class="text-[9px] text-slate-500 leading-relaxed">Все, кто заходил с онлайн-сервером. Уникальный ID выдаётся автоматически. Кнопка ✔ выдаёт/снимает галочку верификации — она видна игроку в профиле и в чате.</div>
-          <div class="flex justify-end">
-            <button onclick="adminLoadPlayers(true)" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[9.5px] font-bold transition">↻ Обновить список</button>
+        <div data-admin-perm="money" class="space-y-1.5">
+          <div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold">💰 Начислить деньги себе</div>
+          <div class="grid grid-cols-3 gap-1.5">
+            <button onclick="adminAddMoney(100000)" class="py-2 rounded-lg bg-emerald-950/60 border border-emerald-800 text-emerald-300 font-bold text-[10px]">+100K ₽</button>
+            <button onclick="adminAddMoney(1000000)" class="py-2 rounded-lg bg-emerald-950/60 border border-emerald-800 text-emerald-300 font-bold text-[10px]">+1M ₽</button>
+            <button onclick="adminAddMoney(10000000)" class="py-2 rounded-lg bg-emerald-950/60 border border-emerald-800 text-emerald-300 font-bold text-[10px]">+10M ₽</button>
           </div>
-          <div id="adminPlayersList" class="space-y-1 max-h-[190px] overflow-y-auto"></div>
+        </div>
+        <button data-admin-perm="cat" onclick="adminGrantCat()" class="w-full py-2 rounded-xl bg-fuchsia-950/60 border border-fuchsia-800 text-fuchsia-300 font-bold text-[10px]">Выдать Кота-Хранителя 🐱</button>
+        <button data-admin-perm="maxlevel" onclick="adminMaxLevel()" class="w-full py-2 rounded-xl bg-slate-800 border border-slate-700 text-slate-200 font-bold text-[10px]">Максимальный уровень и дежурство</button>
+
+        <div data-admin-perm="players" class="bg-slate-950/70 border border-slate-800 rounded-xl p-2.5 space-y-1.5">
+          <div class="flex items-center justify-between gap-2">
+            <div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold">👥 Игроки</div>
+            <span id="adminOnlineCount" class="text-[9px] font-mono text-emerald-400">—</span>
+          </div>
+          <div class="text-[9px] text-slate-500 leading-relaxed">Все, кто заходил с онлайн-сервером: кто онлайн сейчас, последний вход, ID. Действия зависят от твоей роли.</div>
+          <input type="text" id="adminPlayersSearch" oninput="adminRenderPlayers()" placeholder="Поиск: ник, #ID, uid, почта" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-[10px] text-white focus:outline-none focus:border-emerald-500">
+          <div class="flex flex-wrap gap-1 items-center">
+            <button id="adminFilterAll" onclick="adminSetPlayersFilter('all')" class="px-2 py-1 rounded-lg bg-slate-800 bg-slate-600 hover:bg-slate-700 text-slate-200 text-[9px] font-bold transition">Все</button>
+            <button id="adminFilterOnline" onclick="adminSetPlayersFilter('online')" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-300 text-[9px] font-bold transition">● Онлайн</button>
+            <button id="adminFilterAdmins" data-admin-perm="role" onclick="adminSetPlayersFilter('admins')" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-sky-300 text-[9px] font-bold transition">🛡 Админы</button>
+            <button id="adminFilterBanned" data-admin-perm="ban" onclick="adminSetPlayersFilter('banned')" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-rose-300 text-[9px] font-bold transition">⛔ Баны</button>
+            <button onclick="adminLoadPlayers(true)" class="ml-auto px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[9px] font-bold transition">↻</button>
+          </div>
+          <div id="adminPlayersList" class="space-y-1 max-h-[230px] overflow-y-auto"></div>
         </div>
 
-        <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-2.5 space-y-1.5">
+        <div data-admin-perm="chat" class="bg-slate-950/70 border border-slate-800 rounded-xl p-2.5 space-y-1.5">
           <div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold">💬 Официальное сообщение в общий чат</div>
           <div class="flex gap-1.5">
-            <input type="text" id="adminChatInput" maxlength="240" placeholder="Текст от имени «David Lite (АДМИН)»" onkeydown="if(event.key==='Enter') adminSendChat()" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-2 text-[10.5px] text-white focus:outline-none focus:border-amber-500">
+            <input type="text" id="adminChatInput" maxlength="240" placeholder="Текст от имени администрации" onkeydown="if(event.key==='Enter') adminSendChat()" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-2 text-[10.5px] text-white focus:outline-none focus:border-amber-500">
             <button onclick="adminSendChat()" class="px-3 rounded-lg bg-amber-600 hover:bg-amber-500 text-black font-bold text-[11px] transition flex-shrink-0">➤</button>
           </div>
-          <div class="text-[9px] text-slate-500 leading-relaxed">Зайди в «💬 Сообщество» — как админ ты можешь удалять любые сообщения (крестик рядом с ними).</div>
+          <div class="text-[9px] text-slate-500 leading-relaxed">Зайди в «💬 Сообщество» — ты можешь удалять любые сообщения (крестик рядом с ними).</div>
         </div>
 
-        <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-2.5 space-y-1.5">
+        <div data-admin-perm="server" class="bg-slate-950/70 border border-slate-800 rounded-xl p-2.5 space-y-1.5">
           <div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold">🖥 Адрес игрового сервера</div>
           <input type="text" id="adminServerUrl" placeholder="https://shkoladrop.onrender.com (зашит по умолчанию)" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-2 text-[10.5px] text-white font-mono focus:outline-none focus:border-cyan-500">
           <button onclick="adminSaveServerUrl()" class="w-full py-2 rounded-lg bg-cyan-950/70 border border-cyan-800 text-cyan-300 font-bold text-[10px]">Сохранить и проверить связь</button>
           <div class="text-[9px] text-slate-500 leading-relaxed">Сервер сообщества зашит в игру: <span class="font-mono text-cyan-400">https://shkoladrop.onrender.com</span>. Поле нужно только для теста другого адреса (пусто = вернуть зашитый).</div>
         </div>
 
-        <div class="bg-purple-950/30 border border-purple-800/50 rounded-xl p-2.5 space-y-1.5">
+        <div data-admin-perm="authorcodes" class="bg-purple-950/30 border border-purple-800/50 rounded-xl p-2.5 space-y-1.5">
           <div class="text-[10px] uppercase tracking-wider text-purple-300 font-bold">💜 Выдать код автора (только владелец проекта)</div>
           <input type="text" id="adminCodeOwnerUid" placeholder="id аккаунта владельца (player-…)" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-2 text-[10.5px] text-white font-mono focus:outline-none focus:border-purple-500">
           <input type="text" id="adminCodeOwnerName" placeholder="Имя/ник, который увидят игроки" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-2 text-[10.5px] text-white focus:outline-none focus:border-purple-500">
@@ -1515,12 +1550,32 @@
     </div>
   </div>
 
+  <!-- ================= MODAL: СМЕНА НИКА (тот же аккаунт) ================= -->
+  <div id="nickChangeModal" class="app-modal hidden">
+    <div class="modal-card max-w-xs w-full">
+      <div class="flex items-center justify-between pb-2 mb-3 border-b border-slate-800">
+        <h3 class="font-cs text-sm font-bold uppercase text-white">✏️ Сменить ник</h3>
+        <button onclick="closeNickChangeModal()" class="text-slate-400 hover:text-white text-lg leading-none">✕</button>
+      </div>
+      <p class="text-[11px] text-slate-400 mb-2">Текущий ник: <b id="nickChangeCurrent" class="text-white">—</b></p>
+      <input type="text" id="nickChangeInput" maxlength="18" placeholder="Новый ник (2–18 символов)"
+             onkeydown="if(event.key==='Enter') submitNickChange()"
+             class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500">
+      <div id="nickChangeError" class="text-[11px] text-rose-400 mt-2 hidden"></div>
+      <div class="text-[9.5px] text-slate-500 mt-2 leading-relaxed">Меняется только имя. Аккаунт, уникальный ID, почта и весь прогресс остаются твоими — новый аккаунт не создаётся. Ник должен быть свободен.</div>
+      <div class="grid grid-cols-2 gap-2 mt-3">
+        <button onclick="closeNickChangeModal()" class="py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-[11px] transition">Отмена</button>
+        <button id="nickChangeBtn" onclick="submitNickChange()" class="py-2.5 rounded-xl bg-orange-500 hover:bg-orange-400 text-black font-bold text-[11px] transition">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ================= MODAL: DEV CODE (вход в админку) ================= -->
   <div id="adminCodeModal" class="app-modal hidden">
     <div class="modal-card max-w-xs w-full text-center">
       <div class="text-4xl mb-2">🔐</div>
-      <h3 class="font-cs text-sm font-bold uppercase text-white mb-1">Панель разработчика</h3>
-      <p class="text-[11px] text-slate-400 mb-3">Закрытая зона. Введи код доступа — он известен только автору проекта.</p>
+      <h3 class="font-cs text-sm font-bold uppercase text-white mb-1">Панель управления</h3>
+      <p class="text-[11px] text-slate-400 mb-3">Закрытая зона. Введи код доступа — панель откроется с правами твоей роли (владелец или администрация).</p>
       <input type="text" id="adminCodeInput" inputmode="numeric" maxlength="20" placeholder="Код"
              onkeydown="if(event.key==='Enter') submitAdminCode()"
              class="w-full text-center bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-sm font-mono text-white tracking-widest focus:outline-none focus:border-emerald-500">
@@ -1529,7 +1584,7 @@
         <button onclick="closeAdminCodeModal()" class="py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-[11px] transition">Отмена</button>
         <button onclick="submitAdminCode()" class="py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] transition">Войти</button>
       </div>
-      <div class="text-[9.5px] text-slate-500 mt-2.5">Если ты не David Lite — эта панель не для тебя 😉</div>
+      <div class="text-[9.5px] text-slate-500 mt-2.5">Если ты не из команды ШКОЛА ДРОП — эта панель не для тебя 😉</div>
     </div>
   </div>
 
@@ -1764,13 +1819,13 @@
   </div>
 
   <!-- ЛОГИКА ИГРЫ (модульная структура v2.0) -->
-  <script defer src="js/preloader.js?v=3.7.1"></script>
-  <script defer src="js/config.js?v=3.7.1"></script>
-  <script defer src="js/storage.js?v=3.7.1"></script>
-  <script defer src="js/ui.js?v=3.7.1"></script>
-  <script defer src="js/game.js?v=3.7.1"></script>
-  <script defer src="js/netplay.js?v=3.7.1"></script>
-  <script defer src="js/betaManager.js?v=3.7.1"></script>
-  <script defer src="js/main.js?v=3.7.1"></script>
+  <script defer src="js/preloader.js?v=3.8.0"></script>
+  <script defer src="js/config.js?v=3.8.0"></script>
+  <script defer src="js/storage.js?v=3.8.0"></script>
+  <script defer src="js/ui.js?v=3.8.0"></script>
+  <script defer src="js/game.js?v=3.8.0"></script>
+  <script defer src="js/netplay.js?v=3.8.0"></script>
+  <script defer src="js/betaManager.js?v=3.8.0"></script>
+  <script defer src="js/main.js?v=3.8.0"></script>
 </body>
 </html>
