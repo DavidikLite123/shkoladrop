@@ -1,6 +1,6 @@
 /* ==========================================================================
    ШКОЛА ДРОП 2.0 — js/game.js
-   Ядро игры: апгрейдер, кейсы, рюкзак, магазин, мини-игра, дежурство (idle),
+   Ядро игры: апгрейдер, кейсы, рюкзак, магазин, дежурство (idle),
    ежедневные награды, промокоды, опыт, уровни, достижения, настройки, cookie.
    ========================================================================== */
 
@@ -40,14 +40,20 @@ const state = {
   dropHistory: [],
   profileTab: 'profile',
   rigReady: false,
-  betaArchiveOpen: false
+  betaArchiveOpen: false,
+  // Вход по e-mail (AuthGate): сервер выдал uid/ID — забирает их регистрация
+  pendingAuthUid: null,
+  pendingAuthEmail: null,
+  pendingAuthTag: null,
+  pendingAuthVerified: false,
+  seasonWipeToast: false
 };
 
 /* --------------------------------------------------------------------------
    ЗАГРУЗКА / СОХРАНЕНИЕ
    -------------------------------------------------------------------------- */
 function loadGame() {
-  const { data, migrated, fresh } = SaveManager.load();
+  const { data, migrated, fresh, wiped, carriedUser } = SaveManager.load();
 
   state.balance = data.balance;
   state.inventory = data.inventory;
@@ -84,6 +90,9 @@ function loadGame() {
 
   if (migrated) {
     Toast.success('Старый прогресс из версии 1.0 перенесён — привет в Сезоне 2! 🎒', 5000);
+  }
+  if (wiped && carriedUser) {
+    state.seasonWipeToast = true; // NetBoot покажет после приветствия — чтобы тосты не слиплись
   }
   return data;
 }
@@ -1347,7 +1356,7 @@ function closeCaseOddsModal() { Modal.close('caseOddsModal'); }
    -------------------------------------------------------------------------- */
 function setInvFilter(type) {
   state.invFilter = type;
-  const map = { all: 'fltAll', school: 'fltSchool', cs2: 'fltCs2', games: 'fltGames', cat: 'fltCat' };
+  const map = { all: 'fltAll', school: 'fltSchool', cs2: 'fltCs2', games: 'fltGames', cat: 'fltCat', upgrade: 'fltUpgrade' };
   Object.values(map).forEach(id => {
     const el = $(id);
     if (el) el.className = 'filter-chip';
@@ -1362,12 +1371,14 @@ function inventoryList() {
   const cs2 = state.inventory.filter(i => i.category === 'cs2');
   const games = state.inventory.filter(i => i.category === 'other');
   const cats = state.inventory.filter(i => i.category === 'cat');
+  const upgrades = state.inventory.filter(i => i.category === 'upgrade');
 
   let list = state.inventory;
   if (state.invFilter === 'school') list = school;
   if (state.invFilter === 'cs2') list = cs2;
   if (state.invFilter === 'games') list = games;
   if (state.invFilter === 'cat') list = cats;
+  if (state.invFilter === 'upgrade') list = upgrades;
 
   const search = ($('invSearchInput')?.value || '').trim().toLowerCase();
   if (search) list = list.filter(i => i.name.toLowerCase().includes(search));
@@ -1379,7 +1390,7 @@ function inventoryList() {
   else if (sort === 'rarity') sorted.sort((a, b) => (rarityOf(b).order - rarityOf(a).order) || (b.price - a.price));
   else if (sort === 'name') sorted.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
 
-  return { sorted, counts: { all: state.inventory.length, school: school.length, cs2: cs2.length, games: games.length, cat: cats.length } };
+  return { sorted, counts: { all: state.inventory.length, school: school.length, cs2: cs2.length, games: games.length, cat: cats.length, upgrade: upgrades.length } };
 }
 
 function renderInventory() {
@@ -1393,6 +1404,8 @@ function renderInventory() {
   $('countCs2').textContent = counts.cs2;
   $('countGames').textContent = counts.games;
   $('countCat').textContent = counts.cat;
+  const cu = $('countUpgrade');
+  if (cu) cu.textContent = counts.upgrade;
 
   const totalValue = state.inventory.reduce((sum, i) => sum + i.price, 0);
   $('invTotalValue').textContent = moneyText(totalValue, true);
@@ -1544,7 +1557,7 @@ function openItemPicker(type) {
     filters.classList.add('hidden');
   } else {
     $('modalTitle').textContent = 'Выбери желанную цель';
-    $('modalSubtitle').textContent = 'Скины CS2, топ-предметы школы, лут из игр и котики';
+    $('modalSubtitle').textContent = 'Скины, котики и ⚡ эксклюзивы, которые добываются ТОЛЬКО тут';
     filters.classList.remove('hidden');
   }
 
@@ -1560,7 +1573,7 @@ function closeItemModal() {
 
 function setTargetCategory(cat) {
   state.targetFilter = cat;
-  const map = { all: 'tgtCatAll', cs2: 'tgtCatCs2', school: 'tgtCatSchool', other: 'tgtCatOther', cat: 'tgtCatCat' };
+  const map = { all: 'tgtCatAll', cs2: 'tgtCatCs2', school: 'tgtCatSchool', other: 'tgtCatOther', cat: 'tgtCatCat', upgrade: 'tgtCatUpgrade' };
   Object.values(map).forEach(id => {
     const el = $(id);
     if (el) el.className = 'filter-chip';
@@ -1594,6 +1607,7 @@ function renderModalItems() {
     else if (state.targetFilter === 'school') list = SCHOOL_CATALOG;
     else if (state.targetFilter === 'other') list = OTHER_GAMES_CATALOG;
     else if (state.targetFilter === 'cat') list = CAT_CATALOG;
+    else if (state.targetFilter === 'upgrade') list = UPGRADE_CATALOG;
   }
 
   const filtered = list
@@ -1644,15 +1658,19 @@ function selectItemFromModal(item) {
 
 /* --------------------------------------------------------------------------
    МАГАЗИН + КЛИКЕР
+   Сезон 3.7: в лавке остались только 4 базовые вещицы (SHOP_ITEM_IDS).
+   Всё ценное — из кейсов (жёстко!) или апгрейд-эксклюзивы из апгрейдера.
    -------------------------------------------------------------------------- */
-const SHOP_EXCLUDED = ['sch_golden_diary', 'sch_timetable_relic'];
+function shopCatalog() {
+  return SHOP_ITEM_IDS.map(id => ITEMS_BY_ID[id]).filter(Boolean);
+}
 
 function renderShop() {
   const list = $('shopList');
   if (!list) return;
 
-  const items = SCHOOL_CATALOG.filter(i => !SHOP_EXCLUDED.includes(i.id));
-  $('shopCountLabel').textContent = `${items.length} позиций`;
+  const items = shopCatalog();
+  $('shopCountLabel').textContent = `${items.length} базовых`;
 
   list.innerHTML = items.map(item => {
     const rarity = rarityOf(item);
@@ -1700,7 +1718,11 @@ function handleShopClick(event) {
 }
 
 function buySchoolItem(id) {
-  const proto = SCHOOL_CATALOG.find(i => i.id === id);
+  if (!SHOP_ITEM_IDS.includes(id)) {
+    Toast.info('Такое теперь только из кейсов или из апгрейдера — в лавке не продаётся 😅');
+    return;
+  }
+  const proto = shopCatalog().find(i => i.id === id);
   if (!proto || state.balance < proto.price) return;
   audio.init();
   audio.playCoin();
@@ -1739,216 +1761,6 @@ function tapForMoney(event) {
 }
 
 /* --------------------------------------------------------------------------
-   МИНИ-ИГРА «ПЕРЕМЕНА»
-   -------------------------------------------------------------------------- */
-const mCanvas = $('miniGameCanvas');
-const mCtx = (() => {
-  try { return mCanvas ? mCanvas.getContext('2d') : null; } catch (e) { return null; }
-})();
-let mGameRunning = false;
-let mPlayerX = 140;
-let mLives = 3;
-let mScore = 0;
-let mCombo = 0;
-let mDrops = [];
-let mLastDropTime = 0;
-let mAnimationId = null;
-let mLastGameLoopTime = 0;
-
-function initMiniGameCanvas() {
-  if (!mCanvas) return;
-  const rect = mCanvas.getBoundingClientRect();
-  const dpr = Quality.canvasDpr();
-  mCanvas.width = Math.max(200, rect.width * dpr);
-  mCanvas.height = Math.max(200, rect.height * dpr);
-  mPlayerX = mCanvas.width / 2;
-}
-
-function toggleMiniGame() {
-  if (!mCanvas || !mCtx) {
-    Toast.error('Твой браузер не поддерживает canvas — мини-игра недоступна 😔');
-    return;
-  }
-  audio.init();
-  audio.playTick();
-  const overlay = $('gameOverlay');
-  const btn = $('btnGameControl');
-
-  if (!mGameRunning) {
-    initMiniGameCanvas();
-    mGameRunning = true;
-    mLives = 3;
-    mScore = 0;
-    mCombo = 0;
-    mDrops = [];
-    mLastDropTime = 0;
-    overlay.classList.add('hidden');
-    btn.textContent = 'Стоп';
-    btn.className = 'px-4 py-2 rounded-xl bg-red-600 text-white font-cs font-bold text-xs uppercase tracking-wider';
-    mLastGameLoopTime = performance.now();
-    mAnimationId = requestAnimationFrame(miniGameLoop);
-  } else {
-    stopMiniGame();
-  }
-}
-
-function stopMiniGame() {
-  mGameRunning = false;
-  if (mAnimationId) cancelAnimationFrame(mAnimationId);
-  const overlay = $('gameOverlay');
-  const btn = $('btnGameControl');
-  if (overlay) {
-    overlay.innerHTML = `
-      <div class="text-4xl mb-2">🏃‍♂️🎒</div>
-      <div class="font-cs font-bold text-base text-white mb-1">Звонок на перемену!</div>
-      <p class="text-xs text-slate-400 mb-3 max-w-[220px]">Лови пятёрки и пирожки (+₽), рыбки дают жизнь. Три двойки — звонок на урок!</p>
-      <button onclick="toggleMiniGame()" class="px-5 py-2.5 bg-orange-500 text-black rounded-xl font-cs font-bold text-xs uppercase">Погнали!</button>
-    `;
-    overlay.classList.remove('hidden');
-  }
-  if (btn) {
-    btn.textContent = 'Старт игры';
-    btn.className = 'px-4 py-2 rounded-xl bg-orange-500 text-black font-cs font-bold text-xs uppercase tracking-wider hover:brightness-110 active:scale-95 shadow-md';
-  }
-}
-
-function miniGameLoop(now) {
-  if (!mGameRunning) return;
-  const dt = Math.min((now - mLastGameLoopTime) / 1000, 0.1);
-  mLastGameLoopTime = now;
-  const scale = mCanvas.width / 320;
-
-  if (now - mLastDropTime > Math.max(280, 560 - state.stats.level * 12)) {
-    mLastDropTime = now;
-    const roll = RNG.float();
-    let kind;
-    if (roll > 0.42) kind = { good: true, type: RNG.float() > 0.35 ? '5️⃣' : '🥟', value: 220 };
-    else if (roll > 0.34) kind = { good: true, type: '🐟', value: 400, heal: true };
-    else if (roll > 0.14) kind = { good: false, type: RNG.float() > 0.4 ? '2️⃣' : '📏', value: 0 };
-    else kind = { good: true, type: '🐱', value: 900 };
-
-    mDrops.push({
-      x: Math.random() * (mCanvas.width - 40 * scale) + 20 * scale,
-      y: -20,
-      speed: (180 + Math.random() * 130) * (mCanvas.height / 400) * (1 + state.stats.level * 0.02),
-      isGood: kind.good,
-      type: kind.type,
-      value: kind.value,
-      heal: !!kind.heal,
-      size: 26 * scale
-    });
-  }
-
-  for (let i = mDrops.length - 1; i >= 0; i--) {
-    const d = mDrops[i];
-    d.y += d.speed * dt;
-
-    const playerY = mCanvas.height - 40 * scale;
-    const dist = Math.hypot(d.x - mPlayerX, d.y - playerY);
-
-    if (dist < 36 * scale) {
-      if (d.isGood) {
-        audio.playCoin();
-        const comboBonus = Math.round(1 + mCombo * 0.1 * 10) / 10;
-        const gain = Math.round(d.value * comboBonus);
-        mScore += gain;
-        mCombo += 1;
-        addMoney(gain, { silent: true, countEarned: true });
-        if (d.heal && mLives < 5) {
-          mLives += 1;
-          Toast.info('Рыбка! +1 жизнь ❤️', 1600);
-        }
-        floatMoney(mCanvas.getBoundingClientRect().left + (d.x / scale), mCanvas.getBoundingClientRect().top + (d.y / scale), `+${fmt(gain)}₽`);
-      } else {
-        audio.playLoss();
-        haptic(30);
-        mCombo = 0;
-        mLives -= 1;
-        if (mLives <= 0) {
-          mDrops.splice(i, 1);
-          endMiniGame();
-          return;
-        }
-      }
-      mDrops.splice(i, 1);
-      continue;
-    }
-
-    if (d.y > mCanvas.height + 20) mDrops.splice(i, 1);
-  }
-
-  mCtx.clearRect(0, 0, mCanvas.width, mCanvas.height);
-
-  mCtx.strokeStyle = 'rgba(255,255,255,0.04)';
-  mCtx.lineWidth = 1;
-  for (let x = 0; x < mCanvas.width; x += 30 * scale) {
-    mCtx.beginPath();
-    mCtx.moveTo(x, 0);
-    mCtx.lineTo(x, mCanvas.height);
-    mCtx.stroke();
-  }
-
-  mCtx.textAlign = 'center';
-  mCtx.textBaseline = 'middle';
-  mDrops.forEach(d => {
-    mCtx.font = `${d.size}px sans-serif`;
-    mCtx.fillText(d.type, d.x, d.y);
-  });
-
-  const pY = mCanvas.height - 35 * scale;
-  mCtx.font = `${36 * scale}px sans-serif`;
-  mCtx.fillText('🎒', mPlayerX, pY);
-
-  $('gameScoreText').textContent = moneyText(mScore, true);
-  $('gameScoreText').title = moneyText(mScore, false);
-  $('gameLivesText').textContent = '❤️'.repeat(Math.max(0, mLives));
-  $('gameBestScore').textContent = moneyText(Math.max(state.stats.miniBest || 0, mScore), true);
-  $('gameBestScore').title = moneyText(Math.max(state.stats.miniBest || 0, mScore), false);
-
-  mAnimationId = requestAnimationFrame(miniGameLoop);
-}
-
-function endMiniGame() {
-  const score = mScore;
-  mGameRunning = false;
-  if (mAnimationId) cancelAnimationFrame(mAnimationId);
-
-  const isRecord = score > (state.stats.miniBest || 0);
-  if (isRecord) state.stats.miniBest = score;
-  state.stats.miniCaught = (state.stats.miniCaught || 0) + 1;
-
-  audio.playLoss();
-  addXp(XP_REWARDS.miniGameEnd + Math.floor(score / 5000), { silent: true });
-  checkAchievements();
-  persist(true);
-
-  const overlay = $('gameOverlay');
-  const btn = $('btnGameControl');
-  if (overlay) {
-    overlay.innerHTML = `
-      <div class="text-4xl mb-2">🔔</div>
-      <div class="font-cs font-bold text-base text-white mb-1">Звонок на урок!</div>
-      <p class="text-xs text-slate-300 mb-1">Ты налутал: <span class="text-amber-400 font-bold">${fmt(score)} ₽</span></p>
-      ${isRecord ? '<p class="text-[11px] text-emerald-400 font-bold mb-1">🏆 Новый личный рекорд!</p>' : ''}
-      <button onclick="toggleMiniGame()" class="mt-2 px-5 py-2.5 bg-orange-500 text-black rounded-xl font-cs font-bold text-xs uppercase">Сыграть ещё</button>
-    `;
-    overlay.classList.remove('hidden');
-  }
-  if (btn) {
-    btn.textContent = 'Старт игры';
-    btn.className = 'px-4 py-2 rounded-xl bg-orange-500 text-black font-cs font-bold text-xs uppercase tracking-wider hover:brightness-110 active:scale-95 shadow-md';
-  }
-}
-
-function handleGameInput(e) {
-  if (!mGameRunning) return;
-  const rect = mCanvas.getBoundingClientRect();
-  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-  const relX = (clientX - rect.left) * (mCanvas.width / rect.width);
-  mPlayerX = clamp(relX, 30, mCanvas.width - 30);
-}
-
-/* --------------------------------------------------------------------------
    ДЕЖУРСТВО ПО ШКОЛЕ (IDLE)
    -------------------------------------------------------------------------- */
 function idleAps() {
@@ -1977,8 +1789,6 @@ function renderFarm() {
     ? 'px-3 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 font-bold text-[11px] transition active:scale-95'
     : 'px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-slate-500 font-bold text-[11px] cursor-not-allowed';
 
-  $('gameBestScore').textContent = moneyText(state.stats.miniBest || 0, true);
-  $('gameBestScore').title = moneyText(state.stats.miniBest || 0, false);
   $('dailyStreakLabel').textContent = `стрик: ${state.stats.dailyStreak || 0}`;
 
   const list = $('idleUpgradeList');
@@ -2438,13 +2248,22 @@ function submitRegistration() {
 
   audio.init();
   audio.playWin();
+  // Если аккаунт привязался к e-mail (AuthGate) — сохраняем ВЫДАННЫЙ СЕРВЕРОМ uid,
+  // чтобы ID аккаунта и облачный сейв не потерялись
   state.user = {
-    id: RNG.uid('player'),
+    id: state.pendingAuthUid || RNG.uid('player'),
     nick: nick.slice(0, 18),
     avatar: state.tempRegAvatar || '🎒',
     grade: grade || 'Ученик школы',
     joinedAt: new Date().toLocaleDateString('ru-RU')
   };
+  if (state.pendingAuthEmail) state.user.email = state.pendingAuthEmail;
+  if (state.pendingAuthTag) state.user.tag = state.pendingAuthTag;
+  if (state.pendingAuthVerified) state.user.verified = true;
+  state.pendingAuthUid = null;
+  state.pendingAuthEmail = null;
+  state.pendingAuthTag = null;
+  state.pendingAuthVerified = false;
 
   // Если профиль создаётся при включённой 3.6 Beta — ник сразу становится «Тест»
   if (typeof BetaMode !== 'undefined') BetaMode.onUserCreated();
@@ -2455,20 +2274,30 @@ function submitRegistration() {
   persist(true);
   openProfileModal();
   uiUpdate();
+
+  // Онлайн: сервер сразу выдаёт аккаунту уникальный ID (и галочку, если уже выдана)
+  if (typeof NetIdentity !== 'undefined') NetIdentity.sync();
+  // Закрываем шлагбаум входа — новичок теперь зарегистрирован
+  if (typeof AuthGate !== 'undefined') AuthGate.onUserRegistered();
 }
 
 function logoutProfile() {
+  const hasEmail = !!(state.user && state.user.email);
   ConfirmDialog.ask({
     icon: '👤',
-    title: 'Сменить профиль?',
-    text: 'Аккаунт не удаляется, но прогресс останется привязан к текущему сохранению.',
-    okText: 'Сменить'
+    title: hasEmail ? 'Выйти из аккаунта?' : '⚠️ Выйти БЕЗ e-mail?',
+    text: hasEmail
+      ? 'Прогресс сохранён в облаке и привязан к твоему e-mail — вернёшься за пару кликов по коду из письма.'
+      : 'Твой аккаунт <b class="text-rose-300">НЕ привязан к e-mail</b>! После выхода ID и прогресс восстановить будет <b class="text-rose-300">невозможно</b> — мы уже не виноваты. Лучше сначала привяжи почту в окне аккаунта.',
+    okText: hasEmail ? 'Выйти' : 'Выйти на свой страх и риск'
   }).then(ok => {
     if (!ok) return;
     state.user = null;
     persist(true);
     uiUpdate();
     openProfileModal();
+    // Шлагбаум входа возвращается — без аккаунта дальше никак
+    if (typeof AuthGate !== 'undefined') AuthGate.onBoot();
   });
 }
 
@@ -2513,6 +2342,14 @@ function renderProfile() {
   // id аккаунта — нужен друзьям для подарков, а владельцу проекта — для выдачи кода автора
   const uidEl = $('profileUid');
   if (uidEl) uidEl.textContent = state.user ? state.user.id : '—';
+  // Уникальный ID сообщества (выдаёт сервер) и галочка верификации
+  const tagEl = $('profileTag');
+  if (tagEl) tagEl.textContent = (state.user && state.user.tag) ? state.user.tag : '—';
+  const vbEl = $('profileVerifiedBadge');
+  if (vbEl) {
+    vbEl.classList.toggle('hidden', !(state.user && state.user.verified));
+    if (state.user && state.user.verified && typeof verifiedBadgeHtml === 'function') vbEl.innerHTML = verifiedBadgeHtml();
+  }
 
   const invValue = state.inventory.reduce((sum, i) => sum + i.price, 0);
   $('statBalance').textContent = moneyText(state.balance, true);
@@ -2531,8 +2368,9 @@ function renderProfile() {
   $('statEarned').textContent = moneyText(state.stats.earnedTotal || 0, true);
   $('statEarned').title = moneyText(state.stats.earnedTotal || 0, false);
   $('statSold').textContent = fmt(state.stats.itemsSold || 0);
-  $('statMiniGame').textContent = moneyText(state.stats.miniBest || 0, true);
-  $('statMiniGame').title = moneyText(state.stats.miniBest || 0, false);
+  const verEl = $('statVerified');
+  if (verEl) verEl.textContent = (state.user && state.user.verified) ? '✔ ВЕРИФИЦИРОВАН' : 'нет';
+  if (verEl) verEl.className = 'stat-tile-value text-xs ' + ((state.user && state.user.verified) ? 'text-cyan-300' : 'text-slate-400');
   $('statCatFound').textContent = state.stats.catFound ? '🏆 НАЙДЕН' : 'не найден';
   const vipEl = $('statVipStatus');
   if (vipEl) vipEl.textContent = state.stats.vipActive ? '👑 АКТИВЕН' : 'не активен';
@@ -2549,7 +2387,6 @@ function openSettingsModal() {
   audio.init();
   audio.playTick();
   applySettingsToUI();
-  updateLegacyRestoreButton();
   Modal.open('settingsModal');
 }
 
@@ -2635,44 +2472,8 @@ function setAccent(accent) {
   audio.playTick();
 }
 
-/** Прогресс старой версии в localStorage ещё жив? Показываем кнопку возврата */
-function updateLegacyRestoreButton() {
-  const btn = $('btnRestoreLegacy');
-  if (!btn) return;
-  const legacy = SaveManager.readLegacy();
-  const hasData = !!(legacy && ((legacy.balance && legacy.balance > 2000) || (legacy.inventory && legacy.inventory.length > 4) || legacy.user));
-  btn.classList.toggle('hidden', !hasData);
-}
-
-async function restoreLegacySave() {
-  const legacy = SaveManager.readLegacy();
-  if (!legacy) {
-    Toast.info('Прогресс версии 1.0 в этом браузере не найден');
-    updateLegacyRestoreButton();
-    return;
-  }
-
-  const invValue = (legacy.inventory || []).reduce((sum, i) => sum + (i.price || 0), 0);
-  const ok = await ConfirmDialog.ask({
-    icon: '↩️',
-    title: 'Вернуть прогресс 1.0?',
-    text: `Найдено: баланс <b class="text-amber-300">${fmt(legacy.balance || 0)} ₽</b>, предметов <b>${(legacy.inventory || []).length}</b> на ${fmt(invValue)} ₽${legacy.user ? `, профиль «${escapeHtml(legacy.user.nick)}»` : ''}.<br>Текущий прогресс будет заменён.`,
-    okText: 'Вернуть'
-  });
-  if (!ok) return;
-
-  const normalized = SaveManager.normalize(legacy);
-  state.balance = normalized.balance;
-  state.inventory = normalized.inventory;
-  state.user = normalized.user;
-  state.selectedDeposit = state.inventory[0] || null;
-  state.selectedTarget = state.selectedTarget || ITEMS_BY_ID['cs_usp_torque'];
-  auditInventory();
-  persist(true);
-  uiUpdate();
-  Toast.success('Прогресс версии 1.0 восстановлен! 🎒');
-  Modal.close('settingsModal');
-}
+// Кнопка «Вернуть прогресс из версии 1.0» убрана в сезоне 3.7:
+// прогресс теперь живёт в облаке, а локальный вайп обнуляет старую экономику.
 
 async function askResetProgress() {
   const ok = await ConfirmDialog.ask({
@@ -2688,51 +2489,8 @@ async function askResetProgress() {
   setTimeout(() => location.reload(), 900);
 }
 
-function exportSaveToArea() {
-  const text = SaveManager.exportString(snapshot());
-  $('saveExportArea').value = text;
-  Toast.success('Резервная копия выгружена в поле ниже');
-}
-
-async function copySaveToClipboard() {
-  const text = SaveManager.exportString(snapshot());
-  const ok = await copyText(text);
-  Toast[ok ? 'success' : 'error'](ok ? 'Копия прогресса скопирована в буфер обмена' : 'Не удалось скопировать');
-}
-
-async function exportSaveToClipboard() {
-  const text = SaveManager.exportString(snapshot());
-  const ok = await copyText(text);
-  Toast[ok ? 'success' : 'error'](ok ? 'Копия прогресса скопирована. Сохрани её в заметках!' : 'Не удалось скопировать');
-}
-
-async function importSaveFromArea() {
-  const text = $('saveExportArea').value || '';
-  const parsed = SaveManager.parseImport(text);
-  if (!parsed) {
-    Toast.error('Не удалось прочитать сохранение. Проверь текст.');
-    return;
-  }
-  const ok = await ConfirmDialog.ask({
-    icon: '📥',
-    title: 'Импортировать прогресс?',
-    text: 'Текущее сохранение будет заменено данными из резервной копии.',
-    okText: 'Импортировать'
-  });
-  if (!ok) return;
-
-  state.balance = parsed.balance;
-  state.inventory = parsed.inventory;
-  state.user = parsed.user;
-  state.stats = parsed.stats;
-  state.settings = Object.assign({}, DEFAULT_SETTINGS, parsed.settings || {});
-  state.selectedDeposit = state.inventory[0] || null;
-  applySettingsToUI();
-  persist(true);
-  uiUpdate();
-  Toast.success('Прогресс восстановлен из резервной копии!');
-  Modal.close('settingsModal');
-}
+/* Ручной JSON-экспорт/импорт прогресса убран: сохранение синхронизируется
+   с сервером сообщества автоматически (см. CloudSave в js/netplay.js). */
 
 /* --------------------------------------------------------------------------
    COOKIE: БАННЕР, НАСТРОЙКИ, ПОЛИТИКА
@@ -2967,6 +2725,9 @@ function openAdminModal() {
   if (!state.rigReady) return;
   Modal.open('adminModal');
   updateAdminUI();
+  // Онлайн-разделы панели: список игроков с галочками и реестр кодов авторов
+  if (typeof adminLoadPlayers === 'function') adminLoadPlayers();
+  if (typeof renderAdminAuthorList === 'function') renderAdminAuthorList();
 }
 
 function closeAdminModal() { Modal.close('adminModal'); }
@@ -3028,7 +2789,6 @@ function adminMaxLevel() {
 function switchTab(tab) {
   audio.init();
   audio.playTick();
-  if (mGameRunning && tab !== 'farm') stopMiniGame();
   scrollViewportTop();
 
   const views = {
@@ -3060,10 +2820,7 @@ function switchTab(tab) {
   if (tab === 'cases') { renderCasesUI(); setupCaseTape(); }
   if (tab === 'inventory') renderInventory();
   if (tab === 'shop') renderShop();
-  if (tab === 'farm') {
-    setTimeout(initMiniGameCanvas, 60);
-    renderFarm();
-  }
+  if (tab === 'farm') renderFarm();
   if (tab === 'upgrade') renderUpgradeHud();
 
   uiUpdate();
@@ -3085,26 +2842,14 @@ function bindGlobalEvents() {
   const modalGrid = $('modalItemsGrid');
   if (modalGrid) modalGrid.addEventListener('click', handleModalItemsClick);
 
-  if (mCanvas) {
-    mCanvas.addEventListener('mousemove', handleGameInput);
-    mCanvas.addEventListener('touchmove', handleGameInput, { passive: true });
-    mCanvas.addEventListener('touchstart', handleGameInput, { passive: true });
-    mCanvas.addEventListener('click', handleGameInput);
-  }
-
   window.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
       ['settingsModal', 'profileModal', 'authorModal', 'termsModal', 'cookieModal', 'cookiePolicyModal',
-        'caseOddsModal', 'dailyModal', 'multiResultModal', 'confirmModal'].forEach(id => {
+        'caseOddsModal', 'dailyModal', 'multiResultModal', 'confirmModal', 'communityModal', 'netplayModal', 'extrasModal'].forEach(id => {
           if (Modal.isOpen(id)) Modal.close(id);
         });
       if (Modal.isOpen('itemModal')) closeItemModal();
       if (Modal.isOpen('resultOverlay')) closeResultOverlay();
-    }
-    if (mGameRunning) {
-      const scale = mCanvas.width / 320;
-      if (e.key === 'ArrowLeft') mPlayerX = Math.max(30 * scale, mPlayerX - 35 * scale);
-      if (e.key === 'ArrowRight') mPlayerX = Math.min(mCanvas.width - 30 * scale, mPlayerX + 35 * scale);
     }
   });
 
@@ -3150,7 +2895,6 @@ function initGame() {
   renderProfile();
   applyCookieCategoriesToUI();
   updateDailyIndicator();
-  updateLegacyRestoreButton();
   syncModalState();   // приветственное окно открыто — контент под ним не скроллится
 
   renderAll();
@@ -3170,6 +2914,9 @@ function initGame() {
 
   // Онлайн-функции: спонсорство, подарки, трейдинг (js/netplay.js)
   if (typeof NetBoot === 'function') NetBoot();
+
+  // Шлагбаум «введите аккаунт» — если профиля ещё нет (js/netplay.js)
+  if (typeof AuthGate !== 'undefined') AuthGate.onBoot();
 
   // Первое сохранение нового формата
   persist(true);

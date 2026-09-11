@@ -1,7 +1,8 @@
 /* ==========================================================================
    Самотест сервера ШКОЛА ДРОП: node server/selftest.js
    Поднимает сервер на случайном порту с временными данными и гоняет все API:
-   коды авторов, спонсорство 10%, подарки, трейдинг, админ-выдача кода.
+   коды авторов, спонсорство 10%, подарки, трейдинг, админ-выдача кода,
+   аккаунты (e-mail+пароль+код) и одноразовый вайп экономики сезона 3.7.
    Никаких зависимостей — только Node 18+ (встроенный fetch).
    ========================================================================== */
 'use strict';
@@ -14,6 +15,7 @@ const path = require('path');
 const ROOT = path.resolve(__dirname, '..');
 // Временный реестр кодов, чтобы не трогать настоящий author-codes.json:
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'shkola-server-test-'));
+const tmpDataDir = path.join(tmpDir, 'data');
 const tmpRegistry = path.join(tmpDir, 'author-codes.json');
 fs.writeFileSync(tmpRegistry, JSON.stringify({
   version: 1, royaltyPercent: 10,
@@ -35,22 +37,41 @@ const t = (name, cond) => {
 };
 const j = r => r.json();
 
-async function main() {
+function startServer() {
   const child = spawn(process.execPath, [path.join(__dirname, 'index.js')], {
     env: Object.assign({}, process.env, {
       PORT: String(PORT), HOST: '127.0.0.1',
       ADMIN_SECRET: 'test-secret',
-      SHKOLA_REGISTRY_FILE: tmpRegistry // сервер читает этот путь, если задан
+      SHKOLA_REGISTRY_FILE: tmpRegistry, // сервер читает этот путь, если задан
+      SHKOLA_DATA_DIR: tmpDataDir        // изолированная база во временной папке
     }),
     stdio: ['ignore', 'pipe', 'pipe']
   });
   child.stderr.on('data', d => console.error('[server]', d.toString().trim()));
+  return child;
+}
+
+async function waitUp() {
+  for (let i = 0; i < 50; i++) {
+    try { await j(await fetch(`${BASE}/ping`)); return true; } catch (e) { await new Promise(r => setTimeout(r, 200)); }
+  }
+  return false;
+}
+
+function stopServer(child) {
+  return new Promise(res => {
+    if (!child) return res();
+    child.once('exit', () => setTimeout(res, 100));
+    child.kill();
+  });
+}
+
+async function main() {
+  const child = startServer();
+  let liveChild = child;
 
   // ждём подъёма
-  let up = false;
-  for (let i = 0; i < 50; i++) {
-    try { await j(await fetch(`${BASE}/ping`)); up = true; break; } catch (e) { await new Promise(r => setTimeout(r, 200)); }
-  }
+  const up = await waitUp();
   t('сервер поднялся и отвечает на /api/ping', up);
   if (!up) { child.kill(); process.exit(1); }
 
@@ -91,6 +112,67 @@ async function main() {
   t('новый код подхватился из файла', reg2.codes.some(c => c.code === 'NEWYOUTUBER'));
   const written = JSON.parse(fs.readFileSync(tmpRegistry, 'utf8'));
   t('код записался в сам файл author-codes.json', written.codes.some(c => c.ownerUid === 'player-777'));
+
+  console.log('\n— Сообщество: уникальные ID, галочки, чат, облачные сейвы —');
+  r = await fetch(`${BASE}/auth/sync`, { method: 'POST', headers: JSONH, body: JSON.stringify({ uid: 'player-999', nick: 'Вова228' }) });
+  body = await r.json();
+  t('sync вернул уникальный ID (#123456)', r.ok && /^#\d{6}$/.test(body.tag));
+  t('по умолчанию верификации нет', body.verified === false);
+
+  r = await fetch(`${BASE}/auth/sync`, { method: 'POST', headers: JSONH, body: JSON.stringify({ uid: 'player-999', nick: 'Вова228' }) });
+  const body2 = await r.json();
+  t('ID выдаётся один раз и не меняется', body2.tag === body.tag);
+
+  r = await fetch(`${BASE}/auth/sync`, { method: 'POST', headers: JSONH, body: JSON.stringify({ uid: 'player-111', nick: 'Ютубер' }) });
+  const sync111 = await r.json();
+  t('второму игроку выдан ДРУГОЙ ID', /^#\d{6}$/.test(sync111.tag) && sync111.tag !== body.tag);
+
+  let pub = await j(await fetch(`${BASE}/players/public?q=${encodeURIComponent(body.tag)}`));
+  t('поиск игрока по уникальному ID', pub.ok && pub.player.uid === 'player-999');
+  pub = await j(await fetch(`${BASE}/players/public?q=${encodeURIComponent('вова228')}`));
+  t('поиск игрока по нику (регистр не важен)', pub.ok && pub.player.uid === 'player-999');
+  r = await fetch(`${BASE}/players/public?q=NOSUCH` , { headers: JSONH });
+  t('неизвестный ID → 404', r.status === 404);
+
+  r = await fetch(`${BASE}/admin/players`, { headers: JSONH });
+  t('список игроков без секрета — 403', r.status === 403);
+  const plist = await j(await fetch(`${BASE}/admin/players`, { headers: ADMIN }));
+  t('админ видит список игроков с ID', plist.ok && plist.players.length >= 2 && plist.players.every(p => p.tag));
+
+  r = await fetch(`${BASE}/admin/players/verify`, { method: 'POST', headers: ADMIN, body: JSON.stringify({ uid: 'player-999', verified: true }) });
+  body = await r.json();
+  t('админ выдал галочку', r.ok && body.verified === true);
+  r = await fetch(`${BASE}/auth/sync`, { method: 'POST', headers: JSONH, body: JSON.stringify({ uid: 'player-999', nick: 'Вова228' }) });
+  body = await r.json();
+  t('sync видит выданную галочку', body.verified === true);
+  r = await fetch(`${BASE}/admin/players/verify`, { method: 'POST', headers: JSONH, body: JSON.stringify({ uid: 'player-999', verified: true }) });
+  t('без секрета галочку выдать нельзя', r.status === 403);
+
+  r = await fetch(`${BASE}/chat`, { method: 'POST', headers: JSONH, body: JSON.stringify({ uid: 'player-999', nick: 'Вова228', text: 'Всем привет с перемены!' }) });
+  t('сообщение в чат отправлено', r.ok);
+  r = await fetch(`${BASE}/admin/chat`, { method: 'POST', headers: ADMIN, body: JSON.stringify({ text: 'Официально: сезон продлён!' }) });
+  t('админ написал официальное сообщение', r.ok);
+  let chat = await j(await fetch(`${BASE}/chat`));
+  t('чат отдаёт сообщения', chat.ok && chat.messages.length === 2);
+  t('у игрока с галочкой сообщение подсвечено', chat.messages[0].verified === true && chat.messages[0].tag === body.tag);
+  t('админ в чате помечен kind=admin', chat.messages[1].kind === 'admin' && chat.messages[1].verified === true);
+  chat = await j(await fetch(`${BASE}/chat?after=${chat.messages[0].at}`));
+  t('дельта-запрос чата работает', chat.ok && chat.messages.length === 1);
+  r = await fetch(`${BASE}/chat`, { method: 'POST', headers: JSONH, body: JSON.stringify({ uid: 'player-111', nick: 'Ютубер', text: '   ' }) });
+  t('пустое сообщение отклонено', r.status === 400);
+  r = await fetch(`${BASE}/admin/chat/delete`, { method: 'POST', headers: ADMIN, body: JSON.stringify({ id: 'msg-nope' }) });
+  body = await r.json();
+  t('удаление чужого id — 0 удалено', r.ok && body.removed === 0);
+
+  const savePayload = { version: 11, balance: 123456, inventory: [{ id: 'sch_chalk', uid: 'x1', price: 1800 }], user: { id: 'player-999', nick: 'Вова228' }, stats: { level: 5 }, lastSeen: Date.now() };
+  r = await fetch(`${BASE}/save`, { method: 'POST', headers: JSONH, body: JSON.stringify({ uid: 'player-999', nick: 'Вова228', save: savePayload }) });
+  t('облачное сохранение залито', r.ok);
+  let cloud = await j(await fetch(`${BASE}/save?uid=player-999`));
+  t('облачное сохранение читается', cloud.ok && cloud.save.balance === 123456 && Number.isFinite(cloud.updatedAt));
+  r = await fetch(`${BASE}/save?uid=player-nobody`);
+  t('нет сохранения → 404', r.status === 404);
+  r = await fetch(`${BASE}/save`, { method: 'POST', headers: JSONH, body: JSON.stringify({ uid: 'player-999', save: { hello: 'world' } }) });
+  t('битый save отклонён', r.status === 400);
 
   console.log('\n— Подарки —');
   const item = { id: 'sch_chalk', uid: 'case-abc', name: 'Коробка цветного мела', icon: '🖍️', price: 1800, rarity: 'restricted', category: 'school' };
@@ -135,8 +217,76 @@ async function main() {
   const dlv555 = await j(await fetch(`${BASE}/deliveries?uid=player-555`));
   t('предмет вернулся в выдачу', dlv555.deliveries.length === 1);
 
+  /* ---------------- АККАУНТЫ: E-MAIL + ПАРОЛЬ + КОД (сезон 3.7) ---------------- */
+  console.log('\n— Аккаунты: e-mail + пароль + код —');
+  let acc = await j(await fetch(`${BASE}/account/start`, { method: 'POST', headers: JSONH, body: JSON.stringify({ email: 'Player@Gmail.com', password: 's1stol', uid: 'player-999', nick: 'Вова228' }) }));
+  t('регистрация: mode=register, uid привязан к игровому', acc.ok && acc.mode === 'register' && acc.uid === 'player-999');
+  t('демо-код «из письма» вернулся (ровно 6 цифр)', /^[0-9]{6}$/.test(acc.demoCode || ''));
+
+  const exists = await j(await fetch(`${BASE}/account/exists?email=player@gmail.com`));
+  t('exists=true для свежей почты', exists.ok && exists.exists === true);
+
+  const wrong = acc.demoCode === '654321' ? '654322' : '654321';
+  r = await fetch(`${BASE}/account/verify`, { method: 'POST', headers: JSONH, body: JSON.stringify({ email: 'player@gmail.com', code: wrong }) });
+  t('неверный код отклонён (403)', r.status === 403);
+
+  const ver = await j(await fetch(`${BASE}/account/verify`, { method: 'POST', headers: JSONH, body: JSON.stringify({ email: 'player@gmail.com', code: acc.demoCode }) }));
+  t('код подтверждён: аккаунт принят', ver.ok === true && ver.uid === 'player-999');
+  t('уникальный ID входящего на месте', typeof ver.tag === 'string' && ver.tag.startsWith('#'));
+
+  const relogin = await j(await fetch(`${BASE}/account/start`, { method: 'POST', headers: JSONH, body: JSON.stringify({ email: 'PLAYER@gmail.com', password: 's1stol' }) }));
+  t('повторный вход: mode=login, тот же uid (регистр букв не важен)', relogin.ok && relogin.mode === 'login' && relogin.uid === 'player-999');
+
+  r = await fetch(`${BASE}/account/start`, { method: 'POST', headers: JSONH, body: JSON.stringify({ email: 'player@gmail.com', password: 'wrongpass' }) });
+  t('неверный пароль отклонён (403)', r.status === 403);
+
+  r = await fetch(`${BASE}/account/start`, { method: 'POST', headers: JSONH, body: JSON.stringify({ email: 'not-an-email', password: 'x' }) });
+  t('невалидный e-mail отклонён (400)', r.status === 400);
+
+  const ver2 = await j(await fetch(`${BASE}/account/verify`, { method: 'POST', headers: JSONH, body: JSON.stringify({ email: 'player@gmail.com', code: relogin.demoCode }) }));
+  t('второй вход по коду: снова внутри, ник сохранён', ver2.ok === true && ver2.nick === 'Вова228');
+
+  /* ---------------- ОДНОРАЗОВЫЙ ВАЙП ЭКОНОМИКИ СЕЗОНА 3.7 ---------------- */
+  console.log('\n— Одноразовый вайп экономики 3.7 —');
+  await stopServer(liveChild);
+  fs.mkdirSync(tmpDataDir, { recursive: true });
+  const dbFile = path.join(tmpDataDir, 'db.json');
+  fs.writeFileSync(dbFile, JSON.stringify({
+    players: { 'player-old': { uid: 'player-old', nick: 'Старожил', tag: '#424242', verified: true, lastSeen: 1 } },
+    accounts: { 'old@gmail.com': { email: 'old@gmail.com', salt: 's', passHash: 'h', uid: 'player-old' } },
+    saves: { 'player-old': { save: { balance: 999999, inventory: [{ id: 'sch_chalk', price: 2100 }] }, updatedAt: 1 } },
+    gifts: [{ id: 'g1', fromUid: 'a', fromNick: 'a', toUid: 'b', toNick: 'b', item: { id: 'x', price: 1 }, createdAt: 1, claimed: false }],
+    trades: [{ code: 'AAAAAA', fromUid: 'a', fromNick: 'a', offer: { id: 'x', price: 1 }, createdAt: 1, status: 'open' }],
+    deliveries: [{ id: 'd1', toUid: 'b', toNick: 'b', item: { id: 'x', price: 1 }, source: 'trade', createdAt: 1, claimed: false }],
+    supporters: { 'player-old': 'TESTYT' },
+    earnings: { TESTYT: { earned: 100, withdrawn: 0 } },
+    chat: [{ id: 'm1', uid: null, kind: 'admin', nick: 'Админ', text: 'привет', at: 1 }]
+    // meta.seasonWipe НАМЕРЕННО отсутствует — это база «из прошлого сезона»
+  }));
+
+  liveChild = startServer();
+  t('сервер перезапущен поверх «старой» базы', await waitUp());
+  await new Promise(r => setTimeout(r, 400)); // dbSave отрабатывает с дебаунсом
+  const after = JSON.parse(fs.readFileSync(dbFile, 'utf8'));
+  t('вайп: облачные сейвы стёрты', Object.keys(after.saves || {}).length === 0);
+  t('вайп: подарки/трейды/выдача стёрты', (after.gifts || []).length + (after.trades || []).length + (after.deliveries || []).length === 0);
+  t('вайп: игрок с ником, ID и галочкой СОХРАНЁН', !!(after.players && after.players['player-old'] && after.players['player-old'].tag === '#424242' && after.players['player-old'].verified === true));
+  t('вайп: e-mail аккаунт сохранён', !!(after.accounts && after.accounts['old@gmail.com']));
+  t('вайп: спонсорка/начисления/чат сохранены', !!(after.supporters && after.supporters['player-old'] && after.earnings.TESTYT && after.chat.length === 1));
+  t('вайп: флаг проставлен (второй раз не запустится)', after.meta && after.meta.seasonWipe === '3.7');
+
+  // новый прогресс ПОСЛЕ вайпа — и ещё один рестарт: повторного вайпа быть не должно
+  r = await fetch(`${BASE}/save`, { method: 'POST', headers: JSONH, body: JSON.stringify({ uid: 'player-old', nick: 'Старожил', save: { balance: 12345, inventory: [] } }) });
+  t('после вайпа новый сейв заливается', r.ok);
+  await new Promise(rs => setTimeout(rs, 350));
+  await stopServer(liveChild);
+  liveChild = startServer();
+  t('третий запуск сервера', await waitUp());
+  const sv = await j(await fetch(`${BASE}/save?uid=player-old`));
+  t('повторного вайпа нет: новый прогресс пережил рестарт', sv.ok && sv.save && sv.save.balance === 12345);
+
   console.log(`\n${passed} passed, ${failed} failed`);
-  child.kill();
+  liveChild.kill();
   fs.rmSync(tmpDir, { recursive: true, force: true });
   process.exit(failed ? 1 : 0);
 }
