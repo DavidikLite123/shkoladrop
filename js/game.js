@@ -2255,6 +2255,82 @@ function redeemPromo() {
   persist(true);
 }
 
+/* --------------------------------------------------------------------------
+   ЗАКРЫТЫЙ БЕТА-ТЕСТ (доступ по скрытому коду)
+   -------------------------------------------------------------------------- */
+function openBetaModal() {
+  renderBetaModal();
+  Modal.open('betaModal');
+  setTimeout(() => {
+    if (!state.stats.betaTester) {
+      const input = $('betaCodeInput');
+      if (input) input.focus();
+    }
+  }, 150);
+}
+
+function closeBetaModal() { Modal.close('betaModal'); }
+
+function renderBetaModal() {
+  const active = !!(state.stats && state.stats.betaTester);
+  const form = $('betaCodeForm');
+  const card = $('betaActiveCard');
+  const badge = $('betaMenuBadge');
+  if (form) form.classList.toggle('hidden', active);
+  if (card) card.classList.toggle('hidden', !active);
+  if (badge) badge.classList.toggle('hidden', !active);
+  if (active) {
+    const dateEl = $('betaActiveDate');
+    if (dateEl && state.stats.betaActivatedAt) {
+      dateEl.textContent = 'Активирован: ' + new Date(state.stats.betaActivatedAt).toLocaleDateString('ru-RU');
+    }
+  }
+}
+
+function redeemBetaCode() {
+  const input = $('betaCodeInput');
+  const raw = (input.value || '').replace(/\s+/g, '');
+  if (!raw) {
+    Toast.error('Введи код доступа');
+    return;
+  }
+  if (state.stats.betaTester) {
+    Toast.info('Бета-доступ уже активирован 🧪');
+    renderBetaModal();
+    return;
+  }
+
+  // Код в открытом виде в игре не хранится — сравниваем только хеши
+  if (betaCodeHash(raw) !== BETA_CODE_HASH) {
+    input.value = '';
+    audio.init();
+    audio.playLoss();
+    Toast.error('Неверный код. Доступ к закрытому бета-тесту выдаёт только автор проекта.');
+    return;
+  }
+
+  state.stats.betaTester = true;
+  state.stats.betaActivatedAt = Date.now();
+  if (!state.stats.unlockedTitles.includes(BETA_TITLE)) {
+    state.stats.unlockedTitles.push(BETA_TITLE);
+  }
+
+  audio.init();
+  audio.playSecret();
+  Fx.secretRain();
+  Fx.burst(140, ['#22d3ee', '#0ea5e9', '#fbbf24']);
+  addMoney(BETA_REWARD.money, { silent: true, countEarned: true });
+  addXp(BETA_REWARD.xp, { silent: true });
+
+  Toast.gold(`🧪 ДОСТУП К ЗАКРЫТОМУ БЕТА-ТЕСТУ АКТИВИРОВАН! +${fmt(BETA_REWARD.money)} ₽, +${BETA_REWARD.xp} XP и титул «${BETA_TITLE}». Трейдинг и крафты попробуешь первым!`, 9000);
+
+  input.value = '';
+  checkAchievements();
+  renderBetaModal();
+  uiUpdate();
+  persist(true);
+}
+
 function renderPromoList() {
   const box = $('promoList');
   if (!box) return;
@@ -2317,7 +2393,7 @@ function selectRegAvatar(emoji) {
   audio.playTick();
 }
 
-function openExtrasModal() { updateVipCardVisibility(); Modal.open('extrasModal'); }
+function openExtrasModal() { updateVipCardVisibility(); renderBetaModal(); Modal.open('extrasModal'); }
 
 function updateVipCardVisibility() {
   const vipStatusCard = $('vipStatusCard');
@@ -2431,6 +2507,8 @@ function renderProfile() {
   $('statCatFound').textContent = state.stats.catFound ? '🏆 НАЙДЕН' : 'не найден';
   const vipEl = $('statVipStatus');
   if (vipEl) vipEl.textContent = state.stats.vipActive ? '👑 АКТИВЕН' : 'не активен';
+  const betaEl = $('statBetaStatus');
+  if (betaEl) betaEl.textContent = state.stats.betaTester ? '🧪 АКТИВЕН' : 'нет доступа';
 
   if (state.profileTab === 'ach') renderAchievements();
 }

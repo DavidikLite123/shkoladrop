@@ -34,6 +34,8 @@ const DEFAULT_STATS = {
   vipActive: false,   // Активирован ли вечный VIP (отключает налог миллионера)
   vipActivatedAt: 0,  // Дата активации VIP
   vipCode: '',        // Какой именно код был активирован
+  betaTester: false,  // Активирован ли доступ к закрытому бета-тесту
+  betaActivatedAt: 0, // Дата активации бета-доступа
   achievements: [],
   unlockedTitles: [],
   catFound: false,
@@ -290,6 +292,9 @@ const SaveManager = {
     if (typeof stats.vipActive !== 'boolean') stats.vipActive = false;
     if (typeof stats.vipActivatedAt !== 'number') stats.vipActivatedAt = 0;
     if (typeof stats.vipCode !== 'string') stats.vipCode = '';
+    // То же для бета-доступа
+    if (typeof stats.betaTester !== 'boolean') stats.betaTester = false;
+    if (typeof stats.betaActivatedAt !== 'number') stats.betaActivatedAt = 0;
     data.stats = stats;
 
     data.createdAt = raw.createdAt || base.createdAt;
