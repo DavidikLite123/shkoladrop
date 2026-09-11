@@ -176,8 +176,6 @@ async function main() {
   t('владелец видит список с role=owner', ownerList.ok && ownerList.role === 'owner');
   r = await fetch(`${BASE}/admin/players/verify`, { method: 'POST', headers: STAFF, body: JSON.stringify({ uid: 'player-999', verified: false }) });
   t('администрация НЕ может выдавать/снимать галочки', r.status === 403);
-  r = await fetch(`${BASE}/admin/players/ban`, { method: 'POST', headers: STAFF, body: JSON.stringify({ uid: 'player-999', banned: true }) });
-  t('администрация НЕ может банить', r.status === 403);
   r = await fetch(`${BASE}/admin/players/role`, { method: 'POST', headers: STAFF, body: JSON.stringify({ uid: 'player-999', role: 'admin' }) });
   t('администрация НЕ может назначать админов', r.status === 403);
   r = await fetch(`${BASE}/admin/players/delete`, { method: 'POST', headers: STAFF, body: JSON.stringify({ uid: 'player-999' }) });
@@ -228,6 +226,49 @@ async function main() {
   t('забаненный не может сменить ник', r.status === 403);
   r = await fetch(`${BASE}/admin/players/ban`, { method: 'POST', headers: ADMIN, body: JSON.stringify({ uid: 'player-999', banned: false }) });
   t('владелец разбанил', r.ok);
+
+  // причина бана обязательна для администрации; бан по IP; DM; статусы; карточка
+  r = await fetch(`${BASE}/admin/players/ban`, { method: 'POST', headers: STAFF, body: JSON.stringify({ uid: 'player-999', banned: true }) });
+  t('администрация без причины забанить не может (400)', r.status === 400);
+  r = await fetch(`${BASE}/admin/players/ban`, { method: 'POST', headers: STAFF, body: JSON.stringify({ uid: 'player-999', banned: true, reason: 'нашёл дюп и не сообщил', by: 'Модер' }) });
+  body = await r.json();
+  t('администрация банит с причиной', r.ok && body.banned === true && body.reason === 'нашёл дюп и не сообщил');
+  body = await j(await fetch(`${BASE}/auth/sync`, { method: 'POST', headers: JSONH, body: JSON.stringify({ uid: 'player-999' }) }));
+  t('sync отдаёт причину и кто забанил', body.banned === true && body.banReason === 'нашёл дюп и не сообщил' && body.banBy === 'Модер');
+  r = await fetch(`${BASE}/account/start`, { method: 'POST', headers: JSONH, body: JSON.stringify({ email: 'evil@gmail.com', password: 'qwerty', uid: 'player-new-evil', nick: 'Злодей' }) });
+  body = await r.json();
+  t('бан по IP: новый аккаунт с того же адреса → 403 с причиной', r.status === 403 && body.banned === true && body.reason === 'нашёл дюп и не сообщил');
+  staffList = await j(await fetch(`${BASE}/admin/players`, { headers: STAFF }));
+  t('забаненный остаётся в списке с причиной', staffList.players.some(p => p.uid === 'player-999' && p.banned && p.banReason));
+  r = await fetch(`${BASE}/admin/players/ban`, { method: 'POST', headers: STAFF, body: JSON.stringify({ uid: 'player-999', banned: false }) });
+  t('администрация разбанила', r.ok);
+  r = await fetch(`${BASE}/account/start`, { method: 'POST', headers: JSONH, body: JSON.stringify({ email: 'evil@gmail.com', password: 'qwerty', uid: 'player-new-evil', nick: 'Злодей' }) });
+  t('после разбана IP свободен — регистрация проходит', r.ok);
+
+  r = await fetch(`${BASE}/admin/players/status`, { method: 'POST', headers: STAFF, body: JSON.stringify({ uid: 'player-999', status: 'scam' }) });
+  t('статусы выдаёт только владелец (403 для админа)', r.status === 403);
+  r = await fetch(`${BASE}/admin/players/status`, { method: 'POST', headers: ADMIN, body: JSON.stringify({ uid: 'player-999', status: 'scam' }) });
+  body = await r.json();
+  t('владелец выдал статус scam', r.ok && body.status === 'scam');
+  r = await fetch(`${BASE}/admin/players/status`, { method: 'POST', headers: ADMIN, body: JSON.stringify({ uid: 'player-999', status: 'hacker' }) });
+  t('неизвестный статус → 400', r.status === 400);
+  chat = await j(await fetch(`${BASE}/chat`));
+  t('статус виден в чате', chat.messages[0].status === 'scam');
+
+  r = await fetch(`${BASE}/admin/players/dm`, { method: 'POST', headers: STAFF, body: JSON.stringify({ uid: 'player-999', text: 'Привет, круто играешь!', from: 'Модер' }) });
+  t('администрация написала игроку в личку', r.ok);
+  body = await j(await fetch(`${BASE}/dms?uid=player-999`));
+  t('игрок видит 1 непрочитанное', body.ok && body.unread === 1 && body.dms[0].from === 'Модер');
+  body = await j(await fetch(`${BASE}/auth/sync`, { method: 'POST', headers: JSONH, body: JSON.stringify({ uid: 'player-999' }) }));
+  t('sync отдаёт unreadDms', body.unreadDms === 1);
+  r = await fetch(`${BASE}/dms/read`, { method: 'POST', headers: JSONH, body: JSON.stringify({ uid: 'player-999' }) });
+  body = await j(await fetch(`${BASE}/dms?uid=player-999`));
+  t('после прочтения unread=0', body.unread === 0);
+
+  body = await j(await fetch(`${BASE}/admin/players/detail?uid=player-999`, { headers: STAFF }));
+  t('карточка игрока для администрации (без почты/IP)', body.ok && body.player.uid === 'player-999' && body.player.email === undefined && body.player.ip === undefined && body.player.dms.length === 1);
+  body = await j(await fetch(`${BASE}/admin/players/detail?uid=player-999`, { headers: ADMIN }));
+  t('карточка игрока для владельца (с IP)', body.ok && body.player.ip !== undefined);
 
   // удаление аккаунта
   r = await fetch(`${BASE}/account/start`, { method: 'POST', headers: JSONH, body: JSON.stringify({ email: 'del@gmail.com', password: 'qwerty', uid: 'player-del', nick: 'Удаляемый' }) });

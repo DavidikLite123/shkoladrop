@@ -4,9 +4,8 @@
    уровни, награды, промокоды, апгрейды дежурства.
    ========================================================================== */
 
-const APP_VERSION = '3.7';
+const APP_VERSION = '3.8';
 const WHATS_NEW_VERSION = 'community-tab-2026-09'; // ключ последнего окна «Что нового» (сменить при новом апдейте)
-const BETA_VERSION = '3.6';   // тестовая ветка «3.6 Beta» (Лаборатория)
 const SAVE_VERSION = 12;      // v12 = вайп экономики сезона 3.7 (аккаунты/ID сохраняются)
 const SEASON_NUMBER = 3;
 const HARD_MODE_THRESHOLD = 100000000;
@@ -496,19 +495,11 @@ const OWNER_SERVER_SECRET = 'david-admin-1337';
 const ADMIN_SERVER_SECRET = 'david-staff-7331';
 /* Права ролей — что показывать в панели (data-admin-perm="...") */
 const ADMIN_PERMS = {
-  owner: ['rig', 'money', 'cat', 'maxlevel', 'players', 'verify', 'ban', 'role', 'delete', 'chat', 'server', 'authorcodes', 'online', 'emails'],
-  admin: ['money', 'players', 'chat', 'online']
+  owner: ['rig', 'money', 'cat', 'maxlevel', 'players', 'detail', 'dm', 'verify', 'ban', 'role', 'status', 'delete', 'chat', 'server', 'authorcodes', 'online', 'emails'],
+  admin: ['money', 'players', 'detail', 'dm', 'ban', 'chat', 'online']
 };
 
-/* ---------- Закрытый бета-тест ----------
-   Код доступа НИГДЕ не хранится и не показывается в открытом виде:
-   здесь лежит только его djb2-хеш. Введённый игроком код хешируется
-   на клиенте и сравнивается с BETA_CODE_HASH, поэтому подсмотреть
-   код в исходниках нельзя. Чтобы сменить код — посчитай betaCodeHash()
-   от нового значения в консоли и подставь сюда. */
-const BETA_CODE_HASH = 2088368086;
-const BETA_REWARD = { money: 250000, xp: 500 };
-const BETA_TITLE = '🧪 Бета-тестер';
+/* djb2-хеш: используется для кодов админки (коды в открытом виде не хранятся) */
 function betaCodeHash(str) {
   let h = 5381;
   for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) >>> 0;
@@ -638,7 +629,22 @@ const DEFAULT_SETTINGS = {
   fastOpen: false,
   reduceMotion: false,
   accent: 'orange',
-  quality: 'auto'   // 'auto' — под возможности устройства, 'high' / 'low' — вручную
+  quality: 'auto',  // 'auto' — под возможности устройства, 'high' / 'low' — вручную
+  /* Эксперименты (⚙️ Настройки → Эксперименты) */
+  autoWake: false,   // автоматически будить спящий сервер при запуске (без плашки)
+  chatNotify: false  // уведомления о новых сообщениях в общем чате
+};
+
+/* Статусы игроков, которые выдаёт владелец (плашка у ника в чате и профиле) */
+const PLAYER_STATUS_META = {
+  owner:    { label: '👑 ВЛАДЕЛЕЦ', cls: 'bg-amber-500/20 border-amber-500/60 text-amber-300' },
+  admin:    { label: '🛡 АДМИН',    cls: 'bg-sky-500/20 border-sky-500/60 text-sky-300' },
+  vip:      { label: '💎 VIP',      cls: 'bg-fuchsia-500/20 border-fuchsia-500/60 text-fuchsia-300' },
+  youtuber: { label: '▶ ЮТУБЕР',   cls: 'bg-red-500/20 border-red-500/60 text-red-300' },
+  legend:   { label: '🏆 ЛЕГЕНДА',  cls: 'bg-yellow-500/20 border-yellow-500/60 text-yellow-200' },
+  test:     { label: '🧪 ТЕСТ',     cls: 'bg-cyan-500/20 border-cyan-500/60 text-cyan-300' },
+  scam:     { label: '⚠ СКАМ',      cls: 'bg-rose-500/20 border-rose-500/60 text-rose-300' },
+  spam:     { label: '🚫 СПАМ',     cls: 'bg-orange-500/20 border-orange-500/60 text-orange-300' }
 };
 
 /* ---------- Стартовый инвентарь ---------- */

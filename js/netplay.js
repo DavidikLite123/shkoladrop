@@ -122,6 +122,24 @@ function staffChipHtml() {
   return `<span title="Администратор проекта — назначен владельцем" class="inline-flex items-center px-1 py-px rounded bg-sky-500/20 border border-sky-500/50 text-sky-300 font-black align-middle" style="font-size:8px">🛡 АДМИН</span>`;
 }
 
+/* Плашка статуса игрока (выдаёт владелец: скам / спам / тест / админ / владелец…) */
+function statusLabel(st) {
+  const m = typeof PLAYER_STATUS_META !== 'undefined' && PLAYER_STATUS_META[st];
+  return m ? m.label : String(st || '').toUpperCase();
+}
+function statusChipHtml(st) {
+  if (!st) return '';
+  const m = (typeof PLAYER_STATUS_META !== 'undefined' && PLAYER_STATUS_META[st]) || { label: st.toUpperCase(), cls: 'bg-slate-500/20 border-slate-500/60 text-slate-300' };
+  return `<span class="status-chip ${m.cls}" title="Статус выдан владельцем проекта">${m.label}</span>`;
+}
+
+/* Показать игроку экран «ты забанен» с причиной */
+function showBannedScreen(reason, by) {
+  const r = $('bannedReason'); if (r) r.textContent = reason || 'без причины';
+  const b = $('bannedBy'); if (b) b.textContent = by ? `Забанил: ${by}` : '';
+  Modal.open('bannedModal');
+}
+
 /* Человекочитаемый «последний раз заходил» */
 function lastSeenText(ts, online) {
   if (online) return 'онлайн сейчас';
@@ -210,13 +228,17 @@ const NetIdentity = {
         state.user.verified = !!res.verified;
         const hadRole = state.user.role || null;
         state.user.role = res.role || null;
+        state.user.status = res.status || null;
+        const wasBanned = !!state.user.banned;
         state.user.banned = !!res.banned;
+        state.user.banReason = res.banReason || null;
+        if (res.unreadDms != null && typeof DmInbox !== 'undefined') DmInbox.setUnread(res.unreadDms);
         if (res.email && !state.user.email) state.user.email = res.email;
         if (res.nick && res.nick !== state.user.nick) state.user.nick = res.nick; // ник — как на сервере (уникальность)
         if (state.user.role === 'admin' && hadRole !== 'admin') {
           Toast.gold('🛡 Владелец назначил тебя АДМИНИСТРАТОРОМ проекта! Значок виден в чате и профиле.', 8000);
         }
-        if (state.user.banned) Toast.error('⛔ Твой аккаунт заблокирован администрацией: чат и смена ника недоступны.', 8000);
+        if (state.user.banned && !wasBanned) showBannedScreen(res.banReason, res.banBy);
         if (!hadTag && state.user.tag) {
           // Первая выдача ID после входа в обновлённую версию
           Toast.gold(`🆔 Твоему аккаунту присвоен уникальный ID: <b class="font-mono">${escapeHtml(state.user.tag)}</b>. По нему тебя найдут друзья в «💬 Сообществе»!`, 9000);
@@ -469,6 +491,18 @@ const Community = {
     Modal.close('communityModal');
   },
 
+  /* Развернуть чат на весь экран / свернуть обратно */
+  toggleExpand() {
+    const card = $('communityCard');
+    if (!card) return;
+    const on = card.classList.toggle('modal-card-expanded');
+    const btn = $('commExpandBtn');
+    if (btn) btn.textContent = on ? '⤡ Свернуть' : '⛶ Развернуть';
+    audio.playTick();
+    const list = $('commChatList');
+    if (list) list.scrollTop = list.scrollHeight;
+  },
+
   /* Мой уникальный ID во всех местах */
   renderMyId() {
     const hasUser = !!state.user;
@@ -520,7 +554,7 @@ const Community = {
     if (box) box.innerHTML = `
       <div class="net-row">
         <div class="min-w-0">
-          <div class="text-[10.5px] font-bold text-slate-200 truncate flex items-center gap-1">${escapeHtml(p.nick)}${p.verified ? verifiedBadgeHtml() : ''}${p.role === 'admin' ? staffChipHtml() : ''}</div>
+          <div class="text-[10.5px] font-bold text-slate-200 truncate flex items-center gap-1">${escapeHtml(p.nick)}${p.verified ? verifiedBadgeHtml() : ''}${p.role === 'admin' ? staffChipHtml() : ''}${p.status ? statusChipHtml(p.status) : ''}</div>
           <div class="text-[10px] text-slate-400 truncate">ID <span class="font-mono text-amber-300">${escapeHtml(p.tag || '—')}</span>${p.online ? ' · <span class="text-emerald-400">● онлайн</span>' : (seenText ? ' · ' + seenText : '')}</div>
         </div>
         <button onclick="Community.giftToFound()" class="net-btn">🎁 Подарить</button>
@@ -557,6 +591,7 @@ const Community = {
       if (cnt) cnt.textContent = fmt(ServerAPI._playersCount || 0);
     }
     const msgs = data.messages || [];
+    if (typeof ChatNotify !== 'undefined') ChatNotify.observe(msgs);
     const signature = msgs.length + '|' + (msgs.length ? msgs[msgs.length - 1].id : 'x') + '|' + msgs.map(m => (m.verified ? 1 : 0)).join('');
     if (signature === this._lastSignature && !force) return; // ничего нового — не мельтешим
     this._lastSignature = signature;
@@ -583,7 +618,7 @@ const Community = {
           : 'bg-slate-900/70 border-slate-800/70';
       const head = isAdmin
         ? `<span class="font-bold text-amber-300">${escapeHtml(m.nick)}</span> ${adminChipHtml()}`
-        : `<span class="font-bold ${isMe ? 'text-cyan-300' : 'text-slate-200'}">${escapeHtml(m.nick)}</span>${m.verified ? ' ' + verifiedBadgeHtml() : ''}${m.role === 'admin' ? ' ' + staffChipHtml() : ''}${m.tag ? ` <span class="font-mono text-[8.5px] text-slate-500">${escapeHtml(m.tag)}</span>` : ''}`;
+        : `<span class="font-bold ${isMe ? 'text-cyan-300' : 'text-slate-200'}">${escapeHtml(m.nick)}</span>${m.verified ? ' ' + verifiedBadgeHtml() : ''}${m.role === 'admin' ? ' ' + staffChipHtml() : ''}${m.status ? ' ' + statusChipHtml(m.status) : ''}${m.tag ? ` <span class="font-mono text-[8.5px] text-slate-500">${escapeHtml(m.tag)}</span>` : ''}`;
       const del = canModerate && m.id
         ? `<button onclick="Community.adminDeleteMessage('${m.id}')" title="Удалить сообщение (админ)" class="text-slate-500 hover:text-rose-400 transition text-[10px] leading-none flex-shrink-0">✕</button>`
         : '';
@@ -605,7 +640,7 @@ const Community = {
     if (!state.user) { Toast.error('Создай профиль, чтобы писать в чат'); return; }
     if (!(await this._needOnline())) return;
     const { data } = await ServerAPI.req('POST', '/api/chat', { uid: state.user.id, nick: state.user.nick, text });
-    if (!data.ok) { if (data.banned) state.user.banned = true; Toast.error(data.error || 'Сообщение не отправлено'); return; }
+    if (!data.ok) { if (data.banned) { state.user.banned = true; showBannedScreen(data.reason, data.by); return; } Toast.error(data.error || 'Сообщение не отправлено'); return; }
     if (input) input.value = '';
     audio.playCoin();
     this._lastSignature = ''; // принудительно перерисуем
@@ -1072,10 +1107,13 @@ function renderServerStatus() {
     mini.className = 'text-[8px] font-black px-1.5 py-0.5 rounded uppercase border flex-shrink-0 ' + chipCls;
   }
   // Блоки «сервер спит» с кнопкой пробуждения и почтой поддержки
+  const autoWaking = typeof AutoWake !== 'undefined' && AutoWake._timer;
   ['commOfflineHelp', 'netOfflineHelp'].forEach(id => {
     const box = $(id);
-    if (box) box.classList.toggle('hidden', online);
+    if (box) box.classList.toggle('hidden', online || !!autoWaking);
   });
+  const aw = $('autoWakeHint');
+  if (aw) aw.classList.toggle('hidden', online || !autoWaking);
   CloudSave._renderStatus();
 }
 
@@ -1218,7 +1256,9 @@ const AuthGate = {
   async refreshNetworkState(pingIt) {
     const online = pingIt ? await ServerAPI.ping(true) : ServerAPI.isOnline();
     const off = $('authOffline');
-    if (off) off.classList.toggle('hidden', !!online);
+    const autoWaking = typeof AutoWake !== 'undefined' && AutoWake._timer;
+    if (off) off.classList.toggle('hidden', !!online || !!autoWaking);
+    if (!online && !autoWaking && AutoWake.enabled()) AutoWake.start();
     renderServerStatus();
     return online;
   },
@@ -1473,22 +1513,28 @@ function adminRenderPlayers() {
     if (has('role')) btns.push(p.role === 'admin'
       ? `<button onclick="adminSetRole('${p.uid}', null)" class="adm-act" style="background:linear-gradient(135deg,#0ea5e9,#0369a1)" title="Снять права администратора">🛡 снять</button>`
       : `<button onclick="adminSetRole('${p.uid}', 'admin')" class="adm-act" style="background:linear-gradient(135deg,#38bdf8,#6366f1)" title="Назначить администратором (значок 🛡 АДМИН)">🛡 админ</button>`);
+    if (has('dm')) btns.push(`<button onclick="adminOpenDm('${p.uid}', '${escapeHtml(p.nick).replace(/'/g, '')}')" class="adm-act" style="background:linear-gradient(135deg,#0ea5e9,#2563eb)" title="Написать игроку личное сообщение">✉ написать</button>`);
     if (has('ban')) btns.push(p.banned
       ? `<button onclick="adminToggleBan('${p.uid}', false)" class="adm-act" style="background:linear-gradient(135deg,#22c55e,#15803d)" title="Разбанить">✅ разбан</button>`
-      : `<button onclick="adminToggleBan('${p.uid}', true)" class="adm-act" style="background:linear-gradient(135deg,#f43f5e,#be123c)" title="Забанить (чат и смена ника закрыты)">⛔ бан</button>`);
+      : `<button onclick="adminOpenBan('${p.uid}', '${escapeHtml(p.nick).replace(/'/g, '')}')" class="adm-act" style="background:linear-gradient(135deg,#f43f5e,#be123c)" title="Забанить (с причиной; чат, смена ника и новые аккаунты с этого IP закрыты)">⛔ бан</button>`);
+    if (has('status')) btns.push(`<select onchange="adminSetStatus('${p.uid}', this.value)" class="adm-act" style="background:#1e293b;border:1px solid #334155" title="Статус игрока (плашка у ника)">
+        <option value="" ${!p.status ? 'selected' : ''}>статус: нет</option>
+        ${Object.keys(PLAYER_STATUS_META).map(k => `<option value="${k}" ${p.status === k ? 'selected' : ''}>${PLAYER_STATUS_META[k].label}</option>`).join('')}
+      </select>`);
     if (has('delete')) btns.push(`<button onclick="adminDeleteAccount('${p.uid}', '${escapeHtml(p.nick).replace(/'/g, '')}')" class="adm-act" style="background:linear-gradient(135deg,#7f1d1d,#450a0a)" title="Удалить аккаунт навсегда">🗑 удалить</button>`);
 
     const status = p.online
       ? '<span class="text-emerald-400 font-bold">● онлайн</span>'
       : `<span class="text-slate-500">○ ${escapeHtml(lastSeenText(p.lastSeen, false))}</span>`;
-    const chips = `${p.verified ? verifiedBadgeHtml() : ''}${p.role === 'admin' ? staffChipHtml() : ''}${p.banned ? '<span class="text-[8px] font-black px-1 rounded bg-rose-500/20 border border-rose-500/50 text-rose-300">⛔ БАН</span>' : ''}`;
+    const chips = `${p.verified ? verifiedBadgeHtml() : ''}${p.role === 'admin' ? staffChipHtml() : ''}${p.status ? statusChipHtml(p.status) : ''}${p.banned ? `<span class="text-[8px] font-black px-1 rounded bg-rose-500/20 border border-rose-500/50 text-rose-300" title="${escapeHtml(p.banReason || 'без причины')}">⛔ БАН</span>` : ''}`;
+    const banInfo = p.banned ? `<div class="text-[8.5px] text-rose-300/80 truncate">Причина: ${escapeHtml(p.banReason || 'без причины')}${p.banBy ? ` · забанил ${escapeHtml(p.banBy)}` : ''}</div>` : '';
     const email = has('emails') && p.email ? `<div class="text-[8.5px] text-slate-500 truncate">✉ ${escapeHtml(p.email)}</div>` : '';
     const first = p.firstSeen ? `рег. ${new Date(p.firstSeen).toLocaleDateString('ru-RU')}` : '';
     return `<div class="bg-slate-900/70 border border-slate-800 rounded-lg px-2 py-1.5 space-y-1">
-      <div class="min-w-0">
-        <div class="text-[10.5px] font-bold text-slate-200 truncate flex items-center gap-1 flex-wrap">${escapeHtml(p.nick)} ${chips}</div>
+      <div class="min-w-0 cursor-pointer hover:bg-slate-800/50 rounded -mx-1 px-1 transition" onclick="adminOpenPlayer('${p.uid}')" title="Открыть подробную карточку">
+        <div class="text-[10.5px] font-bold text-slate-200 truncate flex items-center gap-1 flex-wrap">${escapeHtml(p.nick)} ${chips}<span class="ml-auto text-slate-600 text-[9px]">›</span></div>
         <div class="text-[9px] text-slate-500 truncate">ID <span class="font-mono text-amber-300">${escapeHtml(p.tag || '—')}</span> · <span class="font-mono">${escapeHtml(p.uid)}</span></div>
-        ${email}
+        ${email}${banInfo}
         <div class="text-[9px] truncate">${status}${first ? ` <span class="text-slate-600">· ${first}</span>` : ''}</div>
       </div>
       ${btns.length ? `<div class="flex flex-wrap gap-1">${btns.join('')}</div>` : ''}
@@ -1512,15 +1558,115 @@ async function adminSetRole(uid, role) {
   adminLoadPlayers();
 }
 
-async function adminToggleBan(uid, ban) {
-  if (ban) {
-    const ok = await ConfirmDialog.ask({ icon: '⛔', title: 'Забанить игрока?', text: 'Он не сможет писать в чат и менять ник. Прогресс не удаляется — бан можно снять.', okText: 'Забанить', danger: true });
-    if (!ok) return;
-  }
-  const { data } = await ServerAPI.req('POST', '/api/admin/players/ban', { uid, banned: ban }, adminHeaders());
+let _banTarget = null;
+function adminOpenBan(uid, nick) {
+  _banTarget = { uid, nick };
+  const who = $('banReasonWho'); if (who) who.textContent = `${nick} · ${uid}`;
+  const inp = $('banReasonInput'); if (inp) inp.value = '';
+  const err = $('banReasonError'); if (err) err.classList.add('hidden');
+  Modal.open('banReasonModal');
+  setTimeout(() => { if (inp) inp.focus(); }, 80);
+}
+async function adminConfirmBan() {
+  if (!_banTarget) return;
+  const reason = (($('banReasonInput') || {}).value || '').trim();
+  const err = $('banReasonError');
+  if (!reason) { if (err) { err.textContent = 'Причина обязательна — напиши, за что бан.'; err.classList.remove('hidden'); } return; }
+  await adminToggleBan(_banTarget.uid, true, reason);
+  Modal.close('banReasonModal');
+  _banTarget = null;
+}
+async function adminToggleBan(uid, ban, reason) {
+  const { data } = await ServerAPI.req('POST', '/api/admin/players/ban', { uid, banned: ban, reason: reason || '', by: state.user ? state.user.nick : '' }, adminHeaders());
   if (!data.ok) { Toast.error(data.error || 'Сервер отклонил запрос'); return; }
-  Toast[ban ? 'error' : 'gold'](ban ? '⛔ Игрок забанен.' : '✅ Бан снят.');
+  Toast[ban ? 'error' : 'gold'](ban ? `⛔ Игрок забанен. Причина: ${escapeHtml(reason || 'без причины')}` : '✅ Бан снят.');
   adminLoadPlayers();
+  if (Modal.isOpen('adminPlayerModal')) adminOpenPlayer(uid);
+}
+
+async function adminSetStatus(uid, status) {
+  const { data } = await ServerAPI.req('POST', '/api/admin/players/status', { uid, status }, adminHeaders());
+  if (!data.ok) { Toast.error(data.error || 'Сервер отклонил запрос'); return; }
+  audio.playSecret();
+  Toast.gold(status ? `Статус ${statusLabel(status)} выдан — плашка видна у ника в чате и профиле.` : 'Статус снят.');
+  adminLoadPlayers();
+}
+
+/* ---- Личное сообщение игроку от админа/владельца ---- */
+let _dmTarget = null;
+function adminOpenDm(uid, nick) {
+  _dmTarget = { uid, nick };
+  const who = $('adminDmWho'); if (who) who.textContent = `Кому: ${nick} · ${uid}`;
+  const inp = $('adminDmInput'); if (inp) inp.value = '';
+  Modal.open('adminDmModal');
+  setTimeout(() => { if (inp) inp.focus(); }, 80);
+}
+async function adminSendDm() {
+  if (!_dmTarget) return;
+  const text = (($('adminDmInput') || {}).value || '').trim();
+  if (!text) { Toast.error('Напиши текст сообщения'); return; }
+  const { data } = await ServerAPI.req('POST', '/api/admin/players/dm', { uid: _dmTarget.uid, text, from: state.user ? state.user.nick : '' }, adminHeaders());
+  if (!data.ok) { Toast.error(data.error || 'Не отправлено'); return; }
+  Modal.close('adminDmModal');
+  audio.playCoin();
+  Toast.gold(`✉ Сообщение отправлено игроку ${escapeHtml(_dmTarget.nick)}.`);
+  _dmTarget = null;
+}
+
+/* ---- Подробная карточка игрока ---- */
+async function adminOpenPlayer(uid) {
+  const body = $('adminPlayerBody');
+  const title = $('adminPlayerTitle');
+  if (!body) return;
+  body.innerHTML = '<div class="net-empty">Загружаю…</div>';
+  Modal.open('adminPlayerModal');
+  const { data } = await ServerAPI.req('GET', `/api/admin/players/detail?uid=${encodeURIComponent(uid)}`, null, adminHeaders());
+  if (!data.ok) { body.innerHTML = `<div class="net-empty">${escapeHtml(data.error || 'Ошибка')}</div>`; return; }
+  const p = data.player, sv = data.save;
+  const has = (perm) => typeof adminHas === 'function' && adminHas(perm);
+  if (title) title.innerHTML = `👤 ${escapeHtml(p.nick)} ${p.verified ? verifiedBadgeHtml() : ''}${p.role === 'admin' ? staffChipHtml() : ''}${p.status ? statusChipHtml(p.status) : ''}`;
+  const tile = (l, v, cls = 'text-slate-200') => `<div class="stat-tile"><div class="stat-tile-label">${l}</div><div class="stat-tile-value text-xs ${cls}">${v}</div></div>`;
+  const nm = (typeof fmt === 'function') ? fmt : (x => x);
+  const actions = [];
+  if (has('dm')) actions.push(`<button onclick="adminOpenDm('${p.uid}', '${escapeHtml(p.nick).replace(/'/g, '')}')" class="py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-[11px]">✉ Написать ему</button>`);
+  if (has('ban')) actions.push(p.banned
+    ? `<button onclick="adminToggleBan('${p.uid}', false)" class="py-2 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-[11px]">✅ Разбанить</button>`
+    : `<button onclick="adminOpenBan('${p.uid}', '${escapeHtml(p.nick).replace(/'/g, '')}')" class="py-2 rounded-xl bg-rose-700 hover:bg-rose-600 text-white font-bold text-[11px]">⛔ Забанить</button>`);
+  if (has('verify')) actions.push(`<button onclick="adminToggleVerify('${p.uid}', ${!p.verified}).then(()=>adminOpenPlayer('${p.uid}'))" class="py-2 rounded-xl bg-cyan-800 hover:bg-cyan-700 text-white font-bold text-[11px]">${p.verified ? '✔ Снять галочку' : '✔ Выдать галочку'}</button>`);
+  if (has('role')) actions.push(`<button onclick="adminSetRole('${p.uid}', ${p.role === 'admin' ? 'null' : "'admin'"}).then(()=>adminOpenPlayer('${p.uid}'))" class="py-2 rounded-xl bg-indigo-700 hover:bg-indigo-600 text-white font-bold text-[11px]">${p.role === 'admin' ? '🛡 Снять админа' : '🛡 Назначить админом'}</button>`);
+  if (has('delete')) actions.push(`<button onclick="adminDeleteAccount('${p.uid}', '${escapeHtml(p.nick).replace(/'/g, '')}').then(()=>Modal.close('adminPlayerModal'))" class="py-2 rounded-xl bg-red-950 hover:bg-red-900 border border-red-800 text-red-300 font-bold text-[11px]">🗑 Удалить аккаунт</button>`);
+  const inv = sv && sv.inventory ? sv.inventory : [];
+  body.innerHTML = `
+    <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-2.5 space-y-1 text-[10px]">
+      <div>ID <span class="font-mono text-amber-300">${escapeHtml(p.tag || '—')}</span> · uid <span class="font-mono text-cyan-300">${escapeHtml(p.uid)}</span></div>
+      ${p.email !== undefined ? `<div>✉ Почта: <span class="font-mono text-slate-200">${escapeHtml(p.email || 'не привязана')}</span></div>` : ''}
+      ${p.ip !== undefined ? `<div>🌐 IP: <span class="font-mono text-slate-400">${escapeHtml(p.ip || '—')}</span></div>` : ''}
+      <div>${p.online ? '<span class="text-emerald-400 font-bold">● онлайн сейчас</span>' : `○ ${escapeHtml(lastSeenText(p.lastSeen, false))}`} · рег. ${p.firstSeen ? new Date(p.firstSeen).toLocaleDateString('ru-RU') : '—'}</div>
+      ${p.authorCode ? `<div>💜 Код автора: <span class="font-mono text-purple-300">${escapeHtml(p.authorCode)}</span></div>` : ''}
+      <div>💬 Сообщений в чате: ${p.chatMessages}</div>
+      ${p.banned ? `<div class="text-rose-300">⛔ ЗАБАНЕН · причина: <b>${escapeHtml(p.banReason || 'без причины')}</b>${p.banBy ? ` · забанил ${escapeHtml(p.banBy)}` : ''}${p.banAt ? ` · ${new Date(p.banAt).toLocaleString('ru-RU')}` : ''}</div>` : ''}
+    </div>
+    ${sv ? `<div class="grid grid-cols-2 gap-1.5">
+      ${tile('Уровень', sv.level != null ? sv.level : '—', 'text-emerald-300')}
+      ${tile('Баланс', (sv.balance != null ? nm(Math.round(sv.balance)) : '—') + ' ₽', 'text-amber-300')}
+      ${tile('Опыт', sv.xp != null ? nm(sv.xp) : '—', 'text-cyan-300')}
+      ${tile('Кейсов открыто', nm(sv.casesOpened || 0))}
+      ${tile('Апгрейдов выиграно', nm(sv.upgradesWon || 0))}
+      ${tile('Всего заработано', nm(Math.round(sv.earnedTotal || 0)) + ' ₽')}
+      ${tile('Предметов', `${sv.inventoryCount} · ${nm(sv.inventoryValue)} ₽`, 'text-fuchsia-300')}
+      ${tile('VIP / Кот', `${sv.vipActive ? '👑 VIP' : '—'} / ${sv.catFound ? '🐱' : '—'}`)}
+    </div>
+    ${sv.biggestDropName ? `<div class="text-[10px] text-slate-400">🏆 Лучший дроп: <b class="text-slate-200">${escapeHtml(sv.biggestDropName)}</b> (${nm(sv.biggestDrop || 0)} ₽)</div>` : ''}
+    <div class="text-[9px] text-slate-500">Сейв обновлён: ${new Date(sv.updatedAt).toLocaleString('ru-RU')}</div>
+    <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-2 max-h-[180px] overflow-y-auto space-y-0.5">
+      <div class="text-[9px] uppercase tracking-wider text-slate-500 font-bold mb-1">🎒 Рюкзак (${sv.inventoryCount})</div>
+      ${inv.length ? inv.map(i => `<div class="flex justify-between text-[10px]"><span class="truncate">${escapeHtml(i.icon || '')} ${escapeHtml(i.name || i.id)}</span><span class="font-mono text-amber-300 flex-shrink-0 ml-2">${nm(i.price || 0)} ₽</span></div>`).join('') : '<div class="net-empty">пусто</div>'}
+    </div>` : '<div class="net-empty">Облачного сохранения ещё нет — игрок не синхронизировался.</div>'}
+    ${p.dms && p.dms.length ? `<div class="bg-slate-950/70 border border-slate-800 rounded-xl p-2 space-y-1 max-h-[120px] overflow-y-auto">
+      <div class="text-[9px] uppercase tracking-wider text-slate-500 font-bold">✉ Последние сообщения ему</div>
+      ${p.dms.map(d => `<div class="text-[9.5px] text-slate-300"><span class="text-sky-300 font-bold">${escapeHtml(d.from)}</span> <span class="text-slate-600">${new Date(d.at).toLocaleString('ru-RU')}${d.read ? ' · прочитано' : ''}</span><br>${escapeHtml(d.text)}</div>`).join('')}
+    </div>` : ''}
+    ${actions.length ? `<div class="grid grid-cols-2 gap-1.5 pt-1">${actions.join('')}</div>` : ''}`;
 }
 
 async function adminDeleteAccount(uid, nick) {
@@ -1590,6 +1736,137 @@ async function renderAdminAuthorList() {
 }
 
 /* --------------------------------------------------------------------------
+   ЭКСПЕРИМЕНТ: АВТОПРОБУЖДЕНИЕ СЕРВЕРА
+   Вместо плашки «Включить сервер» игра сама тихо пингует сервер в фоне,
+   пока он не проснётся (как будто ты нажал кнопку сам).
+   -------------------------------------------------------------------------- */
+const AutoWake = {
+  _timer: null,
+  _started: 0,
+  enabled() { return !!(state.settings && state.settings.autoWake); },
+  start() {
+    if (!this.enabled() || this._timer) return;
+    this._started = Date.now();
+    document.body.classList.add('auto-wake-on');
+    const tick = async () => {
+      if (!this.enabled()) return this.stop();
+      const on = await ServerAPI.ping(true).catch(() => false);
+      if (on) {
+        this.stop();
+        Toast.gold('⚡ Сервер проснулся автоматически (эксперимент). Онлайн-функции активны!', 6000);
+        if (typeof Community !== 'undefined' && Modal.isOpen('communityModal')) Community.refreshChat(true);
+        if (typeof AuthGate !== 'undefined') AuthGate.refreshNetworkState(false);
+        return;
+      }
+      if (Date.now() - this._started > 4 * 60 * 1000) { this.stop(); return; } // 4 минуты — хватит
+      this._timer = setTimeout(tick, 6000);
+    };
+    this._timer = setTimeout(tick, 100);
+  },
+  stop() {
+    clearTimeout(this._timer); this._timer = null;
+    document.body.classList.remove('auto-wake-on');
+  }
+};
+
+/* --------------------------------------------------------------------------
+   ЭКСПЕРИМЕНТ: УВЕДОМЛЕНИЯ ИЗ ОБЩЕГО ЧАТА
+   Фоновый опрос чата (только когда сервер онлайн); новые чужие сообщения
+   всплывают тостом с кнопкой-переходом в сообщество.
+   -------------------------------------------------------------------------- */
+const ChatNotify = {
+  _timer: null,
+  _lastAt: 0,
+  enabled() { return !!(state.settings && state.settings.chatNotify); },
+  start() {
+    if (!this.enabled() || this._timer) return;
+    this._lastAt = Date.now(); // старые сообщения не показываем
+    this._timer = setInterval(() => this.poll(), 8000);
+  },
+  stop() { clearInterval(this._timer); this._timer = null; },
+  async poll() {
+    if (!this.enabled()) return this.stop();
+    if (!ServerAPI.isOnline() || Modal.isOpen('communityModal')) return;
+    try {
+      const { data } = await ServerAPI.req('GET', `/api/chat?limit=10&after=${this._lastAt}`, null, {}, 5000);
+      if (data.ok) this.observe(data.messages || []);
+    } catch (e) {}
+  },
+  /* Вызывается и из Community.refreshChat — чтобы не пропустить, пока окно открыто */
+  observe(msgs) {
+    if (!msgs.length) return;
+    const fresh = msgs.filter(m => m.at > this._lastAt);
+    this._lastAt = Math.max(this._lastAt, msgs[msgs.length - 1].at);
+    if (!this.enabled() || Modal.isOpen('communityModal') || !fresh.length) return;
+    const mine = state.user ? state.user.id : null;
+    const other = fresh.filter(m => m.uid !== mine);
+    if (!other.length) return;
+    const last = other[other.length - 1];
+    const more = other.length > 1 ? ` (+${other.length - 1})` : '';
+    Toast.info(`💬 <b>${escapeHtml(last.nick)}</b>${more}: ${escapeHtml(last.text.slice(0, 80))}${last.text.length > 80 ? '…' : ''} <button onclick="Community.open()" class="underline text-cyan-300 ml-1">открыть чат</button>`, 6000);
+    try { audio.playTick(); } catch (e) {}
+  }
+};
+
+/* --------------------------------------------------------------------------
+   ВХОДЯЩИЕ ОТ АДМИНИСТРАЦИИ (личные сообщения игроку)
+   -------------------------------------------------------------------------- */
+const DmInbox = {
+  _unread: 0,
+  _shownIds: new Set(),
+  setUnread(n) {
+    const prev = this._unread;
+    this._unread = n || 0;
+    this.renderDot();
+    if (this._unread > prev) this.fetchAndToast();
+  },
+  renderDot() {
+    const dot = $('dmDot');
+    if (!dot) return;
+    dot.classList.toggle('hidden', !this._unread);
+    dot.textContent = this._unread > 9 ? '9+' : this._unread;
+  },
+  async fetchAndToast() {
+    if (!state.user) return;
+    const { data } = await ServerAPI.req('GET', `/api/dms?uid=${encodeURIComponent(state.user.id)}`).catch(() => ({ data: {} }));
+    if (!data || !data.ok) return;
+    const unread = (data.dms || []).filter(d => !d.read && !this._shownIds.has(d.id));
+    if (!unread.length) return;
+    const d = unread[unread.length - 1];
+    unread.forEach(x => this._shownIds.add(x.id));
+    audio.playSecret();
+    Toast.gold(`✉ Сообщение от <b>${escapeHtml(d.from)}</b>${d.fromRole === 'owner' ? ' 👑' : ' 🛡'}: ${escapeHtml(d.text.slice(0, 100))}${d.text.length > 100 ? '…' : ''} <button onclick="DmInbox.open()" class="underline text-amber-200 ml-1">открыть</button>`, 10000);
+  },
+  async open() {
+    if (!state.user) { Toast.info('Сначала создай профиль'); return; }
+    const list = $('dmInboxList');
+    if (list) list.innerHTML = '<div class="net-empty">Загружаю…</div>';
+    Modal.open('dmInboxModal');
+    if (!(await ServerAPI.ping())) { if (list) list.innerHTML = '<div class="net-empty">Сервер оффлайн.</div>'; return; }
+    const { data } = await ServerAPI.req('GET', `/api/dms?uid=${encodeURIComponent(state.user.id)}`);
+    if (!data.ok) return;
+    const dms = (data.dms || []).slice().reverse();
+    if (list) list.innerHTML = dms.length ? dms.map(d => `<div class="border rounded-lg px-2.5 py-2 ${d.read ? 'bg-slate-900/70 border-slate-800' : 'bg-sky-950/40 border-sky-700/60'}">
+        <div class="flex items-center justify-between gap-2 text-[9.5px]"><span class="font-bold text-sky-300">${escapeHtml(d.from)} ${d.fromRole === 'owner' ? '👑' : staffChipHtml()}</span><span class="text-slate-500 font-mono text-[8.5px]">${new Date(d.at).toLocaleString('ru-RU')}</span></div>
+        <div class="text-[11px] text-slate-200 mt-0.5 break-words">${escapeHtml(d.text)}</div>
+      </div>`).join('') : '<div class="net-empty">Сообщений от администрации пока нет.</div>';
+    if (data.unread) {
+      await ServerAPI.req('POST', '/api/dms/read', { uid: state.user.id }).catch(() => {});
+      this._unread = 0; this.renderDot();
+    }
+  },
+  /* Фоновая проверка раз в минуту (когда сервер онлайн) */
+  startPolling() {
+    if (this._timer) return;
+    this._timer = setInterval(async () => {
+      if (!state.user || !ServerAPI.isOnline()) return;
+      const { data } = await ServerAPI.req('GET', `/api/dms?uid=${encodeURIComponent(state.user.id)}`, null, {}, 5000).catch(() => ({ data: {} }));
+      if (data && data.ok) this.setUnread(data.unread);
+    }, 60000);
+  }
+};
+
+/* --------------------------------------------------------------------------
    ЗАГРУЗКА МОДУЛЯ ПРИ СТАРТЕ ИГРЫ
    -------------------------------------------------------------------------- */
 function NetBoot() {
@@ -1604,6 +1881,10 @@ function NetBoot() {
 
   ServerAPI.ping(true).then(async on => {
     renderServerStatus();
+    // Эксперименты
+    if (!on && AutoWake.enabled()) AutoWake.start();
+    ChatNotify.start();
+    DmInbox.startPolling();
     // Уникальный ID запрашиваем ВСЕГДА (даже если сейчас оффлайн): sync() сам
     // повторит попытку, как только сервер оживёт. Без этого ID не выдавался,
     // если при загрузке страницы бесплатный Render спал.

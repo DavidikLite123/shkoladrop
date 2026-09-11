@@ -41,7 +41,6 @@ const state = {
   profileTab: 'profile',
   rigReady: false,
   adminRole: null, // 'owner' | 'admin' | null — роль, с которой открыта админка
-  betaArchiveOpen: false,
   // Вход по e-mail (AuthGate): сервер выдал uid/ID — забирает их регистрация
   pendingAuthUid: null,
   pendingAuthEmail: null,
@@ -883,10 +882,9 @@ function chanceToOne(pct) {
   return `1 из ${n >= 100 ? Math.round(n).toLocaleString('ru-RU') : n.toFixed(1)}`;
 }
 
-/* Список кейсов с учётом тестовой ветки 3.6: бета-кейсы видны только в бете */
+/* Список кейсов (бета-ветка 3.6 удалена — бета-кейсы больше не показываются) */
 function activeCasesList() {
-  const beta = typeof BetaMode !== 'undefined' && BetaMode.isActive();
-  return CASES_LIST.filter(c => !c.beta || beta);
+  return CASES_LIST.filter(c => !c.beta);
 }
 
 /* Карточка кейса на витрине */
@@ -911,14 +909,9 @@ function renderCasesUI() {
   const grid = $('casesGrid');
   if (!grid) return;
 
-  const betaActive = typeof BetaMode !== 'undefined' && BetaMode.isActive();
   const allCases = activeCasesList();
 
-  // Панель «Лаборатория 3.6 — в разработке» видна только в бете
-  const devPanel = $('betaDevPanel');
-  if (devPanel) devPanel.classList.toggle('hidden', !betaActive);
-
-  $('currentCaseTitle').textContent = `${state.selectedCase.beta ? '🧪 3.6 · ' : (state.selectedCase.season === 3 ? 'Сезон 3 · ' : '')}Кейс: ${state.selectedCase.name}`;
+  $('currentCaseTitle').textContent = `${state.selectedCase.season === 3 ? 'Сезон 3 · ' : ''}Кейс: ${state.selectedCase.name}`;
   const selectedPrice = casePrice(state.selectedCase);
   $('currentCasePrice').textContent = moneyText(selectedPrice, true);
   $('currentCasePrice').title = moneyText(selectedPrice, false);
@@ -973,33 +966,7 @@ function renderCasesUI() {
       </div>`;
   }
 
-  // В бете на вид «Все»: сначала бета-кейсы, стандартные сворачиваются в «Архив 3.5»
-  let archiveCases = [];
-  if (betaActive && state.caseFilter === 'all') {
-    archiveCases = visibleCases.filter(c => !c.beta);
-    visibleCases = visibleCases.filter(c => c.beta);
-  }
-
   visibleCases.forEach(c => grid.appendChild(buildCaseCard(c)));
-
-  if (archiveCases.length) {
-    const wrap = document.createElement('div');
-    wrap.className = 'beta-archive col-span-2';
-    const opened = !!state.betaArchiveOpen;
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'beta-archive-btn';
-    btn.innerHTML = `📦 Архив стабильной ветки ${APP_VERSION} · ${archiveCases.length} кейсов <span>${opened ? '▴ свернуть' : '▾ показать'}</span>`;
-    btn.onclick = toggleBetaArchive;
-    wrap.appendChild(btn);
-    if (opened) {
-      const inner = document.createElement('div');
-      inner.className = 'beta-archive-grid';
-      archiveCases.forEach(c => inner.appendChild(buildCaseCard(c)));
-      wrap.appendChild(inner);
-    }
-    grid.appendChild(wrap);
-  }
 
   const secret = SECRET_CASE;
   const progress = clamp((state.balance / secret.price) * 100, 0, 100);
@@ -2114,85 +2081,6 @@ function redeemPromo() {
 }
 
 /* --------------------------------------------------------------------------
-   ЗАКРЫТЫЙ БЕТА-ТЕСТ (доступ по скрытому коду)
-   Поле кода живёт в настройках — «Лаборатория / Бета-тестирование», тумблер
-   3.6 Beta и вся механика тестовой ветки — js/betaManager.js.
-   -------------------------------------------------------------------------- */
-function redeemBetaCode(inputId = 'betaLabCodeInput') {
-  const input = $(inputId);
-  const raw = ((input && input.value) || '').replace(/\s+/g, '');
-  if (!raw) {
-    Toast.error('Введи код доступа');
-    return;
-  }
-  if (state.stats.betaTester) {
-    Toast.info('Бета-доступ уже активирован 🧪 — теперь включай ветку 3.6 Beta кнопкой выше.');
-    if (input) input.value = '';
-    if (typeof BetaMode !== 'undefined') BetaMode.renderLab();
-    return;
-  }
-
-  // Код в открытом виде в игре не хранится — сравниваем только хеши
-  if (betaCodeHash(raw) !== BETA_CODE_HASH) {
-    if (input) input.value = '';
-    audio.init();
-    audio.playLoss();
-    Toast.error('Неверный код. Доступ к закрытому бета-тесту выдаёт только автор проекта.');
-    return;
-  }
-
-  state.stats.betaTester = true;
-  state.stats.betaActivatedAt = Date.now();
-  if (!state.stats.unlockedTitles.includes(BETA_TITLE)) {
-    state.stats.unlockedTitles.push(BETA_TITLE);
-  }
-
-  audio.init();
-  audio.playSecret();
-  Fx.secretRain();
-  Fx.burst(140, ['#22d3ee', '#0ea5e9', '#fbbf24']);
-  addMoney(BETA_REWARD.money, { silent: true, countEarned: true });
-  addXp(BETA_REWARD.xp, { silent: true });
-
-  Toast.gold(`🧪 ДОСТУП К ЗАКРЫТОМУ БЕТА-ТЕСТУ АКТИВИРОВАН! +${fmt(BETA_REWARD.money)} ₽, +${BETA_REWARD.xp} XP и титул «${BETA_TITLE}». Теперь жми «Включить 3.6 Beta»!`, 9000);
-
-  if (input) input.value = '';
-  checkAchievements();
-  if (typeof BetaMode !== 'undefined') BetaMode.renderLab();
-  uiUpdate();
-  persist(true);
-}
-
-function renderPromoList() {
-  const box = $('promoList');
-  if (!box) return;
-  if (!state.stats.promosUsed.length) {
-    const vipHint = state.stats.vipActive
-      ? '<br><span class="text-amber-400">👑 VIP-статус активен — налог миллионера отключён навсегда!</span>'
-      : `<br><span class="text-fuchsia-400">VIP за ${VIP_PRICE_RUB}₽ отключает налог миллионера навсегда</span>`;
-    box.innerHTML = `<span class="text-[10px] text-slate-500">Пока ни один код не активирован. Подсказка: следи за видео David Lite 🎬<br><span class="text-fuchsia-400">Коды обновления 3.0.2: NEWUPDATE2026, GORABOGDAN5G</span>${vipHint}</span>`;
-    return;
-  }
-  box.innerHTML = state.stats.promosUsed.map(code => {
-    const isVip = code.startsWith('VIP-') && VIP_CODES.includes(code);
-    if (isVip) {
-      return `<span class="text-[9px] px-2 py-0.5 rounded-full bg-amber-950/70 border border-amber-600/60 text-amber-300 font-mono" title="VIP активирован навечно">👑 ${escapeHtml(code)} ✓ · ВЕЧНЫЙ VIP</span>`;
-    }
-    const p = PROMO_CODES[code];
-    let rewardLabel = '';
-    if (p) {
-      if (p.item) {
-        const it = ITEMS_BY_ID[p.item];
-        rewardLabel = ' · ' + (it ? it.name : 'предмет');
-      } else if (p.money) {
-        rewardLabel = ' · ' + fmt(p.money) + '₽';
-      }
-    }
-    return `<span class="text-[9px] px-2 py-0.5 rounded-full bg-emerald-950/60 border border-emerald-800 text-emerald-300 font-mono">${escapeHtml(code)} ✓${rewardLabel}</span>`;
-  }).join('');
-}
-
-/* --------------------------------------------------------------------------
    ПРОФИЛЬ
    -------------------------------------------------------------------------- */
 function openProfileModal() {
@@ -2225,7 +2113,7 @@ function selectRegAvatar(emoji) {
   audio.playTick();
 }
 
-function openExtrasModal() { updateVipCardVisibility(); if (typeof BetaMode !== 'undefined') BetaMode.renderLab(); Modal.open('extrasModal'); }
+function openExtrasModal() { updateVipCardVisibility(); if (typeof DmInbox !== 'undefined') DmInbox.renderDot(); Modal.open('extrasModal'); }
 
 function updateVipCardVisibility() {
   const vipStatusCard = $('vipStatusCard');
@@ -2265,8 +2153,6 @@ function submitRegistration() {
   state.pendingAuthTag = null;
   state.pendingAuthVerified = false;
 
-  // Если профиль создаётся при включённой 3.6 Beta — ник сразу становится «Тест»
-  if (typeof BetaMode !== 'undefined') BetaMode.onUserCreated();
 
   addMoney(2500, { silent: true, countEarned: true });
   Fx.burst(100);
@@ -2400,6 +2286,12 @@ function renderProfile() {
     vbEl.classList.toggle('hidden', !(state.user && state.user.verified));
     if (state.user && state.user.verified && typeof verifiedBadgeHtml === 'function') vbEl.innerHTML = verifiedBadgeHtml();
   }
+  const sbEl = $('profileStatusBadge');
+  if (sbEl) {
+    const st = state.user && state.user.status;
+    sbEl.classList.toggle('hidden', !st);
+    if (st && typeof statusChipHtml === 'function') sbEl.innerHTML = statusChipHtml(st);
+  }
   const rbEl = $('profileRoleBadge');
   if (rbEl) {
     const isStaff = !!(state.user && state.user.role === 'admin');
@@ -2430,8 +2322,11 @@ function renderProfile() {
   $('statCatFound').textContent = state.stats.catFound ? '🏆 НАЙДЕН' : 'не найден';
   const vipEl = $('statVipStatus');
   if (vipEl) vipEl.textContent = state.stats.vipActive ? '👑 АКТИВЕН' : 'не активен';
-  const betaEl = $('statBetaStatus');
-  if (betaEl) betaEl.textContent = state.stats.betaMode ? '🧪 3.6 ВКЛ' : (state.stats.betaTester ? 'доступ ✔' : 'нет доступа');
+  const stEl = $('statPlayerStatus');
+  if (stEl) {
+    const st = state.user && state.user.status;
+    stEl.textContent = st && typeof statusLabel === 'function' ? statusLabel(st) : (state.user && state.user.role === 'admin' ? '🛡 АДМИН' : 'обычный');
+  }
 
   if (state.profileTab === 'ach') renderAchievements();
 }
@@ -2465,9 +2360,9 @@ function applySettingsToUI() {
   applyQualityToUI();
   $('settingsVersion').textContent = `v${APP_VERSION}`;
   $('aboutVersion').textContent = APP_VERSION;
-  // Бейдж шапки: v3.5 Stable или неоновый v3.6 BETA TESTING (js/betaManager.js)
-  if (typeof BetaMode !== 'undefined') BetaMode.renderBadge();
-  else $('versionBadge').textContent = `v${APP_VERSION} Stable`;
+  $('versionBadge').textContent = `v${APP_VERSION} Stable`;
+  setTogglePill($('setAutoWakeToggle'), !!s.autoWake);
+  setTogglePill($('setChatNotifyToggle'), !!s.chatNotify);
 }
 
 function saveSettings() {
@@ -2494,6 +2389,33 @@ function toggleFastSetting() {
   applySettingsToUI();
   saveSettings();
   Toast.info(state.settings.fastOpen ? 'Быстрый режим: кейсы открываются без анимации' : 'Обычный режим: с анимацией рулетки');
+}
+
+/* ---- Эксперименты ---- */
+function toggleAutoWakeSetting() {
+  state.settings.autoWake = !state.settings.autoWake;
+  applySettingsToUI();
+  saveSettings();
+  if (state.settings.autoWake) {
+    Toast.info('⚡ Эксперимент включён: игра будет сама будить сервер при запуске. Если что-то сломается — выключи.', 6000);
+    if (typeof AutoWake !== 'undefined') AutoWake.start();
+  } else {
+    Toast.info('Автопробуждение выключено.');
+    if (typeof AutoWake !== 'undefined') AutoWake.stop();
+  }
+}
+
+function toggleChatNotifySetting() {
+  state.settings.chatNotify = !state.settings.chatNotify;
+  applySettingsToUI();
+  saveSettings();
+  if (state.settings.chatNotify) {
+    Toast.info('🔔 Уведомления из общего чата включены — будут всплывать, пока сервер онлайн.', 6000);
+    if (typeof ChatNotify !== 'undefined') ChatNotify.start();
+  } else {
+    Toast.info('Уведомления из чата выключены.');
+    if (typeof ChatNotify !== 'undefined') ChatNotify.stop();
+  }
 }
 
 function toggleMotionSetting() {
@@ -2891,6 +2813,16 @@ function applyAdminPermissions() {
 
 function closeAdminModal() { Modal.close('adminModal'); }
 
+/* Развернуть любое модальное окно на весь экран (и обратно) */
+function toggleModalExpand(id) {
+  const modal = $(id);
+  if (!modal) return;
+  const card = modal.querySelector('.modal-card');
+  if (!card) return;
+  card.classList.toggle('modal-card-expanded');
+  audio.playTick();
+}
+
 /* Выход из админки: роль сбрасывается, панель снова закрыта */
 function adminLogout() {
   state.adminRole = null;
@@ -3014,7 +2946,7 @@ function bindGlobalEvents() {
   window.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
       ['settingsModal', 'profileModal', 'authorModal', 'termsModal', 'cookieModal', 'cookiePolicyModal',
-        'caseOddsModal', 'dailyModal', 'multiResultModal', 'confirmModal', 'communityModal', 'netplayModal', 'extrasModal', 'whatsNewModal', 'nickChangeModal', 'adminModal', 'adminCodeModal'].forEach(id => {
+        'caseOddsModal', 'dailyModal', 'multiResultModal', 'confirmModal', 'communityModal', 'netplayModal', 'extrasModal', 'whatsNewModal', 'nickChangeModal', 'adminModal', 'adminCodeModal', 'adminPlayerModal', 'banReasonModal', 'adminDmModal', 'dmInboxModal', 'bannedModal'].forEach(id => {
           if (Modal.isOpen(id)) Modal.close(id);
         });
       if (Modal.isOpen('itemModal')) closeItemModal();
@@ -3078,8 +3010,13 @@ function initGame() {
   startIdleTicker();
   checkAchievements();
 
-  // Лаборатория 3.6 Beta: восстановить состояние тестовой ветки (ник «Тест», бейдж, бета-кейсы)
-  if (typeof BetaMode !== 'undefined') BetaMode.onBoot();
+  // Если сохранение застало игрока в удалённой бета-ветке 3.6 — вернуть настоящий ник
+  if (state.stats && state.stats.betaMode) {
+    state.stats.betaMode = false;
+    if (state.user && state.stats.betaSavedNick) state.user.nick = state.stats.betaSavedNick;
+    state.stats.betaSavedNick = '';
+    persist(true);
+  }
 
   // Онлайн-функции: спонсорство, подарки, трейдинг (js/netplay.js)
   if (typeof NetBoot === 'function') NetBoot();

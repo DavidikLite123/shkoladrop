@@ -39,7 +39,7 @@ const REPO_ROOT = path.resolve(__dirname, '..');
 const REGISTRY_FILE = process.env.SHKOLA_REGISTRY_FILE || path.join(REPO_ROOT, 'author-codes.json'); // список кодов авторов (в GitHub)
 const DATA_DIR = process.env.SHKOLA_DATA_DIR || path.join(__dirname, 'data');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
-const SERVER_VERSION = '1.3.0'; // +роли админки (owner/admin), бан, удаление аккаунтов, смена ника, онлайн
+const SERVER_VERSION = '1.4.0'; // +роли админки (owner/admin), бан, удаление аккаунтов, смена ника, онлайн
 const MAX_BODY = 512 * 1024; // 512 КБ на запрос
 const MAX_ITEM_PRICE = 100000000000; // защита от абсурдных предметов (100 млрд)
 const AUTH_CODE_TTL = 10 * 60 * 1000;  // код из «письма» живёт 10 минут
@@ -49,7 +49,9 @@ const AUTH_CODE_TRIES = 6;             // попыток на один код
 /* Всё хранится в одном JSON-файле server/data/db.json.
    Структура — простая и чинится руками при необходимости. */
 const dbEmpty = () => ({
-  players: {},      // uid -> { uid, nick, tag, verified, role, banned, firstSeen, lastSeen }
+  players: {},      // uid -> { uid, nick, tag, verified, role, banned, banReason, banBy, banAt, status, ip, firstSeen, lastSeen }
+  bannedIps: {},    // ip -> { reason, by, at, uid }  — бан по IP: с этого адреса нельзя зарегистрироваться
+  dms: [],          // { id, toUid, from, fromRole, text, at, read } — личные сообщения от администрации
   accounts: {},     // email -> { email, salt, passHash, uid, code, codeExp, codeTries, createdAt, verifiedAt }
   supporters: {},   // uid игрока -> код автора, который он ввёл
   earnings: {},     // код автора -> { earned, withdrawn }
@@ -202,6 +204,18 @@ function adminRole(req) {
 function isAdmin(req) { return adminRole(req) !== null; }
 function isOwner(req) { return adminRole(req) === 'owner'; }
 function isOnline(p) { return !!(p && p.lastSeen && Date.now() - p.lastSeen < ONLINE_WINDOW); }
+function clientIp(req) {
+  const xf = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+  return xf || (req.socket && req.socket.remoteAddress) || '';
+}
+function ipBan(req) { const ip = clientIp(req); return ip && db.bannedIps && db.bannedIps[ip] ? Object.assign({ ip }, db.bannedIps[ip]) : null; }
+const PLAYER_STATUSES = ['scam', 'spam', 'test', 'admin', 'owner', 'vip', 'youtuber', 'legend'];
+/* Единый ответ «ты забанен» */
+function banPayload(p, ipb) {
+  const src = p && p.banned ? p : ipb;
+  return { ok: false, banned: true, reason: (src && src.reason) || (p && p.banReason) || 'без причины', by: (src && src.by) || (p && p.banBy) || 'администрация', at: (src && src.at) || (p && p.banAt) || 0,
+    error: `Аккаунт заблокирован. Причина: ${(src && src.reason) || (p && p.banReason) || 'без причины'}` };
+}
 function accountEmailOf(uidValue) {
   const acc = Object.values(db.accounts || {}).find(a => a.uid === uidValue);
   return acc ? acc.email : null;
@@ -246,7 +260,7 @@ function genPlayerTag() {
   return tag;
 }
 
-function upsertPlayer(uidValue, nick) {
+function upsertPlayer(uidValue, nick, ip) {
   if (!uidValue) return null;
   let p = db.players[uidValue];
   const isNew = !p;
@@ -254,10 +268,12 @@ function upsertPlayer(uidValue, nick) {
   if (typeof p.verified !== 'boolean') p.verified = false; // старые записи
   if (typeof p.banned !== 'boolean') p.banned = false;
   if (!('role' in p)) p.role = null;
+  if (!('status' in p)) p.status = null;
   // Ник обновляем, только если он не занят другим игроком (уникальность ников)
   if (nick && !nickTakenBy(nick, uidValue)) p.nick = nick;
   if (!p.tag) p.tag = genPlayerTag(); // автовыдача уникального ID при входе в обновлённую версию
   p.lastSeen = Date.now();
+  if (ip) p.ip = ip;
   db.players[uidValue] = p;
   return p;
 }
@@ -310,13 +326,32 @@ const routes = {
     const pUid = cleanStr(body.uid, 80);
     const nick = cleanStr(body.nick, 24);
     if (!pUid) return send(res, 400, { ok: false, error: 'нет uid' });
-    const p = upsertPlayer(pUid, nick);
+    const p = upsertPlayer(pUid, nick, clientIp(req));
     dbSave();
+    const ipb = ipBan(req);
+    const banned = !!(p && p.banned) || !!ipb;
     send(res, 200, {
       ok: true, nick: p ? p.nick : nick, tag: p ? p.tag : null,
-      verified: !!(p && p.verified), role: (p && p.role) || null, banned: !!(p && p.banned),
+      verified: !!(p && p.verified), role: (p && p.role) || null, status: (p && p.status) || null,
+      banned, banReason: banned ? ((p && p.banned && p.banReason) || (ipb && ipb.reason) || 'без причины') : null,
+      banBy: banned ? ((p && p.banned && p.banBy) || (ipb && ipb.by) || null) : null,
+      unreadDms: db.dms.filter(d => d.toUid === pUid && !d.read).length,
       email: accountEmailOf(pUid)
     });
+  },
+
+  /* Личные сообщения от администрации игроку */
+  'GET /api/dms': (req, res, body, url) => {
+    const pUid = cleanStr(url.searchParams.get('uid'), 80);
+    const list = db.dms.filter(d => d.toUid === pUid).slice(-50);
+    send(res, 200, { ok: true, dms: list, unread: list.filter(d => !d.read).length });
+  },
+  'POST /api/dms/read': async (req, res, body) => {
+    const pUid = cleanStr(body.uid, 80);
+    let n = 0;
+    db.dms.forEach(d => { if (d.toUid === pUid && !d.read) { d.read = true; n++; } });
+    if (n) dbSave();
+    send(res, 200, { ok: true, marked: n });
   },
 
   /* Смена ника БЕЗ создания нового аккаунта: uid, ID, почта и прогресс остаются.
@@ -328,7 +363,7 @@ const routes = {
     if (nick.length < 2) return send(res, 400, { ok: false, error: 'Ник — минимум 2 символа' });
     const p = db.players[pUid];
     if (!p) return send(res, 404, { ok: false, error: 'аккаунт не найден на сервере' });
-    if (p.banned) return send(res, 403, { ok: false, error: 'аккаунт заблокирован' });
+    if (p.banned) return send(res, 403, banPayload(p, null));
     const taken = nickTakenBy(nick, pUid);
     if (taken) return send(res, 409, { ok: false, error: `Ник «${nick}» уже занят другим игроком — придумай другой` });
     const old = p.nick;
@@ -357,6 +392,9 @@ const routes = {
 
     let acc = db.accounts[email];
     const isNew = !acc;
+    const ipb = ipBan(req);
+    if (isNew && ipb) return send(res, 403, banPayload(null, ipb));
+    if (acc && db.players[acc.uid] && db.players[acc.uid].banned) return send(res, 403, banPayload(db.players[acc.uid], null));
     if (acc) {
       if (acc.passHash !== hashPassword(password, acc.salt)) {
         return send(res, 403, { ok: false, mode: 'login', error: 'Неверный пароль. Если это твоя почта — проверь пароль и попробуй ещё раз.' });
@@ -372,7 +410,7 @@ const routes = {
         return send(res, 409, { ok: false, mode: 'register', error: `Ник «${nickIn}» уже занят — выбери другой` });
       }
       // Регистрация: привязываем почту к текущему игровому uid (или создаём игрока)
-      const p = upsertPlayer(uidIn || uid('user'), nickIn);
+      const p = upsertPlayer(uidIn || uid('user'), nickIn, clientIp(req));
       const salt = crypto.randomBytes(8).toString('hex');
       acc = {
         email, salt,
@@ -449,7 +487,7 @@ const routes = {
       ok: true,
       player: {
         uid: p.uid, nick: p.nick || 'Игрок', tag: p.tag,
-        verified: !!p.verified, role: p.role || null, online: isOnline(p), lastSeen: p.lastSeen
+        verified: !!p.verified, role: p.role || null, status: p.status || null, online: isOnline(p), lastSeen: p.lastSeen
       }
     });
   },
@@ -465,6 +503,7 @@ const routes = {
       return Object.assign({}, m, {
         verified: m.kind === 'admin' ? true : !!(p && p.verified),
         role: (p && p.role) || null,
+        status: (p && p.status) || null,
         tag: (p && p.tag) || m.tag || null
       });
     });
@@ -477,8 +516,9 @@ const routes = {
     const text = cleanStr(body.text, CHAT_TEXT_MAX);
     if (!pUid) return send(res, 400, { ok: false, error: 'нет uid — создай профиль' });
     if (!text) return send(res, 400, { ok: false, error: 'пустое сообщение' });
-    if (db.players[pUid] && db.players[pUid].banned) return send(res, 403, { ok: false, banned: true, error: 'Аккаунт заблокирован администрацией — писать в чат нельзя' });
-    const p = upsertPlayer(pUid, cleanStr(body.nick, 24));
+    if (db.players[pUid] && db.players[pUid].banned) return send(res, 403, banPayload(db.players[pUid], null));
+    if (ipBan(req)) return send(res, 403, banPayload(null, ipBan(req)));
+    const p = upsertPlayer(pUid, cleanStr(body.nick, 24), clientIp(req));
     db.chat.push({
       id: uid('msg'), uid: pUid, kind: 'player',
       nick: cleanStr(body.nick, 24) || (p && p.nick) || 'Игрок',
@@ -523,7 +563,10 @@ const routes = {
       .map(p => ({
         uid: p.uid, nick: p.nick || 'Игрок', tag: p.tag || null,
         verified: !!p.verified, role: p.role || null, banned: !!p.banned,
+        banReason: p.banned ? (p.banReason || 'без причины') : null, banBy: p.banned ? (p.banBy || null) : null, banAt: p.banned ? (p.banAt || 0) : null,
+        status: p.status || null,
         online: isOnline(p),
+        ip: role === 'owner' ? (p.ip || null) : undefined,
         firstSeen: p.firstSeen || 0, lastSeen: p.lastSeen || 0,
         // почту видит только владелец
         email: role === 'owner' ? accountEmailOf(p.uid) : undefined
@@ -531,16 +574,94 @@ const routes = {
     send(res, 200, { ok: true, role, players, online: players.filter(p => p.online).length });
   },
 
-  /* ---- ВЛАДЕЛЕЦ: бан / разбан (забаненный не может писать в чат и менять ник) ---- */
+  /* ---- ВЛАДЕЛЕЦ и АДМИНИСТРАЦИЯ: бан / разбан ----
+     Причина обязательна (для админов), фиксируется кто забанил. Бан и по uid, и по IP:
+     с этого адреса нельзя зарегистрировать новый аккаунт. Забаненный остаётся
+     в списке игроков (фильтр «Баны»), разбанить можно в любой момент. */
   'POST /api/admin/players/ban': async (req, res, body) => {
-    if (!isOwner(req)) return send(res, 403, { ok: false, error: 'только владелец может банить' });
+    const role = adminRole(req);
+    if (!role) return send(res, 403, { ok: false, error: 'нет доступа' });
     const pUid = cleanStr(body.uid, 80);
     const p = db.players[pUid];
     if (!p) return send(res, 404, { ok: false, error: 'игрок не найден' });
-    p.banned = !!body.banned;
-    if (p.banned) p.role = null; // забаненный не может быть админом
+    const ban = !!body.banned;
+    const reason = cleanStr(body.reason, 200);
+    const by = cleanStr(body.by, 24) || (role === 'owner' ? 'David Lite' : 'Администрация');
+    if (ban) {
+      if (!reason && role !== 'owner') return send(res, 400, { ok: false, error: 'Укажи причину бана — это обязательно' });
+      if (p.role === 'admin' && role !== 'owner') return send(res, 403, { ok: false, error: 'администратора может забанить только владелец' });
+      p.banned = true; p.banReason = reason || 'без причины'; p.banBy = by; p.banAt = Date.now();
+      p.role = null; // забаненный не может быть админом
+      if (p.ip) db.bannedIps[p.ip] = { reason: p.banReason, by, at: p.banAt, uid: pUid };
+    } else {
+      p.banned = false; p.banReason = null; p.banBy = null; p.banAt = null;
+      for (const [ip, b] of Object.entries(db.bannedIps)) if (b.uid === pUid) delete db.bannedIps[ip];
+    }
     dbSave();
-    send(res, 200, { ok: true, uid: pUid, banned: p.banned });
+    send(res, 200, { ok: true, uid: pUid, banned: p.banned, reason: p.banReason || null });
+  },
+
+  /* ---- ВЛАДЕЛЕЦ: статус игрока (скам / спам / тест / админ / владелец / ...) ---- */
+  'POST /api/admin/players/status': async (req, res, body) => {
+    if (!isOwner(req)) return send(res, 403, { ok: false, error: 'статусы выдаёт только владелец' });
+    const pUid = cleanStr(body.uid, 80);
+    const p = db.players[pUid];
+    if (!p) return send(res, 404, { ok: false, error: 'игрок не найден' });
+    const st = cleanStr(body.status, 16).toLowerCase();
+    if (st && !PLAYER_STATUSES.includes(st)) return send(res, 400, { ok: false, error: 'неизвестный статус', allowed: PLAYER_STATUSES });
+    p.status = st || null;
+    dbSave();
+    send(res, 200, { ok: true, uid: pUid, status: p.status });
+  },
+
+  /* ---- АДМИНКА: подробная карточка игрока (уровень, баланс, инвентарь, почта…) ---- */
+  'GET /api/admin/players/detail': (req, res, body, url) => {
+    const role = adminRole(req);
+    if (!role) return send(res, 403, { ok: false, error: 'нет доступа' });
+    const pUid = cleanStr(url.searchParams.get('uid'), 80);
+    const p = db.players[pUid];
+    if (!p) return send(res, 404, { ok: false, error: 'игрок не найден' });
+    const sv = db.saves[pUid] && db.saves[pUid].save;
+    const st = (sv && sv.stats) || {};
+    const inv = Array.isArray(sv && sv.inventory) ? sv.inventory : [];
+    send(res, 200, {
+      ok: true,
+      player: {
+        uid: p.uid, nick: p.nick, tag: p.tag, verified: !!p.verified, role: p.role || null, status: p.status || null,
+        banned: !!p.banned, banReason: p.banReason || null, banBy: p.banBy || null, banAt: p.banAt || null,
+        online: isOnline(p), firstSeen: p.firstSeen, lastSeen: p.lastSeen,
+        email: role === 'owner' ? accountEmailOf(pUid) : undefined,
+        ip: role === 'owner' ? (p.ip || null) : undefined,
+        authorCode: db.supporters[pUid] || null,
+        chatMessages: db.chat.filter(m => m.uid === pUid).length,
+        dms: db.dms.filter(d => d.toUid === pUid).slice(-10)
+      },
+      save: sv ? {
+        updatedAt: db.saves[pUid].updatedAt,
+        balance: sv.balance, level: st.level, xp: st.xp, casesOpened: st.casesOpened, upgradesWon: st.upgradesWon,
+        earnedTotal: st.earnedTotal, vipActive: !!st.vipActive, catFound: !!st.catFound,
+        biggestDropName: st.biggestDropName, biggestDrop: st.biggestDrop,
+        inventoryCount: inv.length,
+        inventoryValue: inv.reduce((a, i) => a + (Number(i.price) || 0), 0),
+        inventory: inv.slice(0, 60).map(i => ({ id: i.id, name: i.name, icon: i.icon, price: i.price, rarity: i.rarity }))
+      } : null
+    });
+  },
+
+  /* ---- АДМИНКА: личное сообщение игроку (от себя: ник админа) ---- */
+  'POST /api/admin/players/dm': async (req, res, body) => {
+    const role = adminRole(req);
+    if (!role) return send(res, 403, { ok: false, error: 'нет доступа' });
+    const pUid = cleanStr(body.uid, 80);
+    const text = cleanStr(body.text, 500);
+    if (!db.players[pUid]) return send(res, 404, { ok: false, error: 'игрок не найден' });
+    if (!text) return send(res, 400, { ok: false, error: 'пустое сообщение' });
+    const from = cleanStr(body.from, 24) || (role === 'owner' ? 'David Lite' : 'Администрация');
+    const dm = { id: uid('dm'), toUid: pUid, from, fromRole: role, text, at: Date.now(), read: false };
+    db.dms.push(dm);
+    if (db.dms.length > 2000) db.dms = db.dms.slice(-2000);
+    dbSave();
+    send(res, 200, { ok: true, dm });
   },
 
   /* ---- ВЛАДЕЛЕЦ: назначить / снять администратора (значок 🛡 АДМИН у игрока) ---- */
@@ -575,6 +696,8 @@ const routes = {
     db.gifts = db.gifts.filter(g => g.toUid !== pUid && g.fromUid !== pUid);
     db.trades = db.trades.filter(t => t.fromUid !== pUid && !(t.joined && t.joined.uid === pUid));
     db.deliveries = db.deliveries.filter(d => d.toUid !== pUid);
+    db.dms = db.dms.filter(d => d.toUid !== pUid);
+    for (const [ip, b] of Object.entries(db.bannedIps)) if (b.uid === pUid) delete db.bannedIps[ip];
     dbSave();
     send(res, 200, { ok: true, uid: pUid, removed });
   },
@@ -602,14 +725,15 @@ const routes = {
       return send(res, 400, { ok: false, error: 'save не похож на сохранение игры' });
     }
     db.saves[pUid] = { save, updatedAt: Date.now() };
-    const pl = upsertPlayer(pUid, cleanStr(body.nick, 24));
+    const pl = upsertPlayer(pUid, cleanStr(body.nick, 24), clientIp(req));
     dbSave();
     // Заодно отдаём уникальный ID и галочку: второй канал выдачи для клиента
     // (помогает, если стартовый /api/auth/sync не прошёл — сервер спал и т.п.)
     send(res, 200, {
       ok: true, updatedAt: db.saves[pUid].updatedAt,
       tag: pl ? pl.tag : null, verified: !!(pl && pl.verified),
-      role: (pl && pl.role) || null, banned: !!(pl && pl.banned)
+      role: (pl && pl.role) || null, banned: !!(pl && pl.banned), status: (pl && pl.status) || null,
+      unreadDms: db.dms.filter(d => d.toUid === pUid && !d.read).length
     });
   },
 
