@@ -258,7 +258,7 @@ const NetAuthor = {
       .catch(() => { state.stats.authorRoyaltyPending = pending; });
   },
 
-  /* Карточка «Спонсорство» в разделе промокодов (фарм-экран) */
+  /* Карточка «Спонсорство» в разделе промокодов (вкладка «Сообщество») */
   renderCard() {
     const form = $('authorCodeForm');
     const activeBox = $('authorCodeActive');
@@ -369,8 +369,8 @@ const Community = {
     const tag = hasUser && state.user.tag;
     const el = $('commMyTag');
     if (el) el.textContent = tag || (hasUser ? 'выдаётся…' : '#…');
-    const farm = $('farmMyTag');
-    if (farm) farm.textContent = tag || (hasUser ? 'ID выдаётся сервером…' : 'войди в аккаунт');
+    const communityTag = $('communityMyTag');
+    if (communityTag) communityTag.textContent = tag || (hasUser ? 'ID выдаётся сервером…' : 'войди в аккаунт');
     const badge = $('commMyVerified');
     if (badge) {
       badge.classList.toggle('hidden', !(hasUser && state.user.verified));
@@ -906,7 +906,7 @@ const NetPlay = {
   async _needOnline() {
     const on = await ServerAPI.ping(true);
     if (!on) {
-      Toast.error('Сервер оффлайн! Подарки и обмен работают через сервер сообщества: ' + COMMUNITY_SERVER_URL);
+      Toast.error('Сервер оффлайн! Нажми «Включить сервер» и подожди, пока он оживёт: ' + COMMUNITY_SERVER_URL);
       renderServerStatus();
     }
     return on;
@@ -920,7 +920,7 @@ function renderServerStatus() {
   const online = ServerAPI.isOnline();
   const statusText = online
     ? `<span class="text-emerald-400">●</span> Сервер онлайн — чат, подарки и обмен работают`
-    : `<span class="text-rose-400">●</span> Сервер не работает — нажми «Включить сервер» (Render просыпается ~минуту) или напиши нам на <b class="text-rose-200">${SERVER_CONTACT_EMAIL}</b> — решим проблему!`;
+    : `<span class="text-rose-400">●</span> Сервер не работает — нажми «Включить сервер» и подожди, пока сервер оживёт (~минуту), или напиши нам на <b class="text-rose-200">${SERVER_CONTACT_EMAIL}</b> — решим проблему!`;
   const chipCls = online
     ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/40'
     : 'bg-rose-500/15 text-rose-300 border border-rose-500/40';
