@@ -40,7 +40,7 @@ const state = {
   dropHistory: [],
   profileTab: 'profile',
   rigReady: false,
-  betaArchiveOpen: false,
+  adminRole: null, // 'owner' | 'admin' | null — роль, с которой открыта админка
   // Вход по e-mail (AuthGate): сервер выдал uid/ID — забирает их регистрация
   pendingAuthUid: null,
   pendingAuthEmail: null,
@@ -882,10 +882,9 @@ function chanceToOne(pct) {
   return `1 из ${n >= 100 ? Math.round(n).toLocaleString('ru-RU') : n.toFixed(1)}`;
 }
 
-/* Список кейсов с учётом тестовой ветки 3.6: бета-кейсы видны только в бете */
+/* Список кейсов (бета-ветка 3.6 удалена — бета-кейсы больше не показываются) */
 function activeCasesList() {
-  const beta = typeof BetaMode !== 'undefined' && BetaMode.isActive();
-  return CASES_LIST.filter(c => !c.beta || beta);
+  return CASES_LIST.filter(c => !c.beta);
 }
 
 /* Карточка кейса на витрине */
@@ -910,14 +909,9 @@ function renderCasesUI() {
   const grid = $('casesGrid');
   if (!grid) return;
 
-  const betaActive = typeof BetaMode !== 'undefined' && BetaMode.isActive();
   const allCases = activeCasesList();
 
-  // Панель «Лаборатория 3.6 — в разработке» видна только в бете
-  const devPanel = $('betaDevPanel');
-  if (devPanel) devPanel.classList.toggle('hidden', !betaActive);
-
-  $('currentCaseTitle').textContent = `${state.selectedCase.beta ? '🧪 3.6 · ' : (state.selectedCase.season === 3 ? 'Сезон 3 · ' : '')}Кейс: ${state.selectedCase.name}`;
+  $('currentCaseTitle').textContent = `${state.selectedCase.season === 3 ? 'Сезон 3 · ' : ''}Кейс: ${state.selectedCase.name}`;
   const selectedPrice = casePrice(state.selectedCase);
   $('currentCasePrice').textContent = moneyText(selectedPrice, true);
   $('currentCasePrice').title = moneyText(selectedPrice, false);
@@ -972,33 +966,7 @@ function renderCasesUI() {
       </div>`;
   }
 
-  // В бете на вид «Все»: сначала бета-кейсы, стандартные сворачиваются в «Архив 3.5»
-  let archiveCases = [];
-  if (betaActive && state.caseFilter === 'all') {
-    archiveCases = visibleCases.filter(c => !c.beta);
-    visibleCases = visibleCases.filter(c => c.beta);
-  }
-
   visibleCases.forEach(c => grid.appendChild(buildCaseCard(c)));
-
-  if (archiveCases.length) {
-    const wrap = document.createElement('div');
-    wrap.className = 'beta-archive col-span-2';
-    const opened = !!state.betaArchiveOpen;
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'beta-archive-btn';
-    btn.innerHTML = `📦 Архив стабильной ветки ${APP_VERSION} · ${archiveCases.length} кейсов <span>${opened ? '▴ свернуть' : '▾ показать'}</span>`;
-    btn.onclick = toggleBetaArchive;
-    wrap.appendChild(btn);
-    if (opened) {
-      const inner = document.createElement('div');
-      inner.className = 'beta-archive-grid';
-      archiveCases.forEach(c => inner.appendChild(buildCaseCard(c)));
-      wrap.appendChild(inner);
-    }
-    grid.appendChild(wrap);
-  }
 
   const secret = SECRET_CASE;
   const progress = clamp((state.balance / secret.price) * 100, 0, 100);
@@ -1998,11 +1966,10 @@ function redeemPromo() {
     return;
   }
 
-  if (code === 'ADMIN' + ADMIN_CODE) {
+  // Вход в админку через промокод: ADMIN<код> (роль определяется по хешу кода)
+  if (code.startsWith('ADMIN') && resolveAdminRole(code.slice(5))) {
     input.value = '';
-    state.rigReady = true;
-    openAdminModal();
-    Toast.info('Привет, разработчик! Панель открыта 👑');
+    grantAdminRole(resolveAdminRole(code.slice(5)));
     return;
   }
 
@@ -2011,7 +1978,7 @@ function redeemPromo() {
     return;
   }
 
-  // ===== ПРОВЕРКА VIP-КОДОВ (одноразовые, за реальные 150 ₽ на FunPay) =====
+  // ===== ПРОВЕРКА VIP-КОДОВ (одноразовые, за реальные 150 ₽ — покупка через почту) =====
   if (VIP_CODES.includes(code)) {
     if (state.stats.usedVipCodes && state.stats.usedVipCodes.includes(code)) {
       Toast.error('Этот VIP-код уже был использован. Каждый код работает только один раз.');
@@ -2047,7 +2014,7 @@ function redeemPromo() {
 
   const promo = PROMO_CODES[code];
   if (!promo) {
-    Toast.error('Такого промокода нет. Ищи коды в видео David Lite или VIP-код в лоте на FunPay!');
+    Toast.error('Такого промокода нет. Ищи коды в видео David Lite или купи VIP-код, написав нам на почту!');
     return;
   }
 
@@ -2114,85 +2081,6 @@ function redeemPromo() {
 }
 
 /* --------------------------------------------------------------------------
-   ЗАКРЫТЫЙ БЕТА-ТЕСТ (доступ по скрытому коду)
-   Поле кода живёт в настройках — «Лаборатория / Бета-тестирование», тумблер
-   3.6 Beta и вся механика тестовой ветки — js/betaManager.js.
-   -------------------------------------------------------------------------- */
-function redeemBetaCode(inputId = 'betaLabCodeInput') {
-  const input = $(inputId);
-  const raw = ((input && input.value) || '').replace(/\s+/g, '');
-  if (!raw) {
-    Toast.error('Введи код доступа');
-    return;
-  }
-  if (state.stats.betaTester) {
-    Toast.info('Бета-доступ уже активирован 🧪 — теперь включай ветку 3.6 Beta кнопкой выше.');
-    if (input) input.value = '';
-    if (typeof BetaMode !== 'undefined') BetaMode.renderLab();
-    return;
-  }
-
-  // Код в открытом виде в игре не хранится — сравниваем только хеши
-  if (betaCodeHash(raw) !== BETA_CODE_HASH) {
-    if (input) input.value = '';
-    audio.init();
-    audio.playLoss();
-    Toast.error('Неверный код. Доступ к закрытому бета-тесту выдаёт только автор проекта.');
-    return;
-  }
-
-  state.stats.betaTester = true;
-  state.stats.betaActivatedAt = Date.now();
-  if (!state.stats.unlockedTitles.includes(BETA_TITLE)) {
-    state.stats.unlockedTitles.push(BETA_TITLE);
-  }
-
-  audio.init();
-  audio.playSecret();
-  Fx.secretRain();
-  Fx.burst(140, ['#22d3ee', '#0ea5e9', '#fbbf24']);
-  addMoney(BETA_REWARD.money, { silent: true, countEarned: true });
-  addXp(BETA_REWARD.xp, { silent: true });
-
-  Toast.gold(`🧪 ДОСТУП К ЗАКРЫТОМУ БЕТА-ТЕСТУ АКТИВИРОВАН! +${fmt(BETA_REWARD.money)} ₽, +${BETA_REWARD.xp} XP и титул «${BETA_TITLE}». Теперь жми «Включить 3.6 Beta»!`, 9000);
-
-  if (input) input.value = '';
-  checkAchievements();
-  if (typeof BetaMode !== 'undefined') BetaMode.renderLab();
-  uiUpdate();
-  persist(true);
-}
-
-function renderPromoList() {
-  const box = $('promoList');
-  if (!box) return;
-  if (!state.stats.promosUsed.length) {
-    const vipHint = state.stats.vipActive
-      ? '<br><span class="text-amber-400">👑 VIP-статус активен — налог миллионера отключён навсегда!</span>'
-      : `<br><span class="text-fuchsia-400">VIP за ${VIP_PRICE_RUB}₽ отключает налог миллионера навсегда</span>`;
-    box.innerHTML = `<span class="text-[10px] text-slate-500">Пока ни один код не активирован. Подсказка: следи за видео David Lite 🎬<br><span class="text-fuchsia-400">Коды обновления 3.0.2: NEWUPDATE2026, GORABOGDAN5G</span>${vipHint}</span>`;
-    return;
-  }
-  box.innerHTML = state.stats.promosUsed.map(code => {
-    const isVip = code.startsWith('VIP-') && VIP_CODES.includes(code);
-    if (isVip) {
-      return `<span class="text-[9px] px-2 py-0.5 rounded-full bg-amber-950/70 border border-amber-600/60 text-amber-300 font-mono" title="VIP активирован навечно">👑 ${escapeHtml(code)} ✓ · ВЕЧНЫЙ VIP</span>`;
-    }
-    const p = PROMO_CODES[code];
-    let rewardLabel = '';
-    if (p) {
-      if (p.item) {
-        const it = ITEMS_BY_ID[p.item];
-        rewardLabel = ' · ' + (it ? it.name : 'предмет');
-      } else if (p.money) {
-        rewardLabel = ' · ' + fmt(p.money) + '₽';
-      }
-    }
-    return `<span class="text-[9px] px-2 py-0.5 rounded-full bg-emerald-950/60 border border-emerald-800 text-emerald-300 font-mono">${escapeHtml(code)} ✓${rewardLabel}</span>`;
-  }).join('');
-}
-
-/* --------------------------------------------------------------------------
    ПРОФИЛЬ
    -------------------------------------------------------------------------- */
 function openProfileModal() {
@@ -2225,7 +2113,7 @@ function selectRegAvatar(emoji) {
   audio.playTick();
 }
 
-function openExtrasModal() { updateVipCardVisibility(); if (typeof BetaMode !== 'undefined') BetaMode.renderLab(); Modal.open('extrasModal'); }
+function openExtrasModal() { updateVipCardVisibility(); if (typeof DmInbox !== 'undefined') DmInbox.renderDot(); Modal.open('extrasModal'); }
 
 function updateVipCardVisibility() {
   const vipStatusCard = $('vipStatusCard');
@@ -2265,8 +2153,6 @@ function submitRegistration() {
   state.pendingAuthTag = null;
   state.pendingAuthVerified = false;
 
-  // Если профиль создаётся при включённой 3.6 Beta — ник сразу становится «Тест»
-  if (typeof BetaMode !== 'undefined') BetaMode.onUserCreated();
 
   addMoney(2500, { silent: true, countEarned: true });
   Fx.burst(100);
@@ -2299,6 +2185,56 @@ function logoutProfile() {
     // Шлагбаум входа возвращается — без аккаунта дальше никак
     if (typeof AuthGate !== 'undefined') AuthGate.onBoot();
   });
+}
+
+/* --------------------------------------------------------------------------
+   СМЕНА НИКА — тот же аккаунт (uid, ID, почта, прогресс), меняется только имя.
+   Новый аккаунт НЕ создаётся. Ник проверяется на сервере на уникальность.
+   -------------------------------------------------------------------------- */
+function openNickChangeModal() {
+  if (!state.user) return;
+  const input = $('nickChangeInput');
+  if (input) input.value = state.user.nick || '';
+  const err = $('nickChangeError');
+  if (err) err.classList.add('hidden');
+  const cur = $('nickChangeCurrent');
+  if (cur) cur.textContent = state.user.nick || '—';
+  Modal.open('nickChangeModal');
+  setTimeout(() => { if (input) { input.focus(); input.select(); } }, 80);
+}
+
+function closeNickChangeModal() { Modal.close('nickChangeModal'); }
+
+async function submitNickChange() {
+  if (!state.user) return;
+  const input = $('nickChangeInput');
+  const err = $('nickChangeError');
+  const showErr = (t) => { if (err) { err.textContent = t; err.classList.remove('hidden'); } audio.playLoss(); };
+  const nick = ((input && input.value) || '').trim().slice(0, 18);
+  if (nick.length < 2) return showErr('Ник — минимум 2 символа');
+  if (nick === state.user.nick) return showErr('Это и так твой текущий ник 🙂');
+  const btn = $('nickChangeBtn');
+  if (btn) btn.disabled = true;
+  try {
+    // Онлайн: сервер проверит уникальность и обновит ник у того же аккаунта
+    if (typeof ServerAPI !== 'undefined' && await ServerAPI.ping(true)) {
+      if (typeof NetIdentity !== 'undefined') NetIdentity.ensureUid();
+      const { data } = await ServerAPI.req('POST', '/api/players/nick', { uid: state.user.id, nick });
+      if (!data.ok) return showErr(data.error || 'Сервер отклонил новый ник');
+    }
+    const old = state.user.nick;
+    state.user.nick = nick;
+    persist(true);
+    closeNickChangeModal();
+    renderProfile();
+    uiUpdate();
+    if (typeof NetIdentity !== 'undefined') NetIdentity.renderEverywhere();
+    if (typeof CloudSave !== 'undefined') CloudSave.push(false);
+    audio.playWin();
+    Toast.success(`Ник изменён: <b>${escapeHtml(old)}</b> → <b>${escapeHtml(nick)}</b>. Аккаунт, ID и прогресс те же 🎒`, 6000);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 function switchProfileTab(tab) {
@@ -2350,6 +2286,18 @@ function renderProfile() {
     vbEl.classList.toggle('hidden', !(state.user && state.user.verified));
     if (state.user && state.user.verified && typeof verifiedBadgeHtml === 'function') vbEl.innerHTML = verifiedBadgeHtml();
   }
+  const sbEl = $('profileStatusBadge');
+  if (sbEl) {
+    const st = state.user && state.user.status;
+    sbEl.classList.toggle('hidden', !st);
+    if (st && typeof statusChipHtml === 'function') sbEl.innerHTML = statusChipHtml(st);
+  }
+  const rbEl = $('profileRoleBadge');
+  if (rbEl) {
+    const isStaff = !!(state.user && state.user.role === 'admin');
+    rbEl.classList.toggle('hidden', !isStaff);
+    if (isStaff && typeof staffChipHtml === 'function') rbEl.innerHTML = staffChipHtml();
+  }
 
   const invValue = state.inventory.reduce((sum, i) => sum + i.price, 0);
   $('statBalance').textContent = moneyText(state.balance, true);
@@ -2374,8 +2322,11 @@ function renderProfile() {
   $('statCatFound').textContent = state.stats.catFound ? '🏆 НАЙДЕН' : 'не найден';
   const vipEl = $('statVipStatus');
   if (vipEl) vipEl.textContent = state.stats.vipActive ? '👑 АКТИВЕН' : 'не активен';
-  const betaEl = $('statBetaStatus');
-  if (betaEl) betaEl.textContent = state.stats.betaMode ? '🧪 3.6 ВКЛ' : (state.stats.betaTester ? 'доступ ✔' : 'нет доступа');
+  const stEl = $('statPlayerStatus');
+  if (stEl) {
+    const st = state.user && state.user.status;
+    stEl.textContent = st && typeof statusLabel === 'function' ? statusLabel(st) : (state.user && state.user.role === 'admin' ? '🛡 АДМИН' : 'обычный');
+  }
 
   if (state.profileTab === 'ach') renderAchievements();
 }
@@ -2409,9 +2360,9 @@ function applySettingsToUI() {
   applyQualityToUI();
   $('settingsVersion').textContent = `v${APP_VERSION}`;
   $('aboutVersion').textContent = APP_VERSION;
-  // Бейдж шапки: v3.5 Stable или неоновый v3.6 BETA TESTING (js/betaManager.js)
-  if (typeof BetaMode !== 'undefined') BetaMode.renderBadge();
-  else $('versionBadge').textContent = `v${APP_VERSION} Stable`;
+  $('versionBadge').textContent = `v${APP_VERSION} Stable`;
+  setTogglePill($('setAutoWakeToggle'), !!s.autoWake);
+  setTogglePill($('setChatNotifyToggle'), !!s.chatNotify);
 }
 
 function saveSettings() {
@@ -2438,6 +2389,33 @@ function toggleFastSetting() {
   applySettingsToUI();
   saveSettings();
   Toast.info(state.settings.fastOpen ? 'Быстрый режим: кейсы открываются без анимации' : 'Обычный режим: с анимацией рулетки');
+}
+
+/* ---- Эксперименты ---- */
+function toggleAutoWakeSetting() {
+  state.settings.autoWake = !state.settings.autoWake;
+  applySettingsToUI();
+  saveSettings();
+  if (state.settings.autoWake) {
+    Toast.info('⚡ Эксперимент включён: игра будет сама будить сервер при запуске. Если что-то сломается — выключи.', 6000);
+    if (typeof AutoWake !== 'undefined') AutoWake.start();
+  } else {
+    Toast.info('Автопробуждение выключено.');
+    if (typeof AutoWake !== 'undefined') AutoWake.stop();
+  }
+}
+
+function toggleChatNotifySetting() {
+  state.settings.chatNotify = !state.settings.chatNotify;
+  applySettingsToUI();
+  saveSettings();
+  if (state.settings.chatNotify) {
+    Toast.info('🔔 Уведомления из общего чата включены — будут всплывать, пока сервер онлайн.', 6000);
+    if (typeof ChatNotify !== 'undefined') ChatNotify.start();
+  } else {
+    Toast.info('Уведомления из чата выключены.');
+    if (typeof ChatNotify !== 'undefined') ChatNotify.stop();
+  }
 }
 
 function toggleMotionSetting() {
@@ -2748,21 +2726,51 @@ function closeAdminCodeModal() {
   Modal.close('adminCodeModal');
 }
 
+/* Определяем роль по введённому коду (сравниваем хеши, коды в открытом виде не храним) */
+function resolveAdminRole(raw) {
+  const code = String(raw || '').trim().toUpperCase();
+  if (!code) return null;
+  // убираем удобные префиксы: SHKOLA1337 / ADMIN1337 / КОТ1337 → 1337
+  const bare = code.replace(/^(SHKOLA|ADMIN|КОТ|OWNER|STAFF)/, '');
+  const candidates = [code, bare];
+  for (const c of candidates) {
+    const h = betaCodeHash(c);
+    if (h === OWNER_CODE_HASH) return 'owner';
+  }
+  for (const c of candidates) {
+    const h = betaCodeHash(c);
+    if (h === ADMIN_CODE_HASH) return 'admin';
+  }
+  return null;
+}
+
+function adminHas(perm) {
+  const role = state.adminRole;
+  if (!role) return false;
+  return (ADMIN_PERMS[role] || []).includes(perm);
+}
+
+function grantAdminRole(role) {
+  state.adminRole = role;
+  state.rigReady = true;
+  // секрет для серверных запросов подбирается под роль
+  try { localStorage.setItem('shkola_admin_secret', role === 'owner' ? OWNER_SERVER_SECRET : ADMIN_SERVER_SECRET); } catch (e) {}
+  closeAdminCodeModal();
+  openAdminModal();
+  audio.playLevelUp();
+  Fx.burst(80, role === 'owner' ? ['#10b981', '#fbbf24'] : ['#38bdf8', '#a78bfa']);
+  Toast.success(role === 'owner'
+    ? 'Панель ВЛАДЕЛЬЦА открыта — доступны все функции. Тише! 🤫'
+    : 'Панель АДМИНИСТРАЦИИ открыта — доступны функции модерации 🛡');
+}
+
 function submitAdminCode() {
   const input = $('adminCodeInput');
   const error = $('adminCodeError');
-  const code = ((input && input.value) || '').trim().toUpperCase();
-
-  // принимаем 1337 и удобные варианты записи
-  const accepted = [ADMIN_CODE, 'SHKOLA' + ADMIN_CODE, 'ADMIN' + ADMIN_CODE, 'КОТ' + ADMIN_CODE];
-
-  if (accepted.includes(code)) {
-    state.rigReady = true;
-    closeAdminCodeModal();
-    openAdminModal();
-    audio.playLevelUp();
-    Fx.burst(80, ['#10b981', '#fbbf24']);
-    Toast.success('Панель разработчика открыта. Тише! 🤫');
+  const code = ((input && input.value) || '').trim();
+  const role = resolveAdminRole(code);
+  if (role) {
+    grantAdminRole(role);
   } else {
     if (error) error.classList.remove('hidden');
     audio.playLoss();
@@ -2771,18 +2779,62 @@ function submitAdminCode() {
 }
 
 function openAdminModal() {
-  if (!state.rigReady) return;
+  if (!state.rigReady || !state.adminRole) return;
+  applyAdminPermissions();
   Modal.open('adminModal');
   updateAdminUI();
   // Онлайн-разделы панели: список игроков с галочками и реестр кодов авторов
   if (typeof adminLoadPlayers === 'function') adminLoadPlayers();
-  if (typeof renderAdminAuthorList === 'function') renderAdminAuthorList();
+  if (adminHas('authorcodes') && typeof renderAdminAuthorList === 'function') renderAdminAuthorList();
+}
+
+/* Показываем только те блоки панели, на которые у роли есть права */
+function applyAdminPermissions() {
+  const role = state.adminRole;
+  document.querySelectorAll('#adminModal [data-admin-perm]').forEach(el => {
+    const perms = String(el.getAttribute('data-admin-perm')).split(/[\s,]+/).filter(Boolean);
+    const allowed = perms.some(p => adminHas(p));
+    el.classList.toggle('hidden', !allowed);
+  });
+  const title = $('adminModalTitle');
+  if (title) title.textContent = role === 'owner' ? '👑 Панель владельца' : '🛡 Панель администрации';
+  const badge = $('adminRoleBadge');
+  if (badge) {
+    badge.textContent = role === 'owner' ? 'OWNER · полный доступ' : 'ADMIN · модерация';
+    badge.className = 'text-[8px] font-black px-1.5 py-0.5 rounded border uppercase ' +
+      (role === 'owner' ? 'bg-amber-500/20 text-amber-300 border-amber-500/50' : 'bg-sky-500/20 text-sky-300 border-sky-500/50');
+  }
+  const card = document.querySelector('#adminModal .modal-card');
+  if (card) {
+    card.classList.toggle('border-emerald-700/60', role === 'owner');
+    card.classList.toggle('border-sky-700/60', role !== 'owner');
+  }
 }
 
 function closeAdminModal() { Modal.close('adminModal'); }
 
+/* Развернуть любое модальное окно на весь экран (и обратно) */
+function toggleModalExpand(id) {
+  const modal = $(id);
+  if (!modal) return;
+  const card = modal.querySelector('.modal-card');
+  if (!card) return;
+  card.classList.toggle('modal-card-expanded');
+  audio.playTick();
+}
+
+/* Выход из админки: роль сбрасывается, панель снова закрыта */
+function adminLogout() {
+  state.adminRole = null;
+  state.rigReady = false;
+  state.rigMode = 'fair';
+  try { localStorage.removeItem('shkola_admin_secret'); } catch (e) {}
+  closeAdminModal();
+  Toast.info('Вышел из админ-панели');
+}
+
 function setRigMode(mode) {
-  if (!state.rigReady) return;
+  if (!state.rigReady || !adminHas('rig')) return;
   state.rigMode = mode;
   audio.playTick();
   updateAdminUI();
@@ -2802,13 +2854,13 @@ function updateAdminUI() {
 }
 
 function adminAddMoney(amount) {
-  if (!state.rigReady) return;
+  if (!state.rigReady || !adminHas('money')) return;
   addMoney(amount);
   Toast.gold(`Dev-начисление: +${fmt(amount)} ₽`);
 }
 
 function adminGrantCat() {
-  if (!state.rigReady) return;
+  if (!state.rigReady || !adminHas('cat')) return;
   const cat = ITEMS_BY_ID['cat_keeper'];
   const item = Object.assign({}, cat, { uid: RNG.uid('dev'), wonAt: nowTimeLabel() });
   state.inventory.unshift(item);
@@ -2824,7 +2876,7 @@ function adminGrantCat() {
 }
 
 function adminMaxLevel() {
-  if (!state.rigReady) return;
+  if (!state.rigReady || !adminHas('maxlevel')) return;
   state.stats.idle.level = IDLE_LEVELS.length;
   addXp(900000);
   Toast.gold('Максимальное дежурство и опыт выданы');
@@ -2894,7 +2946,7 @@ function bindGlobalEvents() {
   window.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
       ['settingsModal', 'profileModal', 'authorModal', 'termsModal', 'cookieModal', 'cookiePolicyModal',
-        'caseOddsModal', 'dailyModal', 'multiResultModal', 'confirmModal', 'communityModal', 'netplayModal', 'extrasModal', 'whatsNewModal'].forEach(id => {
+        'caseOddsModal', 'dailyModal', 'multiResultModal', 'confirmModal', 'communityModal', 'netplayModal', 'extrasModal', 'whatsNewModal', 'nickChangeModal', 'adminModal', 'adminCodeModal', 'adminPlayerModal', 'banReasonModal', 'adminDmModal', 'dmInboxModal', 'bannedModal'].forEach(id => {
           if (Modal.isOpen(id)) Modal.close(id);
         });
       if (Modal.isOpen('itemModal')) closeItemModal();
@@ -2958,8 +3010,13 @@ function initGame() {
   startIdleTicker();
   checkAchievements();
 
-  // Лаборатория 3.6 Beta: восстановить состояние тестовой ветки (ник «Тест», бейдж, бета-кейсы)
-  if (typeof BetaMode !== 'undefined') BetaMode.onBoot();
+  // Если сохранение застало игрока в удалённой бета-ветке 3.6 — вернуть настоящий ник
+  if (state.stats && state.stats.betaMode) {
+    state.stats.betaMode = false;
+    if (state.user && state.stats.betaSavedNick) state.user.nick = state.stats.betaSavedNick;
+    state.stats.betaSavedNick = '';
+    persist(true);
+  }
 
   // Онлайн-функции: спонсорство, подарки, трейдинг (js/netplay.js)
   if (typeof NetBoot === 'function') NetBoot();
