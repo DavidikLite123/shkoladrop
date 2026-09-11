@@ -39,7 +39,8 @@ const state = {
   lastResultIsWin: false,
   dropHistory: [],
   profileTab: 'profile',
-  rigReady: false
+  rigReady: false,
+  betaArchiveOpen: false
 };
 
 /* --------------------------------------------------------------------------
@@ -73,7 +74,7 @@ function loadGame() {
 
   auditInventory();
 
-  state.selectedCase = CASES_LIST.find(c => !c.secret) || CASES_LIST[0];
+  state.selectedCase = CASES_LIST.find(c => !c.secret && !c.beta) || CASES_LIST[0];
   state.selectedDeposit = state.inventory[0] || null;
   state.selectedTarget = ITEMS_BY_ID['cs_usp_torque'] || CS2_CATALOG[1];
 
@@ -872,15 +873,46 @@ function chanceToOne(pct) {
   return `1 из ${n >= 100 ? Math.round(n).toLocaleString('ru-RU') : n.toFixed(1)}`;
 }
 
+/* Список кейсов с учётом тестовой ветки 3.6: бета-кейсы видны только в бете */
+function activeCasesList() {
+  const beta = typeof BetaMode !== 'undefined' && BetaMode.isActive();
+  return CASES_LIST.filter(c => !c.beta || beta);
+}
+
+/* Карточка кейса на витрине */
+function buildCaseCard(c) {
+  const selected = c.id === state.selectedCase.id;
+  const affordable = state.balance >= casePrice(c);
+  const card = document.createElement('div');
+  card.className = `case-card ${selected ? 'case-card-selected' : ''} ${c.secret ? 'case-card-secret' : ''} ${!affordable && c.secret ? 'case-card-locked' : ''} ${c.beta ? 'case-card-beta' : ''}`;
+  card.innerHTML = `
+    <div class="text-3xl mb-1 relative z-10">${c.image ? `<img src="${escapeHtml(c.image)}" alt="${escapeHtml(c.name)}" class="case-cover" onerror="this.style.display='none';this.nextElementSibling.style.display='block';"><span style="display:none">${c.icon}</span>` : (c.secret && !affordable ? '🔒' : c.icon)}</div>
+    <div class="text-xs font-bold font-cs ${c.secret ? 'secret-shine' : 'text-white'} leading-tight relative z-10">${escapeHtml(c.name)}</div>
+    <div class="text-[10px] text-slate-400 line-clamp-1 my-1 relative z-10">${escapeHtml(c.desc)}</div>
+    <div class="text-xs font-cs font-bold relative z-10" style="color:${c.color}">${fmt(casePrice(c))} ₽</div>
+    ${c.beta ? '<div class="beta-case-flag">🧪 ЭКСПЕРИМЕНТАЛЬНО</div>' : ''}
+    ${c.secret ? `<div class="text-[9px] text-fuchsia-300 mt-0.5 relative z-10">${affordable ? 'ДОСТУПЕН! ТЫ ЛЕГЕНДА' : 'секретный · нужен 10 000 000 ₽'}</div>` : ''}
+  `;
+  card.onclick = () => selectCase(c.id);
+  return card;
+}
+
 function renderCasesUI() {
   const grid = $('casesGrid');
   if (!grid) return;
 
-  $('currentCaseTitle').textContent = `${state.selectedCase.season === 3 ? 'Сезон 3 · ' : ''}Кейс: ${state.selectedCase.name}`;
+  const betaActive = typeof BetaMode !== 'undefined' && BetaMode.isActive();
+  const allCases = activeCasesList();
+
+  // Панель «Лаборатория 3.6 — в разработке» видна только в бете
+  const devPanel = $('betaDevPanel');
+  if (devPanel) devPanel.classList.toggle('hidden', !betaActive);
+
+  $('currentCaseTitle').textContent = `${state.selectedCase.beta ? '🧪 3.6 · ' : (state.selectedCase.season === 3 ? 'Сезон 3 · ' : '')}Кейс: ${state.selectedCase.name}`;
   const selectedPrice = casePrice(state.selectedCase);
   $('currentCasePrice').textContent = moneyText(selectedPrice, true);
   $('currentCasePrice').title = moneyText(selectedPrice, false);
-  $('casesCountLabel').textContent = `${CASES_LIST.length} кейсов · ${ALL_MASTER_ITEMS.length} предметов`;
+  $('casesCountLabel').textContent = `${allCases.length} кейсов · ${ALL_MASTER_ITEMS.length} предметов`;
   $('casesOpenedLabel').textContent = `всего: ${fmt(state.stats.casesOpened || 0)}`;
 
   const enoughMoney = state.balance >= selectedPrice;
@@ -904,16 +936,16 @@ function renderCasesUI() {
     openX5.textContent = state.selectedCase.secret ? 'x5 🔒' : `x5 · ${shortMoney(x5Cost)}₽`;
   }
 
-  const affordableList = CASES_LIST.filter(c => state.balance >= casePrice(c));
-  const topList = CASES_LIST.filter(c => !c.secret && c.price >= 45000);
-  const secretList = CASES_LIST.filter(c => c.secret);
+  const affordableList = allCases.filter(c => state.balance >= casePrice(c));
+  const topList = allCases.filter(c => !c.secret && !c.beta && c.price >= 45000);
+  const secretList = allCases.filter(c => c.secret);
 
-  let visibleCases = CASES_LIST;
+  let visibleCases = allCases;
   if (state.caseFilter === 'affordable') visibleCases = affordableList;
   else if (state.caseFilter === 'top') visibleCases = topList;
   else if (state.caseFilter === 'secret') visibleCases = secretList;
 
-  $('caseCountAll').textContent = CASES_LIST.length;
+  $('caseCountAll').textContent = allCases.length;
   $('caseCountAffordable').textContent = affordableList.length;
 
   // если выбранный кейс скрыт фильтром — переключаемся на первый доступный
@@ -931,21 +963,33 @@ function renderCasesUI() {
       </div>`;
   }
 
-  visibleCases.forEach(c => {
-    const selected = c.id === state.selectedCase.id;
-    const affordable = state.balance >= casePrice(c);
-    const card = document.createElement('div');
-    card.className = `case-card ${selected ? 'case-card-selected' : ''} ${c.secret ? 'case-card-secret' : ''} ${!affordable && c.secret ? 'case-card-locked' : ''}`;
-    card.innerHTML = `
-      <div class="text-3xl mb-1 relative z-10">${c.image ? `<img src="${escapeHtml(c.image)}" alt="${escapeHtml(c.name)}" class="case-cover" onerror="this.style.display='none';this.nextElementSibling.style.display='block';"><span style="display:none">${c.icon}</span>` : (c.secret && !affordable ? '🔒' : c.icon)}</div>
-      <div class="text-xs font-bold font-cs ${c.secret ? 'secret-shine' : 'text-white'} leading-tight relative z-10">${escapeHtml(c.name)}</div>
-      <div class="text-[10px] text-slate-400 line-clamp-1 my-1 relative z-10">${escapeHtml(c.desc)}</div>
-      <div class="text-xs font-cs font-bold relative z-10" style="color:${c.color}">${fmt(casePrice(c))} ₽</div>
-      ${c.secret ? `<div class="text-[9px] text-fuchsia-300 mt-0.5 relative z-10">${affordable ? 'ДОСТУПЕН! ТЫ ЛЕГЕНДА' : 'секретный · нужен 10 000 000 ₽'}</div>` : ''}
-    `;
-    card.onclick = () => selectCase(c.id);
-    grid.appendChild(card);
-  });
+  // В бете на вид «Все»: сначала бета-кейсы, стандартные сворачиваются в «Архив 3.5»
+  let archiveCases = [];
+  if (betaActive && state.caseFilter === 'all') {
+    archiveCases = visibleCases.filter(c => !c.beta);
+    visibleCases = visibleCases.filter(c => c.beta);
+  }
+
+  visibleCases.forEach(c => grid.appendChild(buildCaseCard(c)));
+
+  if (archiveCases.length) {
+    const wrap = document.createElement('div');
+    wrap.className = 'beta-archive col-span-2';
+    const opened = !!state.betaArchiveOpen;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'beta-archive-btn';
+    btn.innerHTML = `📦 Архив стабильной ветки ${APP_VERSION} · ${archiveCases.length} кейсов <span>${opened ? '▴ свернуть' : '▾ показать'}</span>`;
+    btn.onclick = toggleBetaArchive;
+    wrap.appendChild(btn);
+    if (opened) {
+      const inner = document.createElement('div');
+      inner.className = 'beta-archive-grid';
+      archiveCases.forEach(c => inner.appendChild(buildCaseCard(c)));
+      wrap.appendChild(inner);
+    }
+    grid.appendChild(wrap);
+  }
 
   const secret = SECRET_CASE;
   const progress = clamp((state.balance / secret.price) * 100, 0, 100);
@@ -1101,6 +1145,8 @@ function openSelectedCase() {
   audio.playCoin();
   state.isOpeningCase = true;
   spendMoney(price);
+  // Спонсорство: 10% от стоимости кейса — владельцу введённого кода автора
+  if (typeof NetAuthor !== 'undefined') NetAuthor.trackCaseSpend(price, caseObj.id);
   state.stats.casesOpened = (state.stats.casesOpened || 0) + 1;
   if (isSecret) state.stats.secretCases = (state.stats.secretCases || 0) + 1;
   addXp(XP_REWARDS.caseOpen, { silent: true });
@@ -1153,6 +1199,8 @@ function openSelectedCaseMulti(count = 5) {
   audio.playCoin();
   state.isOpeningCase = true;
   spendMoney(cost);
+  // Спонсорство: 10% от стоимости открытия — автору кода
+  if (typeof NetAuthor !== 'undefined') NetAuthor.trackCaseSpend(cost, caseObj.id);
   state.stats.casesOpened = (state.stats.casesOpened || 0) + count;
   addXp(XP_REWARDS.caseOpen * count, { silent: true });
 
@@ -2255,6 +2303,56 @@ function redeemPromo() {
   persist(true);
 }
 
+/* --------------------------------------------------------------------------
+   ЗАКРЫТЫЙ БЕТА-ТЕСТ (доступ по скрытому коду)
+   Поле кода живёт в настройках — «Лаборатория / Бета-тестирование», тумблер
+   3.6 Beta и вся механика тестовой ветки — js/betaManager.js.
+   -------------------------------------------------------------------------- */
+function redeemBetaCode(inputId = 'betaLabCodeInput') {
+  const input = $(inputId);
+  const raw = ((input && input.value) || '').replace(/\s+/g, '');
+  if (!raw) {
+    Toast.error('Введи код доступа');
+    return;
+  }
+  if (state.stats.betaTester) {
+    Toast.info('Бета-доступ уже активирован 🧪 — теперь включай ветку 3.6 Beta кнопкой выше.');
+    if (input) input.value = '';
+    if (typeof BetaMode !== 'undefined') BetaMode.renderLab();
+    return;
+  }
+
+  // Код в открытом виде в игре не хранится — сравниваем только хеши
+  if (betaCodeHash(raw) !== BETA_CODE_HASH) {
+    if (input) input.value = '';
+    audio.init();
+    audio.playLoss();
+    Toast.error('Неверный код. Доступ к закрытому бета-тесту выдаёт только автор проекта.');
+    return;
+  }
+
+  state.stats.betaTester = true;
+  state.stats.betaActivatedAt = Date.now();
+  if (!state.stats.unlockedTitles.includes(BETA_TITLE)) {
+    state.stats.unlockedTitles.push(BETA_TITLE);
+  }
+
+  audio.init();
+  audio.playSecret();
+  Fx.secretRain();
+  Fx.burst(140, ['#22d3ee', '#0ea5e9', '#fbbf24']);
+  addMoney(BETA_REWARD.money, { silent: true, countEarned: true });
+  addXp(BETA_REWARD.xp, { silent: true });
+
+  Toast.gold(`🧪 ДОСТУП К ЗАКРЫТОМУ БЕТА-ТЕСТУ АКТИВИРОВАН! +${fmt(BETA_REWARD.money)} ₽, +${BETA_REWARD.xp} XP и титул «${BETA_TITLE}». Теперь жми «Включить 3.6 Beta»!`, 9000);
+
+  if (input) input.value = '';
+  checkAchievements();
+  if (typeof BetaMode !== 'undefined') BetaMode.renderLab();
+  uiUpdate();
+  persist(true);
+}
+
 function renderPromoList() {
   const box = $('promoList');
   if (!box) return;
@@ -2317,7 +2415,7 @@ function selectRegAvatar(emoji) {
   audio.playTick();
 }
 
-function openExtrasModal() { updateVipCardVisibility(); Modal.open('extrasModal'); }
+function openExtrasModal() { updateVipCardVisibility(); if (typeof BetaMode !== 'undefined') BetaMode.renderLab(); Modal.open('extrasModal'); }
 
 function updateVipCardVisibility() {
   const vipStatusCard = $('vipStatusCard');
@@ -2347,6 +2445,9 @@ function submitRegistration() {
     grade: grade || 'Ученик школы',
     joinedAt: new Date().toLocaleDateString('ru-RU')
   };
+
+  // Если профиль создаётся при включённой 3.6 Beta — ник сразу становится «Тест»
+  if (typeof BetaMode !== 'undefined') BetaMode.onUserCreated();
 
   addMoney(2500, { silent: true, countEarned: true });
   Fx.burst(100);
@@ -2409,6 +2510,10 @@ function renderProfile() {
     `<span class="text-[9px] px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-300 font-bold">${escapeHtml(t)}</span>`
   ).join('');
 
+  // id аккаунта — нужен друзьям для подарков, а владельцу проекта — для выдачи кода автора
+  const uidEl = $('profileUid');
+  if (uidEl) uidEl.textContent = state.user ? state.user.id : '—';
+
   const invValue = state.inventory.reduce((sum, i) => sum + i.price, 0);
   $('statBalance').textContent = moneyText(state.balance, true);
   $('statBalance').title = moneyText(state.balance, false);
@@ -2431,6 +2536,8 @@ function renderProfile() {
   $('statCatFound').textContent = state.stats.catFound ? '🏆 НАЙДЕН' : 'не найден';
   const vipEl = $('statVipStatus');
   if (vipEl) vipEl.textContent = state.stats.vipActive ? '👑 АКТИВЕН' : 'не активен';
+  const betaEl = $('statBetaStatus');
+  if (betaEl) betaEl.textContent = state.stats.betaMode ? '🧪 3.6 ВКЛ' : (state.stats.betaTester ? 'доступ ✔' : 'нет доступа');
 
   if (state.profileTab === 'ach') renderAchievements();
 }
@@ -2465,7 +2572,9 @@ function applySettingsToUI() {
   applyQualityToUI();
   $('settingsVersion').textContent = `v${APP_VERSION}`;
   $('aboutVersion').textContent = APP_VERSION;
-  $('versionBadge').textContent = `v${APP_VERSION}`;
+  // Бейдж шапки: v3.5 Stable или неоновый v3.6 BETA TESTING (js/betaManager.js)
+  if (typeof BetaMode !== 'undefined') BetaMode.renderBadge();
+  else $('versionBadge').textContent = `v${APP_VERSION} Stable`;
 }
 
 function saveSettings() {
@@ -3030,7 +3139,7 @@ function initGame() {
   BackgroundFx.init();
 
   // Заглушки на случай отсутствия данных кейсов
-  if (!state.selectedCase) state.selectedCase = CASES_LIST[0];
+  if (!state.selectedCase) state.selectedCase = CASES_LIST.find(c => !c.secret && !c.beta) || CASES_LIST[0];
 
   setInvFilter('all');
   setTargetCategory('all');
@@ -3055,6 +3164,12 @@ function initGame() {
   applyOfflineIdleIncome();
   startIdleTicker();
   checkAchievements();
+
+  // Лаборатория 3.6 Beta: восстановить состояние тестовой ветки (ник «Тест», бейдж, бета-кейсы)
+  if (typeof BetaMode !== 'undefined') BetaMode.onBoot();
+
+  // Онлайн-функции: спонсорство, подарки, трейдинг (js/netplay.js)
+  if (typeof NetBoot === 'function') NetBoot();
 
   // Первое сохранение нового формата
   persist(true);

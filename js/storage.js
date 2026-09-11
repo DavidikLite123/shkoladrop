@@ -34,6 +34,17 @@ const DEFAULT_STATS = {
   vipActive: false,   // Активирован ли вечный VIP (отключает налог миллионера)
   vipActivatedAt: 0,  // Дата активации VIP
   vipCode: '',        // Какой именно код был активирован
+  betaTester: false,  // Активирован ли доступ к закрытому бета-тесту
+  betaActivatedAt: 0, // Дата активации бета-доступа
+  betaMode: false,    // Включена ли тестовая ветка 3.6 Beta
+  betaSavedNick: '',  // Бэкап настоящего ника на время беты (в бете ник — «Тест»)
+  // Спонсорство (код автора): кого поддерживаю, сколько сгенерировал автору и очередь на сервер
+  authorCode: null,           // { code, ownerUid, ownerName } | null
+  authorRoyaltyLocal: 0,      // сколько ₽ мои открытия принесли автору (локальный счётчик)
+  authorRoyaltyPending: 0,    // очередь репортов на сервер (придётся, когда сервер появится онлайн)
+  netGiftsSent: 0,
+  netGiftsReceived: 0,
+  netTradesDone: 0,
   achievements: [],
   unlockedTitles: [],
   catFound: false,
@@ -290,6 +301,16 @@ const SaveManager = {
     if (typeof stats.vipActive !== 'boolean') stats.vipActive = false;
     if (typeof stats.vipActivatedAt !== 'number') stats.vipActivatedAt = 0;
     if (typeof stats.vipCode !== 'string') stats.vipCode = '';
+    // То же для бета-доступа и тестовой ветки 3.6
+    if (typeof stats.betaTester !== 'boolean') stats.betaTester = false;
+    if (typeof stats.betaActivatedAt !== 'number') stats.betaActivatedAt = 0;
+    if (typeof stats.betaMode !== 'boolean') stats.betaMode = false;
+    if (typeof stats.betaSavedNick !== 'string') stats.betaSavedNick = '';
+    // Спонсорство и сеть
+    if (!stats.authorCode || typeof stats.authorCode !== 'object' || !stats.authorCode.code) stats.authorCode = null;
+    ['authorRoyaltyLocal', 'authorRoyaltyPending', 'netGiftsSent', 'netGiftsReceived', 'netTradesDone'].forEach(k => {
+      if (!Number.isFinite(stats[k])) stats[k] = 0;
+    });
     data.stats = stats;
 
     data.createdAt = raw.createdAt || base.createdAt;

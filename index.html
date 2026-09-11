@@ -8,7 +8,7 @@
   <meta name="color-scheme" content="dark" />
 
   <!-- Основные поисковые теги (SEO) -->
-  <title>ШКОЛА ДРОП 3.0 — Кейсы ютуберов и Бриллиантовая кнопка | David Lite</title>
+  <title>ШКОЛА ДРОП 3.5 — Кейсы ютуберов и Бриллиантовая кнопка | David Lite</title>
   <meta name="description" content="ШКОЛА ДРОП 3.0 (shkoladrop.vercel.app) — официальный интерактивный симулятор школьных кейсов и честный CS2 апгрейдер от David Lite Studio. Новые кейсы, коты-предметы, достижения, ежедневные награды, секретный кейс с Котом-Хранителем за 10 000 000 ₽!" />
   <meta name="keywords" content="школа дроп, школа дроп 3.0, david lite, давид лайт, davidlite, школа дроп кейсы, школа дроп апгрейдер, честный апгрейд кс2, школьный симулятор, секретный кот, кот хранитель, david lite studio, shkola drop" />
   <meta name="author" content="David Lite (Давид Лайт) / David Lite Studio" />
@@ -73,7 +73,7 @@
 
   <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="assets/icon.svg">
-  <link rel="manifest" href="manifest.webmanifest?v=3.0.2">
+  <link rel="manifest" href="manifest.webmanifest?v=3.5">
   <!-- КРИТИЧЕСКИЙ CSS: прокрутка и нижнее меню работают всегда, даже если внешний файл не загрузился -->
   <style>
     /* Прокрутка страницы.
@@ -132,9 +132,28 @@
       border-color: transparent;
     }
     html.scroll-locked, html.scroll-locked body { overflow: hidden; }
+
+    /* КРИТИЧЕСКИЙ CSS ПРЕЛОАДЕРА (работает ещё до загрузки style.css) */
+    #appPreloader {
+      position: fixed; inset: 0; z-index: 9999;
+      display: flex; align-items: center; justify-content: center;
+      background: radial-gradient(120% 120% at 50% 0%, #0f172a 0%, #020617 72%);
+      transition: opacity .5s ease; opacity: 1;
+    }
+    #appPreloader.preloader-hide { opacity: 0; pointer-events: none; }
+    #appPreloader .pre-card { display: flex; flex-direction: column; align-items: center; gap: .65rem; padding: 2rem; text-align: center; }
+    #appPreloader .pre-logo { font-size: 3.1rem; line-height: 1; animation: preloaderPulse 1.15s ease-in-out infinite; filter: drop-shadow(0 0 18px rgba(255, 85, 0, .55)); }
+    @keyframes preloaderPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.16); } }
+    #appPreloader .pre-title { color: #fb923c; font-weight: 900; letter-spacing: .16em; text-transform: uppercase; font-size: .95rem; }
+    #appPreloader .pre-track { width: 230px; max-width: 70vw; height: 10px; border-radius: 999px; background: #0f1a2b; border: 1px solid #1e293b; overflow: hidden; }
+    #appPreloader #preloaderBar { height: 100%; width: 0%; border-radius: 999px; background: linear-gradient(90deg, #ff5500, #fbbf24); transition: width .12s linear; }
+    #appPreloader .pre-percent { font-family: ui-monospace, monospace; font-size: 10px; color: #fbbf24; }
+    #appPreloader .pre-status { font-size: 11px; color: #94a3b8; min-height: 1rem; }
+    #appPreloader .pre-ver { font-size: 9px; color: #475569; letter-spacing: .08em; }
+    @media (prefers-reduced-motion: reduce) { #appPreloader .pre-logo { animation: none; } }
   </style>
 
-  <link rel="stylesheet" href="css/style.css?v=3.0.2">
+  <link rel="stylesheet" href="css/style.css?v=3.5">
 
   <script>
     window.tailwind = window.tailwind || {};
@@ -164,6 +183,18 @@
 </head>
 <body class="shkola-app max-w-md mx-auto relative border-x border-slate-800/40 shadow-2xl bg-schoolDark">
 
+  <!-- ПРЕЛОАДЕР: экран загрузки, закрывает интерфейс до полной готовности страницы (js/preloader.js) -->
+  <div id="appPreloader">
+    <div class="pre-card">
+      <div class="pre-logo">🎒</div>
+      <div class="pre-title">ШКОЛА ДРОП</div>
+      <div class="pre-track"><div id="preloaderBar"></div></div>
+      <div id="preloaderPercent" class="pre-percent">0%</div>
+      <div id="preloaderStatus" class="pre-status">Проверяем сменку на входе...</div>
+      <div class="pre-ver">v3.5 Stable · David Lite Studio</div>
+    </div>
+  </div>
+
   <!-- ЖИВОЙ ФОН: анимированные пятна + звёздное поле -->
   <div id="bgLayer" class="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
     <div class="bg-blob bg-blob-1"></div>
@@ -177,13 +208,13 @@
   <header class="w-full px-3.5 pt-3 pb-2.5 flex items-center justify-between gap-2 border-b border-slate-800/80 bg-slate-900/80 backdrop-blur-md sticky top-0 z-30">
     <div class="flex items-center space-x-2.5 min-w-0 flex-1">
       <!-- Logo Button: 5 кликов = скрытая панель разработчика -->
-      <button id="btnLogo" onclick="handleAdminTrigger()" title="🎒 ШКОЛА ДРОП 3.0 by David Lite" class="w-10 h-10 rounded-xl bg-gradient-to-tr from-orange-600 to-amber-500 flex items-center justify-center text-xl shadow-lg shadow-orange-500/25 active:scale-90 transition flex-shrink-0">
+      <button id="btnLogo" onclick="handleAdminTrigger()" title="🎒 ШКОЛА ДРОП 3.5 by David Lite" class="w-10 h-10 rounded-xl bg-gradient-to-tr from-orange-600 to-amber-500 flex items-center justify-center text-xl shadow-lg shadow-orange-500/25 active:scale-90 transition flex-shrink-0">
         🎒
       </button>
       <div class="min-w-0">
         <div class="flex items-center space-x-1.5 min-w-0">
           <h1 class="text-xs font-black uppercase tracking-wider text-orange-400 font-cs truncate">ШКОЛА ДРОП</h1>
-          <span id="versionBadge" class="text-[8px] bg-orange-500/20 text-orange-300 font-bold px-1.5 py-0.5 rounded border border-orange-500/40 font-cs flex-shrink-0">v3.0.2</span>
+          <span id="versionBadge" class="text-[8px] bg-orange-500/20 text-orange-300 font-bold px-1.5 py-0.5 rounded border border-orange-500/40 font-cs flex-shrink-0">v3.5 Stable</span>
         </div>
         <!-- Клик по автору открывает карточку создателя -->
         <button onclick="openAuthorModal()" class="hidden text-[10px] text-slate-400 hover:text-amber-300 font-medium transition items-center space-x-1 max-w-full truncate">
@@ -367,6 +398,17 @@
         <p class="text-[11px] text-slate-400">Крути кейсы со школьным лутом и депай в апгрейдер</p>
       </div>
       <span class="text-xs bg-orange-500/20 text-orange-400 font-bold px-2 py-0.5 rounded-lg border border-orange-500/30">СЕЗОН 2</span>
+    </div>
+
+    <!-- ЛАБОРАТОРИЯ 3.6: функции в разработке (видно только в бете) -->
+    <div id="betaDevPanel" class="hidden space-y-2">
+      <div class="text-[11px] font-black uppercase tracking-wider text-cyan-300 flex items-center space-x-1.5">
+        <span>🧪</span><span>Лаборатория 3.6 — функции в разработке</span>
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        <button onclick="BetaMode.devSoon('Школьные кланы')" class="beta-dev-card">🛡️<b>Школьные кланы</b><span>[В разработке]</span></button>
+        <button onclick="BetaMode.devSoon('Крафт-лаборатория')" class="beta-dev-card">⚗️<b>Крафт-лаборатория</b><span>[В разработке]</span></button>
+      </div>
     </div>
 
     <!-- Active Case Opening Stage -->
@@ -604,6 +646,43 @@
       </div>
       <div id="promoList" class="flex flex-wrap gap-1.5"></div>
     </div>
+
+    <!-- СПОНСОРСТВО · КОД АВТОРА -->
+    <div class="w-full bg-gradient-to-br from-purple-950/40 to-slate-900 rounded-2xl border border-purple-500/30 p-3 space-y-2">
+      <div class="flex items-center justify-between">
+        <div class="text-[11px] font-bold text-purple-300 uppercase tracking-wider">💜 Спонсорство · Код автора</div>
+        <span id="authorRoyaltyPercentBadge" class="text-[8px] font-black bg-purple-500/20 text-purple-300 border border-purple-500/40 px-1.5 py-0.5 rounded uppercase">+10% автору</span>
+      </div>
+      <div class="text-[10px] text-slate-400 leading-relaxed">Введи код любимого ютубера — <b class="text-purple-300">10% от стоимости твоих кейсов</b> будет приходить ему. У тебя ничего не отнимается! Коды выдаёт только David Lite.</div>
+
+      <!-- Форма ввода (скрывается, когда код активен) -->
+      <div id="authorCodeForm" class="flex space-x-1.5">
+        <input type="text" id="authorCodeInput" placeholder="Код автора (например DAVIDLITE)" onkeydown="if(event.key==='Enter') NetAuthor.apply()" class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 uppercase focus:outline-none focus:border-purple-500">
+        <button onclick="NetAuthor.apply()" class="px-3 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-cs font-bold text-[11px] uppercase active:scale-95 transition">Ввести</button>
+      </div>
+
+      <!-- Активный код -->
+      <div id="authorCodeActive" class="hidden space-y-1.5">
+        <div class="flex items-center justify-between bg-purple-950/60 border border-purple-500/30 rounded-xl p-2.5">
+          <div class="min-w-0">
+            <div class="text-[10.5px] font-bold text-purple-200 truncate">💜 <span id="authorActiveName">—</span></div>
+            <div class="text-[9.5px] text-purple-300/70">Код: <span id="authorActiveCode" class="font-mono">—</span> · ты уже принёс автору: <span id="authorRoyaltyStat" class="font-mono">0</span> ₽</div>
+          </div>
+          <button onclick="NetAuthor.remove()" class="text-[9.5px] font-bold text-slate-400 hover:text-rose-300 transition flex-shrink-0 ml-2">Отключить</button>
+        </div>
+      </div>
+
+      <!-- Кабинет автора кода (виден только владельцу кода, при онлайн-сервере) -->
+      <div id="authorCabinet" class="hidden bg-purple-950/40 border border-purple-500/30 rounded-xl p-2.5 space-y-1.5">
+        <div class="text-[10px] font-bold text-purple-300 uppercase tracking-wider">Мой код автора: <span id="authorCabinetCode" class="font-mono">—</span></div>
+        <div class="grid grid-cols-3 gap-1.5 text-center">
+          <div class="bg-slate-950/60 rounded-lg p-1.5"><div class="text-[8.5px] text-slate-500 uppercase">К выводу</div><div id="authorCabinetEarned" class="text-[11px] font-bold text-purple-200 font-mono">—</div></div>
+          <div class="bg-slate-950/60 rounded-lg p-1.5"><div class="text-[8.5px] text-slate-500 uppercase">Игроков</div><div id="authorCabinetSupporters" class="text-[11px] font-bold text-slate-200 font-mono">—</div></div>
+          <div class="bg-slate-950/60 rounded-lg p-1.5"><div class="text-[8.5px] text-slate-500 uppercase">Выведено</div><div id="authorCabinetWithdrawn" class="text-[11px] font-bold text-slate-400 font-mono">—</div></div>
+        </div>
+        <button onclick="AuthorCabinet.withdraw()" class="w-full py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-cs font-bold text-[11px] uppercase active:scale-95 transition">Забрать накопленные 10%</button>
+      </div>
+    </div>
   </main>
 
   <!-- ================= TAB 4: SCHOOL SHOP ================= -->
@@ -767,7 +846,7 @@
           </button>
         </div>
         <div class="text-[9px] text-slate-500 leading-relaxed bg-slate-950/70 border border-slate-800 rounded-xl p-2.5">
-          Версия игры: <span id="aboutVersion" class="text-orange-400 font-mono">3.0.2</span> · Обновлено: сентябрь 2026 ·
+          Версия игры: <span id="aboutVersion" class="text-orange-400 font-mono">3.5</span> · Обновлено: сентябрь 2026 ·
           Все внутриигровые ценности виртуальные.
         </div>
       </div>
@@ -865,6 +944,9 @@
             <div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Прогресс до следующего уровня</div>
             <div id="profileLevelHint" class="text-[11px] text-slate-300">Открой кейс или задепай предмет, чтобы получить опыт</div>
             <div class="flex flex-wrap gap-1.5 pt-1" id="titleChips"></div>
+            <div class="pt-1 text-[9.5px] text-slate-500">id аккаунта (для подарков и кода автора):
+              <button onclick="navigator.clipboard && navigator.clipboard.writeText(document.getElementById('profileUid').textContent); Toast.info('id аккаунта скопирован!')" class="font-mono text-cyan-300 hover:text-cyan-200 transition" title="Нажми, чтобы скопировать"><span id="profileUid">—</span> 📋</button>
+            </div>
           </div>
         </div>
 
@@ -907,6 +989,10 @@
               <div class="stat-tile-label">VIP-статус</div>
               <div id="statVipStatus" class="stat-tile-value text-amber-400 text-xs">не активен</div>
             </div>
+            <div class="stat-tile">
+              <div class="stat-tile-label">Бета-тест</div>
+              <div id="statBetaStatus" class="stat-tile-value text-cyan-300 text-xs">нет доступа</div>
+            </div>
           </div>
           <button onclick="exportSaveToClipboard()" class="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-[11px] transition active:scale-95">
             Скопировать резервную копию прогресса
@@ -939,10 +1025,76 @@
       <div class="space-y-2">
         <button onclick="openProfileModal(); closeExtrasModal()" class="extra-menu-button"><span class="text-xl">👤</span><span><b>Профиль</b><small>Вход, кабинет и достижения</small></span><span>›</span></button>
         <button onclick="switchTab('farm'); closeExtrasModal(); setTimeout(() => { const input = document.getElementById('promoInput'); if (input) { input.focus(); input.select(); } }, 300);" class="extra-menu-button"><span class="text-xl">🎫</span><span><b>Промокоды</b><small>Введи код и получи награду</small></span><span>›</span></button>
+        <button onclick="NetPlay.open(); closeExtrasModal()" class="extra-menu-button"><span class="text-xl">🤝</span><span><b>Трейдинг и подарки</b><small>Обмен предметами и гифты друзьям (нужен server/index.js)</small></span><span id="netplayDot" class="hidden text-[8px] font-black text-white bg-rose-500 border border-rose-400 min-w-[16px] px-1 py-0.5 rounded-full text-center">1</span></button>
+        <button onclick="closeExtrasModal(); openBetaLab()" class="extra-menu-button"><span class="text-xl">🧪</span><span><b>Бета-тест</b><small>Лаборатория 3.6 и закрытый доступ</small></span><span id="betaMenuBadge" class="hidden text-[8px] font-black text-cyan-300 bg-cyan-500/15 border border-cyan-500/40 px-1.5 py-0.5 rounded uppercase">Активен</span></button>
         <button onclick="openSettingsModal(); closeExtrasModal()" class="extra-menu-button"><span class="text-xl">⚙️</span><span><b>Настройки</b><small>Звук, тема, качество и сохранение</small></span><span>›</span></button>
         <button onclick="openCookieSettingsModal(); closeExtrasModal()" class="extra-menu-button"><span class="text-xl">🍪</span><span><b>Файлы cookie</b><small>Согласие и конфиденциальность</small></span><span>›</span></button>
         <button onclick="openAuthorModal(); closeExtrasModal()" class="extra-menu-button"><span class="text-xl">▶️</span><span><b>Об авторе</b><small>David Lite и YouTube</small></span><span>›</span></button>
       </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL: NETPLAY (трейдинг и подарки) ================= -->
+  <div id="netplayModal" class="app-modal hidden">
+    <div class="modal-card max-w-md w-full">
+      <div class="flex items-center justify-between pb-2 mb-2 border-b border-slate-800">
+        <h3 class="font-cs text-sm font-bold uppercase text-white flex items-center gap-1.5"><span>🤝</span><span>Трейдинг и подарки</span></h3>
+        <button onclick="NetPlay.close()" class="text-slate-400 hover:text-white text-lg leading-none">✕</button>
+      </div>
+
+      <div class="flex items-center justify-between mb-2">
+        <div id="netServerStatus" class="text-[9.5px] text-slate-400 leading-relaxed">Проверяю сервер…</div>
+        <span id="netServerChip" class="text-[8px] font-black px-1.5 py-0.5 rounded uppercase bg-slate-700 text-slate-300">…</span>
+      </div>
+      <div class="text-[9px] text-slate-500 mb-2">Мой id аккаунта (дай его друзьям для подарков): <button onclick="navigator.clipboard && navigator.clipboard.writeText(document.getElementById('netMyUid').textContent); Toast.info('id скопирован!')" class="font-mono text-cyan-300 hover:text-cyan-200" title="Нажми, чтобы скопировать"><span id="netMyUid">—</span> 📋</button></div>
+
+      <!-- Вкладки -->
+      <div class="grid grid-cols-3 gap-1.5 mb-2">
+        <button id="netTabGifts" onclick="NetPlay.switchTab('gifts')" class="net-tab">🎁 Подарить</button>
+        <button id="netTabIncoming" onclick="NetPlay.switchTab('incoming')" class="net-tab">📥 Входящие</button>
+        <button id="netTabTrades" onclick="NetPlay.switchTab('trades')" class="net-tab">🤝 Обмен</button>
+      </div>
+
+      <!-- ПОДАРОК -->
+      <div id="netPanelGifts" class="space-y-2">
+        <select id="netGiftItem" class="net-select"></select>
+        <input type="text" id="netGiftTarget" placeholder="id аккаунта или ник получателя" class="net-input">
+        <button onclick="NetPlay.sendGift()" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-fuchsia-500 to-purple-500 text-white font-cs font-bold text-[12px] uppercase active:scale-95 transition">Отправить подарок 🎁</button>
+        <div class="text-[9px] text-slate-500 leading-relaxed">Предмет уходит из рюкзака сразу после отправки и ждёт получателя на сервере во «Входящих».</div>
+      </div>
+
+      <!-- ВХОДЯЩИЕ -->
+      <div id="netPanelIncoming" class="hidden space-y-1.5">
+        <div id="netIncomingList" class="space-y-1.5"></div>
+      </div>
+
+      <!-- ОБМЕН -->
+      <div id="netPanelTrades" class="hidden space-y-2">
+        <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-2.5 space-y-2">
+          <div class="text-[10px] font-bold text-slate-300 uppercase tracking-wider">Создать комнату обмена</div>
+          <select id="netTradeItem" class="net-select"></select>
+          <input type="text" id="netTradeWant" placeholder="Что хочешь взамен (необязательно)" class="net-input">
+          <button onclick="NetPlay.createTrade()" class="w-full py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-sky-500 text-black font-cs font-bold text-[11px] uppercase active:scale-95 transition">Создать и получить код комнаты</button>
+        </div>
+        <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-2.5 space-y-2">
+          <div class="text-[10px] font-bold text-slate-300 uppercase tracking-wider">Вступить в обмен по коду</div>
+          <input type="text" id="netTradeCode" placeholder="Код комнаты (6 символов)" maxlength="6" class="net-input uppercase tracking-widest text-center font-mono">
+          <select id="netTradeJoinItem" class="net-select"></select>
+          <button onclick="NetPlay.joinTrade()" class="w-full py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-black font-cs font-bold text-[11px] uppercase active:scale-95 transition">Обменяться</button>
+        </div>
+        <div id="netMyTradesList" class="space-y-1.5"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= OVERLAY: BETA UPDATE (имитация загрузки 3.6) ================= -->
+  <div id="betaUpdateOverlay" class="app-modal hidden">
+    <div class="beta-update-card">
+      <div class="text-4xl">🧪</div>
+      <div class="font-cs font-bold text-sm uppercase tracking-wider text-cyan-300">Обновление до 3.6 Beta</div>
+      <div id="betaUpdateStatus" class="text-[11px] text-slate-300">Подключение к тестовой ветке 3.6 Beta...</div>
+      <div class="beta-update-track"><div id="betaUpdateBar" class="beta-update-fill" style="width:0%"></div></div>
+      <div id="betaUpdatePercent" class="beta-update-percent">0%</div>
     </div>
   </div>
 
@@ -1046,8 +1198,36 @@
           Полный сброс прогресса
         </button>
 
+        <!-- ЛАБОРАТОРИЯ / БЕТА-ТЕСТИРОВАНИЕ 3.6 -->
+        <div id="betaLabSection" class="bg-gradient-to-br from-cyan-950/50 to-slate-900 border border-cyan-500/40 rounded-xl p-3 space-y-2.5">
+          <div class="flex items-center justify-between">
+            <div class="text-[11px] font-black text-cyan-300 uppercase tracking-wider">🧪 Лаборатория / Бета-тестирование</div>
+            <span class="text-[8px] font-black bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 px-1.5 py-0.5 rounded uppercase tracking-wider">Beta 3.6</span>
+          </div>
+          <div class="text-[10px] text-slate-400 leading-relaxed">Получи доступ к экспериментальным кейсам и новым механикам до официального релиза.</div>
+
+          <button id="betaModeToggle" onclick="BetaMode.toggle()" class="beta-toggle w-full py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-sky-500 text-black font-cs font-bold text-[12px] uppercase tracking-wide active:scale-95 transition">Включить 3.6 Beta</button>
+
+          <!-- Поле кода закрытого бета-теста — под кнопкой (скрывается после активации доступа) -->
+          <div id="betaLabCodeBlock" class="space-y-1.5">
+            <div class="text-[10px] text-slate-400 leading-relaxed">У тебя есть доступ к закрытому бета-тесту? <b class="text-cyan-300">Введи код</b>, который лично выдал David Lite:</div>
+            <div class="flex space-x-1.5">
+              <input type="password" id="betaLabCodeInput" inputmode="numeric" autocomplete="off" maxlength="12" placeholder="Код доступа" class="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white font-mono placeholder-slate-600 focus:outline-none focus:border-cyan-500">
+              <button onclick="redeemBetaCode('betaLabCodeInput')" class="px-3 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-black font-cs font-bold text-[11px] uppercase active:scale-95 transition">Ввести</button>
+            </div>
+            <div class="text-[9px] text-slate-500 leading-relaxed">Код не публикуется нигде — его выдаёт только автор проекта</div>
+          </div>
+
+          <!-- Статус доступа (показывается после ввода кода) -->
+          <div id="betaLabActiveInfo" class="hidden bg-cyan-950/60 border border-cyan-500/30 rounded-lg p-2.5 space-y-1">
+            <div class="text-[10px] font-bold text-cyan-300">✔ Доступ к закрытому бета-тесту активирован</div>
+            <div id="betaLabInfoState" class="text-[10px] text-cyan-200/80">Ветка 3.6 Beta: выключена</div>
+            <div id="betaLabInfoDate" class="text-[9px] font-mono text-cyan-400/70"></div>
+          </div>
+        </div>
+
         <div class="text-[9px] text-slate-500 text-center leading-relaxed">
-          ШКОЛА ДРОП <span id="settingsVersion" class="font-mono text-orange-400">v3.0.2</span> · David Lite Studio<br>
+          ШКОЛА ДРОП <span id="settingsVersion" class="font-mono text-orange-400">v3.5</span> · David Lite Studio<br>
           Прогресс хранится в localStorage и cookie-файлах на твоём устройстве.
         </div>
       </div>
@@ -1222,6 +1402,23 @@
         </div>
         <button onclick="adminGrantCat()" class="w-full py-2 rounded-xl bg-fuchsia-950/60 border border-fuchsia-800 text-fuchsia-300 font-bold text-[10px]">Выдать Кота-Хранителя 🐱</button>
         <button onclick="adminMaxLevel()" class="w-full py-2 rounded-xl bg-slate-800 border border-slate-700 text-slate-200 font-bold text-[10px]">Максимальный уровень и дежурство</button>
+
+        <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-2.5 space-y-1.5">
+          <div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold">🖥 Адрес игрового сервера</div>
+          <input type="text" id="adminServerUrl" placeholder="https://мой-сервер (пусто = этот же сайт)" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-2 text-[10.5px] text-white font-mono focus:outline-none focus:border-cyan-500">
+          <button onclick="adminSaveServerUrl()" class="w-full py-2 rounded-lg bg-cyan-950/70 border border-cyan-800 text-cyan-300 font-bold text-[10px]">Сохранить и проверить связь</button>
+        </div>
+
+        <div class="bg-purple-950/30 border border-purple-800/50 rounded-xl p-2.5 space-y-1.5">
+          <div class="text-[10px] uppercase tracking-wider text-purple-300 font-bold">💜 Выдать код автора (только владелец проекта)</div>
+          <input type="text" id="adminCodeOwnerUid" placeholder="id аккаунта владельца (player-…)" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-2 text-[10.5px] text-white font-mono focus:outline-none focus:border-purple-500">
+          <input type="text" id="adminCodeOwnerName" placeholder="Имя/ник, который увидят игроки" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-2 text-[10.5px] text-white focus:outline-none focus:border-purple-500">
+          <input type="text" id="adminCodeValue" placeholder="Код (необязательно — сгенерируем)" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-2 text-[10.5px] text-white font-mono uppercase focus:outline-none focus:border-purple-500">
+          <button onclick="adminIssueAuthorCode()" class="w-full py-2 rounded-lg bg-purple-700 hover:bg-purple-600 text-white font-bold text-[10px]">Выдать код автора</button>
+          <textarea id="adminCodeSnippet" rows="2" placeholder="JSON-строка нового кода появится тут, если сервер оффлайн" class="hidden w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-[9px] font-mono text-purple-200 focus:outline-none resize-none"></textarea>
+          <div class="text-[9px] text-slate-500 leading-relaxed">При онлайн-сервере код допишется в author-codes.json автоматически. Оффлайн — скопируй строку в файл на GitHub руками.</div>
+          <div id="adminAuthorList" class="space-y-1 max-h-[110px] overflow-y-auto"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -1396,10 +1593,13 @@
   <div id="toastContainer" class="fixed top-16 right-3 left-3 sm:left-auto sm:w-80 z-[80] flex flex-col items-end space-y-2 pointer-events-none"></div>
 
   <!-- ЛОГИКА ИГРЫ (модульная структура v2.0) -->
-  <script defer src="js/config.js?v=3.0.2"></script>
-  <script defer src="js/storage.js?v=3.0.2"></script>
-  <script defer src="js/ui.js?v=3.0.2"></script>
-  <script defer src="js/game.js?v=3.0.2"></script>
-  <script defer src="js/main.js?v=3.0.2"></script>
+  <script defer src="js/preloader.js?v=3.5"></script>
+  <script defer src="js/config.js?v=3.5"></script>
+  <script defer src="js/storage.js?v=3.5"></script>
+  <script defer src="js/ui.js?v=3.5"></script>
+  <script defer src="js/game.js?v=3.5"></script>
+  <script defer src="js/netplay.js?v=3.5"></script>
+  <script defer src="js/betaManager.js?v=3.5"></script>
+  <script defer src="js/main.js?v=3.5"></script>
 </body>
 </html>
