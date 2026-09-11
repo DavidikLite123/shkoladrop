@@ -36,6 +36,8 @@ const DEFAULT_STATS = {
   vipCode: '',        // Какой именно код был активирован
   betaTester: false,  // Активирован ли доступ к закрытому бета-тесту
   betaActivatedAt: 0, // Дата активации бета-доступа
+  betaMode: false,    // Включена ли тестовая ветка 3.6 Beta
+  betaSavedNick: '',  // Бэкап настоящего ника на время беты (в бете ник — «Тест»)
   achievements: [],
   unlockedTitles: [],
   catFound: false,
@@ -292,9 +294,11 @@ const SaveManager = {
     if (typeof stats.vipActive !== 'boolean') stats.vipActive = false;
     if (typeof stats.vipActivatedAt !== 'number') stats.vipActivatedAt = 0;
     if (typeof stats.vipCode !== 'string') stats.vipCode = '';
-    // То же для бета-доступа
+    // То же для бета-доступа и тестовой ветки 3.6
     if (typeof stats.betaTester !== 'boolean') stats.betaTester = false;
     if (typeof stats.betaActivatedAt !== 'number') stats.betaActivatedAt = 0;
+    if (typeof stats.betaMode !== 'boolean') stats.betaMode = false;
+    if (typeof stats.betaSavedNick !== 'string') stats.betaSavedNick = '';
     data.stats = stats;
 
     data.createdAt = raw.createdAt || base.createdAt;

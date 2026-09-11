@@ -8,7 +8,7 @@
   <meta name="color-scheme" content="dark" />
 
   <!-- Основные поисковые теги (SEO) -->
-  <title>ШКОЛА ДРОП 3.0 — Кейсы ютуберов и Бриллиантовая кнопка | David Lite</title>
+  <title>ШКОЛА ДРОП 3.5 — Кейсы ютуберов и Бриллиантовая кнопка | David Lite</title>
   <meta name="description" content="ШКОЛА ДРОП 3.0 (shkoladrop.vercel.app) — официальный интерактивный симулятор школьных кейсов и честный CS2 апгрейдер от David Lite Studio. Новые кейсы, коты-предметы, достижения, ежедневные награды, секретный кейс с Котом-Хранителем за 10 000 000 ₽!" />
   <meta name="keywords" content="школа дроп, школа дроп 3.0, david lite, давид лайт, davidlite, школа дроп кейсы, школа дроп апгрейдер, честный апгрейд кс2, школьный симулятор, секретный кот, кот хранитель, david lite studio, shkola drop" />
   <meta name="author" content="David Lite (Давид Лайт) / David Lite Studio" />
@@ -73,7 +73,7 @@
 
   <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="assets/icon.svg">
-  <link rel="manifest" href="manifest.webmanifest?v=3.0.3">
+  <link rel="manifest" href="manifest.webmanifest?v=3.5">
   <!-- КРИТИЧЕСКИЙ CSS: прокрутка и нижнее меню работают всегда, даже если внешний файл не загрузился -->
   <style>
     /* Прокрутка страницы.
@@ -132,9 +132,28 @@
       border-color: transparent;
     }
     html.scroll-locked, html.scroll-locked body { overflow: hidden; }
+
+    /* КРИТИЧЕСКИЙ CSS ПРЕЛОАДЕРА (работает ещё до загрузки style.css) */
+    #appPreloader {
+      position: fixed; inset: 0; z-index: 9999;
+      display: flex; align-items: center; justify-content: center;
+      background: radial-gradient(120% 120% at 50% 0%, #0f172a 0%, #020617 72%);
+      transition: opacity .5s ease; opacity: 1;
+    }
+    #appPreloader.preloader-hide { opacity: 0; pointer-events: none; }
+    #appPreloader .pre-card { display: flex; flex-direction: column; align-items: center; gap: .65rem; padding: 2rem; text-align: center; }
+    #appPreloader .pre-logo { font-size: 3.1rem; line-height: 1; animation: preloaderPulse 1.15s ease-in-out infinite; filter: drop-shadow(0 0 18px rgba(255, 85, 0, .55)); }
+    @keyframes preloaderPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.16); } }
+    #appPreloader .pre-title { color: #fb923c; font-weight: 900; letter-spacing: .16em; text-transform: uppercase; font-size: .95rem; }
+    #appPreloader .pre-track { width: 230px; max-width: 70vw; height: 10px; border-radius: 999px; background: #0f1a2b; border: 1px solid #1e293b; overflow: hidden; }
+    #appPreloader #preloaderBar { height: 100%; width: 0%; border-radius: 999px; background: linear-gradient(90deg, #ff5500, #fbbf24); transition: width .12s linear; }
+    #appPreloader .pre-percent { font-family: ui-monospace, monospace; font-size: 10px; color: #fbbf24; }
+    #appPreloader .pre-status { font-size: 11px; color: #94a3b8; min-height: 1rem; }
+    #appPreloader .pre-ver { font-size: 9px; color: #475569; letter-spacing: .08em; }
+    @media (prefers-reduced-motion: reduce) { #appPreloader .pre-logo { animation: none; } }
   </style>
 
-  <link rel="stylesheet" href="css/style.css?v=3.0.3">
+  <link rel="stylesheet" href="css/style.css?v=3.5">
 
   <script>
     window.tailwind = window.tailwind || {};
@@ -164,6 +183,18 @@
 </head>
 <body class="shkola-app max-w-md mx-auto relative border-x border-slate-800/40 shadow-2xl bg-schoolDark">
 
+  <!-- ПРЕЛОАДЕР: экран загрузки, закрывает интерфейс до полной готовности страницы (js/preloader.js) -->
+  <div id="appPreloader">
+    <div class="pre-card">
+      <div class="pre-logo">🎒</div>
+      <div class="pre-title">ШКОЛА ДРОП</div>
+      <div class="pre-track"><div id="preloaderBar"></div></div>
+      <div id="preloaderPercent" class="pre-percent">0%</div>
+      <div id="preloaderStatus" class="pre-status">Проверяем сменку на входе...</div>
+      <div class="pre-ver">v3.5 Stable · David Lite Studio</div>
+    </div>
+  </div>
+
   <!-- ЖИВОЙ ФОН: анимированные пятна + звёздное поле -->
   <div id="bgLayer" class="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
     <div class="bg-blob bg-blob-1"></div>
@@ -177,13 +208,13 @@
   <header class="w-full px-3.5 pt-3 pb-2.5 flex items-center justify-between gap-2 border-b border-slate-800/80 bg-slate-900/80 backdrop-blur-md sticky top-0 z-30">
     <div class="flex items-center space-x-2.5 min-w-0 flex-1">
       <!-- Logo Button: 5 кликов = скрытая панель разработчика -->
-      <button id="btnLogo" onclick="handleAdminTrigger()" title="🎒 ШКОЛА ДРОП 3.0 by David Lite" class="w-10 h-10 rounded-xl bg-gradient-to-tr from-orange-600 to-amber-500 flex items-center justify-center text-xl shadow-lg shadow-orange-500/25 active:scale-90 transition flex-shrink-0">
+      <button id="btnLogo" onclick="handleAdminTrigger()" title="🎒 ШКОЛА ДРОП 3.5 by David Lite" class="w-10 h-10 rounded-xl bg-gradient-to-tr from-orange-600 to-amber-500 flex items-center justify-center text-xl shadow-lg shadow-orange-500/25 active:scale-90 transition flex-shrink-0">
         🎒
       </button>
       <div class="min-w-0">
         <div class="flex items-center space-x-1.5 min-w-0">
           <h1 class="text-xs font-black uppercase tracking-wider text-orange-400 font-cs truncate">ШКОЛА ДРОП</h1>
-          <span id="versionBadge" class="text-[8px] bg-orange-500/20 text-orange-300 font-bold px-1.5 py-0.5 rounded border border-orange-500/40 font-cs flex-shrink-0">v3.0.3</span>
+          <span id="versionBadge" class="text-[8px] bg-orange-500/20 text-orange-300 font-bold px-1.5 py-0.5 rounded border border-orange-500/40 font-cs flex-shrink-0">v3.5 Stable</span>
         </div>
         <!-- Клик по автору открывает карточку создателя -->
         <button onclick="openAuthorModal()" class="hidden text-[10px] text-slate-400 hover:text-amber-300 font-medium transition items-center space-x-1 max-w-full truncate">
@@ -367,6 +398,17 @@
         <p class="text-[11px] text-slate-400">Крути кейсы со школьным лутом и депай в апгрейдер</p>
       </div>
       <span class="text-xs bg-orange-500/20 text-orange-400 font-bold px-2 py-0.5 rounded-lg border border-orange-500/30">СЕЗОН 2</span>
+    </div>
+
+    <!-- ЛАБОРАТОРИЯ 3.6: функции в разработке (видно только в бете) -->
+    <div id="betaDevPanel" class="hidden space-y-2">
+      <div class="text-[11px] font-black uppercase tracking-wider text-cyan-300 flex items-center space-x-1.5">
+        <span>🧪</span><span>Лаборатория 3.6 — функции в разработке</span>
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        <button onclick="BetaMode.devSoon('Школьные кланы')" class="beta-dev-card">🛡️<b>Школьные кланы</b><span>[В разработке]</span></button>
+        <button onclick="BetaMode.devSoon('Крафт-лаборатория')" class="beta-dev-card">⚗️<b>Крафт-лаборатория</b><span>[В разработке]</span></button>
+      </div>
     </div>
 
     <!-- Active Case Opening Stage -->
@@ -767,7 +809,7 @@
           </button>
         </div>
         <div class="text-[9px] text-slate-500 leading-relaxed bg-slate-950/70 border border-slate-800 rounded-xl p-2.5">
-          Версия игры: <span id="aboutVersion" class="text-orange-400 font-mono">3.0.3</span> · Обновлено: сентябрь 2026 ·
+          Версия игры: <span id="aboutVersion" class="text-orange-400 font-mono">3.5</span> · Обновлено: сентябрь 2026 ·
           Все внутриигровые ценности виртуальные.
         </div>
       </div>
@@ -943,7 +985,7 @@
       <div class="space-y-2">
         <button onclick="openProfileModal(); closeExtrasModal()" class="extra-menu-button"><span class="text-xl">👤</span><span><b>Профиль</b><small>Вход, кабинет и достижения</small></span><span>›</span></button>
         <button onclick="switchTab('farm'); closeExtrasModal(); setTimeout(() => { const input = document.getElementById('promoInput'); if (input) { input.focus(); input.select(); } }, 300);" class="extra-menu-button"><span class="text-xl">🎫</span><span><b>Промокоды</b><small>Введи код и получи награду</small></span><span>›</span></button>
-        <button onclick="openBetaModal(); closeExtrasModal()" class="extra-menu-button"><span class="text-xl">🧪</span><span><b>Бета-тест</b><small>Закрытый доступ к новым функциям</small></span><span id="betaMenuBadge" class="hidden text-[8px] font-black text-cyan-300 bg-cyan-500/15 border border-cyan-500/40 px-1.5 py-0.5 rounded uppercase">Активен</span></button>
+        <button onclick="closeExtrasModal(); openBetaLab()" class="extra-menu-button"><span class="text-xl">🧪</span><span><b>Бета-тест</b><small>Лаборатория 3.6 и закрытый доступ</small></span><span id="betaMenuBadge" class="hidden text-[8px] font-black text-cyan-300 bg-cyan-500/15 border border-cyan-500/40 px-1.5 py-0.5 rounded uppercase">Активен</span></button>
         <button onclick="openSettingsModal(); closeExtrasModal()" class="extra-menu-button"><span class="text-xl">⚙️</span><span><b>Настройки</b><small>Звук, тема, качество и сохранение</small></span><span>›</span></button>
         <button onclick="openCookieSettingsModal(); closeExtrasModal()" class="extra-menu-button"><span class="text-xl">🍪</span><span><b>Файлы cookie</b><small>Согласие и конфиденциальность</small></span><span>›</span></button>
         <button onclick="openAuthorModal(); closeExtrasModal()" class="extra-menu-button"><span class="text-xl">▶️</span><span><b>Об авторе</b><small>David Lite и YouTube</small></span><span>›</span></button>
@@ -951,35 +993,14 @@
     </div>
   </div>
 
-  <!-- ================= MODAL: BETA TEST ================= -->
-  <div id="betaModal" class="app-modal hidden">
-    <div class="modal-card max-w-sm w-full">
-      <div class="flex items-center justify-between pb-2 mb-3 border-b border-slate-800">
-        <h3 class="font-cs text-sm font-bold uppercase text-white flex items-center gap-1.5"><span>🧪</span><span>Закрытый бета-тест</span></h3>
-        <button onclick="closeBetaModal()" class="text-slate-400 hover:text-white text-lg leading-none">✕</button>
-      </div>
-
-      <!-- Форма ввода кода (скрывается после активации) -->
-      <div id="betaCodeForm" class="space-y-2.5">
-        <div class="bg-cyan-950/40 border border-cyan-500/30 rounded-xl p-3 text-[10.5px] text-cyan-100/80 leading-relaxed">
-          У тебя есть доступ к закрытому бета-тесту? <b class="text-cyan-300">Введи код</b>, который лично выдал David Lite, и первым пробуй новые функции ещё до релиза.
-        </div>
-        <input type="password" id="betaCodeInput" inputmode="numeric" autocomplete="off" maxlength="12" placeholder="Введи код доступа" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-sm text-white text-center font-mono placeholder-slate-600 focus:outline-none focus:border-cyan-500">
-        <button onclick="redeemBetaCode()" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-sky-500 text-black font-cs font-bold text-[12px] uppercase tracking-wide active:scale-95 transition">Активировать доступ</button>
-        <div class="text-[9px] text-slate-500 text-center leading-relaxed">Код не публикуется нигде — его выдаёт только автор проекта</div>
-      </div>
-
-      <!-- Статус (показывается после активации) -->
-      <div id="betaActiveCard" class="hidden">
-        <div class="bg-gradient-to-br from-cyan-950/60 via-sky-900/40 to-slate-900 border border-cyan-500/40 rounded-xl p-3 space-y-1.5">
-          <div class="flex items-center justify-between">
-            <div class="text-[11px] font-black text-cyan-300 uppercase tracking-wider">Бета-доступ активен</div>
-            <span class="text-lg">🧪</span>
-          </div>
-          <div class="text-[10px] text-cyan-100/80 leading-relaxed">Ты в списке бета-тестеров! Когда выйдут <b>трейдинг</b> и <b>крафты</b> — попробуешь их первым. Титул «🧪 Бета-тестер» уже в твоей коллекции.</div>
-          <div id="betaActiveDate" class="text-[9px] font-mono text-cyan-400/70"></div>
-        </div>
-      </div>
+  <!-- ================= OVERLAY: BETA UPDATE (имитация загрузки 3.6) ================= -->
+  <div id="betaUpdateOverlay" class="app-modal hidden">
+    <div class="beta-update-card">
+      <div class="text-4xl">🧪</div>
+      <div class="font-cs font-bold text-sm uppercase tracking-wider text-cyan-300">Обновление до 3.6 Beta</div>
+      <div id="betaUpdateStatus" class="text-[11px] text-slate-300">Подключение к тестовой ветке 3.6 Beta...</div>
+      <div class="beta-update-track"><div id="betaUpdateBar" class="beta-update-fill" style="width:0%"></div></div>
+      <div id="betaUpdatePercent" class="beta-update-percent">0%</div>
     </div>
   </div>
 
@@ -1083,8 +1104,36 @@
           Полный сброс прогресса
         </button>
 
+        <!-- ЛАБОРАТОРИЯ / БЕТА-ТЕСТИРОВАНИЕ 3.6 -->
+        <div id="betaLabSection" class="bg-gradient-to-br from-cyan-950/50 to-slate-900 border border-cyan-500/40 rounded-xl p-3 space-y-2.5">
+          <div class="flex items-center justify-between">
+            <div class="text-[11px] font-black text-cyan-300 uppercase tracking-wider">🧪 Лаборатория / Бета-тестирование</div>
+            <span class="text-[8px] font-black bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 px-1.5 py-0.5 rounded uppercase tracking-wider">Beta 3.6</span>
+          </div>
+          <div class="text-[10px] text-slate-400 leading-relaxed">Получи доступ к экспериментальным кейсам и новым механикам до официального релиза.</div>
+
+          <button id="betaModeToggle" onclick="BetaMode.toggle()" class="beta-toggle w-full py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-sky-500 text-black font-cs font-bold text-[12px] uppercase tracking-wide active:scale-95 transition">Включить 3.6 Beta</button>
+
+          <!-- Поле кода закрытого бета-теста — под кнопкой (скрывается после активации доступа) -->
+          <div id="betaLabCodeBlock" class="space-y-1.5">
+            <div class="text-[10px] text-slate-400 leading-relaxed">У тебя есть доступ к закрытому бета-тесту? <b class="text-cyan-300">Введи код</b>, который лично выдал David Lite:</div>
+            <div class="flex space-x-1.5">
+              <input type="password" id="betaLabCodeInput" inputmode="numeric" autocomplete="off" maxlength="12" placeholder="Код доступа" class="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white font-mono placeholder-slate-600 focus:outline-none focus:border-cyan-500">
+              <button onclick="redeemBetaCode('betaLabCodeInput')" class="px-3 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-black font-cs font-bold text-[11px] uppercase active:scale-95 transition">Ввести</button>
+            </div>
+            <div class="text-[9px] text-slate-500 leading-relaxed">Код не публикуется нигде — его выдаёт только автор проекта</div>
+          </div>
+
+          <!-- Статус доступа (показывается после ввода кода) -->
+          <div id="betaLabActiveInfo" class="hidden bg-cyan-950/60 border border-cyan-500/30 rounded-lg p-2.5 space-y-1">
+            <div class="text-[10px] font-bold text-cyan-300">✔ Доступ к закрытому бета-тесту активирован</div>
+            <div id="betaLabInfoState" class="text-[10px] text-cyan-200/80">Ветка 3.6 Beta: выключена</div>
+            <div id="betaLabInfoDate" class="text-[9px] font-mono text-cyan-400/70"></div>
+          </div>
+        </div>
+
         <div class="text-[9px] text-slate-500 text-center leading-relaxed">
-          ШКОЛА ДРОП <span id="settingsVersion" class="font-mono text-orange-400">v3.0.3</span> · David Lite Studio<br>
+          ШКОЛА ДРОП <span id="settingsVersion" class="font-mono text-orange-400">v3.5</span> · David Lite Studio<br>
           Прогресс хранится в localStorage и cookie-файлах на твоём устройстве.
         </div>
       </div>
@@ -1433,10 +1482,12 @@
   <div id="toastContainer" class="fixed top-16 right-3 left-3 sm:left-auto sm:w-80 z-[80] flex flex-col items-end space-y-2 pointer-events-none"></div>
 
   <!-- ЛОГИКА ИГРЫ (модульная структура v2.0) -->
-  <script defer src="js/config.js?v=3.0.3"></script>
-  <script defer src="js/storage.js?v=3.0.3"></script>
-  <script defer src="js/ui.js?v=3.0.3"></script>
-  <script defer src="js/game.js?v=3.0.3"></script>
-  <script defer src="js/main.js?v=3.0.2"></script>
+  <script defer src="js/preloader.js?v=3.5"></script>
+  <script defer src="js/config.js?v=3.5"></script>
+  <script defer src="js/storage.js?v=3.5"></script>
+  <script defer src="js/ui.js?v=3.5"></script>
+  <script defer src="js/game.js?v=3.5"></script>
+  <script defer src="js/betaManager.js?v=3.5"></script>
+  <script defer src="js/main.js?v=3.5"></script>
 </body>
 </html>

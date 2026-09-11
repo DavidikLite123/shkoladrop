@@ -4,7 +4,8 @@
    уровни, награды, промокоды, апгрейды дежурства.
    ========================================================================== */
 
-const APP_VERSION = '3.0.3';
+const APP_VERSION = '3.5';
+const BETA_VERSION = '3.6';   // тестовая ветка «3.6 Beta» (Лаборатория)
 const SAVE_VERSION = 11;
 const SEASON_NUMBER = 3;
 const HARD_MODE_THRESHOLD = 100000000;
@@ -81,7 +82,8 @@ const CATEGORIES = {
   school: { label: 'Школа', short: 'Школа', badge: 'bg-amber-950 text-amber-300 border-amber-800' },
   cs2:    { label: 'CS2',   short: 'CS2',   badge: 'bg-cyan-950 text-cyan-300 border-cyan-800' },
   other:  { label: 'Игры',  short: 'Игра',  badge: 'bg-violet-950 text-violet-300 border-violet-800' },
-  cat:    { label: '🐱 Коты', short: 'Кот', badge: 'bg-fuchsia-950 text-fuchsia-300 border-fuchsia-800' }
+  cat:    { label: '🐱 Коты', short: 'Кот', badge: 'bg-fuchsia-950 text-fuchsia-300 border-fuchsia-800' },
+  beta:   { label: '🧪 Бета 3.6', short: 'Бета', badge: 'bg-cyan-950 text-cyan-200 border-cyan-700' }
 };
 
 /* ---------- Школьный каталог ---------- */
@@ -189,7 +191,19 @@ const SEASON3_CATALOG = [
   { id: 'yt_stream_deck', name: 'Пульт стримера', price: 700000, icon: '🎛️', badgeBg: 'from-fuchsia-500/50 to-purple-900/60', rarity: 'classified', category: 'other', game: 'YouTube', desc: 'Одна кнопка — и весь класс в прямом эфире' }
 ];
 
-const ALL_MASTER_ITEMS = [...SCHOOL_CATALOG, ...CS2_CATALOG, ...OTHER_GAMES_CATALOG, ...CAT_CATALOG, ...SEASON3_CATALOG, ...ULTRA_CATALOG];
+/* ---------- Каталог Лаборатории 3.6 Beta (экспериментальные предметы) ----------
+   Предметы физически живут в общем каталоге, чтобы рюкзак и сейвы не ломались
+   при выключении беты. Дропаются они только из бета-кейсов тестовой ветки. */
+const BETA_CATALOG = [
+  { id: 'beta_holo_diary',    name: 'Голографический дневник',     price: 3600,    icon: '📘', badgeBg: 'from-cyan-600/30 to-sky-900/40',          rarity: 'restricted', category: 'beta', desc: 'Двойки в нём рассеиваются ещё в облаке' },
+  { id: 'beta_antimatter',    name: 'Антиматерия из буфета',       price: 9600,    icon: '🥪', badgeBg: 'from-fuchsia-600/30 to-purple-900/40',    rarity: 'classified', category: 'beta', desc: 'Бутерброд массой минус 12 грамм' },
+  { id: 'beta_quantum_cheat', name: 'Квантовая шпаргалка 3.6',     price: 36000,   icon: '🌀', badgeBg: 'from-sky-600/30 to-indigo-900/40',        rarity: 'classified', category: 'beta', desc: 'Правильный ответ существует во всех вариантах сразу' },
+  { id: 'beta_robo_bell',     name: 'Робозвонок с первого этажа',  price: 96000,   icon: '⏰', badgeBg: 'from-amber-600/30 to-orange-900/40',       rarity: 'covert',     category: 'beta', desc: 'Прозвенел на урок — урока больше нет' },
+  { id: 'beta_nuclear_mel',   name: 'Ядерный мел физика',          price: 360000,  icon: '☢️', badgeBg: 'from-lime-600/30 to-emerald-900/40',      rarity: 'covert',     category: 'beta', desc: 'Одна формула — и доска светится до утра' },
+  { id: 'beta_cyber_cat',     name: 'Кибер-Кот 3.6',               price: 3600000, icon: '🤖', badgeBg: 'from-cyan-500/40 to-fuchsia-800/40',      rarity: 'secret',     category: 'cat',  desc: 'Хранитель тестовой ветки. Мурлычет на частоте 3.6 ГГц' }
+];
+
+const ALL_MASTER_ITEMS = [...SCHOOL_CATALOG, ...CS2_CATALOG, ...OTHER_GAMES_CATALOG, ...CAT_CATALOG, ...SEASON3_CATALOG, ...ULTRA_CATALOG, ...BETA_CATALOG];
 const ITEMS_BY_ID = ALL_MASTER_ITEMS.reduce((acc, it) => { acc[it.id] = it; return acc; }, {});
 
 /* ---------- Кейсы (веса = честные шансы, нормализуются автоматически) ---------- */
@@ -305,6 +319,37 @@ const CASES_LIST = [
       { id: 'cat_black_physics', w: 20 }, { id: 'cat_curator', w: 20 }, { id: 'cat_canteen', w: 18 },
       { id: 'cat_diary_eater', w: 14 }, { id: 'cat_murka', w: 10 }, { id: 'cat_professor', w: 10 },
       { id: 'cat_keeper', w: 8 }
+    ]
+  },
+
+  /* ---------- Кейсы Лаборатории 3.6 Beta ----------
+     beta: true — видны ТОЛЬКО при включённой тестовой ветке 3.6 Beta.
+     Плашка «🧪 ЭКСПЕРИМЕНТАЛЬНО» рисуется в renderCasesUI(). */
+  {
+    id: 'beta_case_lab36', name: 'Кофр Химика-Экспериментатора', price: 36000, icon: '🧫', color: '#22d3ee',
+    beta: true,
+    desc: 'Пробирки, дым и первые опыты Лаборатории 3.6',
+    items: [
+      { id: 'beta_holo_diary', w: 30 }, { id: 'beta_antimatter', w: 26 }, { id: 'beta_quantum_cheat', w: 20 },
+      { id: 'beta_robo_bell', w: 14 }, { id: 'beta_nuclear_mel', w: 8 }, { id: 'beta_cyber_cat', w: 2 }
+    ]
+  },
+  {
+    id: 'beta_case_cybercat', name: 'Кейс Кибер-Кота 3.6', price: 360000, icon: '🤖', color: '#67e8f9',
+    beta: true,
+    desc: 'Главный кейс тестовой ветки — внутри мурчит будущее',
+    items: [
+      { id: 'beta_quantum_cheat', w: 24 }, { id: 'beta_robo_bell', w: 22 }, { id: 'cat_black_physics', w: 14 },
+      { id: 'beta_nuclear_mel', w: 20 }, { id: 'cat_murka', w: 14 }, { id: 'beta_cyber_cat', w: 6 }
+    ]
+  },
+  {
+    id: 'beta_case_nuclear', name: 'Тайник Физика-Ядерщика', price: 3600000, icon: '☢️', color: '#a3e635',
+    beta: true,
+    desc: 'Свинцовый сейф кабинета физики. Дозиметр не входит в комплект',
+    items: [
+      { id: 'beta_antimatter', w: 20 }, { id: 'sch_100_points', w: 24 }, { id: 'beta_robo_bell', w: 18 },
+      { id: 'beta_nuclear_mel', w: 26 }, { id: 'beta_cyber_cat', w: 12 }
     ]
   }
 ];
