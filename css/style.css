@@ -757,7 +757,4 @@ body.shkola-app > * { max-width: 100%; }
 .extra-menu-button span:nth-child(2) { flex: 1; }
 .extra-menu-button b, .extra-menu-button small { display: block; }
 .extra-menu-button small { color: #64748b; font-size: 9px; margin-top: 2px; }
-.leaderboard-row { display:flex; align-items:center; gap:.55rem; padding:.55rem .6rem; border-radius:.75rem; background:rgba(15,23,42,.72); border:1px solid rgba(51,65,85,.45); }
-.leaderboard-current { border-color: rgba(251,191,36,.7); background: rgba(120,53,15,.2); }
-.leaderboard-place { width: 1.7rem; text-align:center; color:#fbbf24; font-family:'Chakra Petch',sans-serif; font-weight:700; font-size:11px; }
 .case-cover { width: 4.2rem; height: 3.4rem; object-fit: cover; border-radius: .65rem; margin: 0 auto; border: 1px solid rgba(255,255,255,.35); }

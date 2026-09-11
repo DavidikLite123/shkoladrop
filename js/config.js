@@ -116,6 +116,14 @@ const CAT_CATALOG = [
   { id: 'cat_keeper',        name: 'КОТ-ХРАНИТЕЛЬ ШКОЛЫ ★ СЕКРЕТНЫЙ', price: 10000000, icon: '🐱', img: 'assets/secret-cat.png', badgeBg: 'from-cyan-400/60 to-fuchsia-900/70', rarity: 'secret', category: 'cat', desc: 'Легенда школы. Появляется лишь тем, кто дошёл до секретного кейса' }
 ];
 
+/* ---------- Ультра-экономика: предметы для поздней игры ---------- */
+const ULTRA_CATALOG = [
+  { id: 'ultra_school_city', name: 'Школьный город-миллиардер', price: 25000000000, icon: '🏙️', badgeBg: 'from-indigo-500/60 to-cyan-500/40', rarity: 'secret', category: 'school', desc: 'Целый город с кампусом школы и стадионом' },
+  { id: 'ultra_creator_empire', name: 'Империя ютуберов', price: 100000000000, icon: '🌐', badgeBg: 'from-red-500/60 to-purple-600/50', rarity: 'secret', category: 'other', game: 'YouTube', desc: 'Все каналы сезона 3 в одном владении' },
+  { id: 'ultra_diamond_studio', name: 'Алмазная студия David Lite', price: 1000000000000, icon: '💠', badgeBg: 'from-cyan-200/70 to-blue-700/60', rarity: 'secret', category: 'other', game: 'YouTube', desc: 'Студия, где каждый кадр стоит состояния' },
+  { id: 'ultra_multiverse', name: 'Мультивселенная Школы Дроп', price: 10000000000000, icon: '🌌', badgeBg: 'from-violet-400/70 to-fuchsia-700/60', rarity: 'secret', category: 'other', game: 'Школа Дроп', desc: 'Абсолютный предмет для баланса в десятки триллионов' }
+];
+
 /* ---------- Сезон 3: кейсы ютуберов ---------- */
 const SEASON3_CATALOG = [
   { id: 'yt_creator_award', name: 'Золотая кнопка YouTube', price: 2000000, icon: '🏆', badgeBg: 'from-yellow-400/50 to-orange-700/50', rarity: 'covert', category: 'other', game: 'YouTube', desc: 'Миллион подписчиков и ни одного страйка' },
@@ -125,7 +133,7 @@ const SEASON3_CATALOG = [
   { id: 'yt_stream_deck', name: 'Пульт стримера', price: 700000, icon: '🎛️', badgeBg: 'from-fuchsia-500/50 to-purple-900/60', rarity: 'classified', category: 'other', game: 'YouTube', desc: 'Одна кнопка — и весь класс в прямом эфире' }
 ];
 
-const ALL_MASTER_ITEMS = [...SCHOOL_CATALOG, ...CS2_CATALOG, ...OTHER_GAMES_CATALOG, ...CAT_CATALOG, ...SEASON3_CATALOG];
+const ALL_MASTER_ITEMS = [...SCHOOL_CATALOG, ...CS2_CATALOG, ...OTHER_GAMES_CATALOG, ...CAT_CATALOG, ...SEASON3_CATALOG, ...ULTRA_CATALOG];
 const ITEMS_BY_ID = ALL_MASTER_ITEMS.reduce((acc, it) => { acc[it.id] = it; return acc; }, {});
 
 /* ---------- Кейсы (веса = честные шансы, нормализуются автоматически) ---------- */
@@ -231,7 +239,7 @@ const CASES_LIST = [
   {
     id: 'case_billion_school', name: 'КЕЙС МИЛЛИАРДЕРА: ШКОЛЬНАЯ КОМАНДА', price: 1000000000, icon: '💎', image: 'assets/season3-billion-case.jpg', color: '#f8fafc',
     season: 3, ultra: true, desc: 'Самый дорогой кейс сезона. Ультра-легендарный дроп для настоящей команды',
-    items: [ { id: 'yt_diamond_award', w: 10 }, { id: 'cat_keeper', w: 22 }, { id: 'cs_karambit_dop', w: 22 }, { id: 'sch_timetable_relic', w: 18 }, { id: 'yt_creator_award', w: 28 } ]
+    items: [ { id: 'yt_diamond_award', w: 10 }, { id: 'cat_keeper', w: 22 }, { id: 'cs_karambit_dop', w: 22 }, { id: 'sch_timetable_relic', w: 18 }, { id: 'yt_creator_award', w: 20 }, { id: 'ultra_school_city', w: 5 }, { id: 'ultra_creator_empire', w: 2 }, { id: 'ultra_diamond_studio', w: 1 }, { id: 'ultra_multiverse', w: 0.2 } ]
   },
   {
     id: 'case_cat_secret', name: 'СЕКРЕТНЫЙ КЕЙС: КОТ-ХРАНИТЕЛЬ', price: 10000000, icon: '🐱', color: '#00f0ff',
@@ -366,7 +374,8 @@ function casePool(caseObj) {
   return caseObj.items
     .map(entry => ({
       item: ITEMS_BY_ID[entry.id],
-      weight: entry.w
+      // Чем выше редкость, тем сильнее штраф к шансу. Хороший дроп теперь действительно редкий.
+      weight: entry.w * ({ consumer: 1, milspec: 0.55, restricted: 0.22, classified: 0.08, covert: 0.025, gold: 0.01, secret: 0.004 }[(ITEMS_BY_ID[entry.id] || {}).rarity] || 0.01)
     }))
     .filter(e => e.item);
 }

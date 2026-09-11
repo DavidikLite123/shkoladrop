@@ -581,9 +581,9 @@
       <div>
         <span class="text-xs font-bold text-amber-400 uppercase tracking-wider">Стрельнуть мелочь</span>
         <p class="text-[11px] text-slate-400">Быстрый кликер карманных денег (растёт с уровнем)</p>
-        <div id="tapValueLabel" class="text-xs text-slate-300 font-mono mt-0.5">+150 ₽ за каждый тап</div>
+        <div id="tapValueLabel" class="text-xs text-slate-300 font-mono mt-0.5">+150 ₽ за каждый тап · лимит фарма 100 000 ₽</div>
       </div>
-      <button onclick="tapForMoney(event)" class="w-14 h-14 rounded-2xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 flex items-center justify-center text-3xl shadow-lg active:scale-90 transition select-none">
+      <button id="tapMoneyButton" onclick="tapForMoney(event)" class="w-14 h-14 rounded-2xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 flex items-center justify-center text-3xl shadow-lg active:scale-90 transition select-none">
         🥟
       </button>
     </div>
@@ -896,24 +896,10 @@
         <button onclick="closeExtrasModal()" class="text-slate-400 hover:text-white text-lg leading-none">✕</button>
       </div>
       <div class="space-y-2">
-        <button onclick="openLeaderboard()" class="extra-menu-button"><span class="text-xl">🏆</span><span><b>Таблица лидеров</b><small>Самые популярные игроки</small></span><span>›</span></button>
         <button onclick="openSettingsModal(); closeExtrasModal()" class="extra-menu-button"><span class="text-xl">⚙️</span><span><b>Настройки</b><small>Звук, тема, качество и сохранение</small></span><span>›</span></button>
         <button onclick="openCookieSettingsModal(); closeExtrasModal()" class="extra-menu-button"><span class="text-xl">🍪</span><span><b>Файлы cookie</b><small>Согласие и конфиденциальность</small></span><span>›</span></button>
         <button onclick="openAuthorModal(); closeExtrasModal()" class="extra-menu-button"><span class="text-xl">▶️</span><span><b>Об авторе</b><small>David Lite и YouTube</small></span><span>›</span></button>
       </div>
-    </div>
-  </div>
-
-  <!-- ================= MODAL: LEADERBOARD ================= -->
-  <div id="leaderboardModal" class="app-modal hidden">
-    <div class="modal-card max-w-sm w-full">
-      <div class="flex items-center justify-between pb-2 mb-3 border-b border-slate-800">
-        <div><h3 class="font-cs text-sm font-bold uppercase text-white">🏆 Таблица лидеров</h3><div id="leaderboardCount" class="text-[9px] text-slate-500 mt-0.5">0 профилей</div></div>
-        <button onclick="closeLeaderboard()" class="text-slate-400 hover:text-white text-lg leading-none">✕</button>
-      </div>
-      <div class="rounded-xl border border-amber-500/20 bg-amber-950/10 p-2 mb-2 text-[10px] text-slate-300 leading-relaxed">Популярность считается по уровню, открытым кейсам и стоимости рюкзака. Твой профиль подсвечивается.</div>
-      <div id="leaderboardList" class="space-y-1.5 max-h-[55vh] overflow-y-auto"></div>
-      <button onclick="closeLeaderboard(); openExtrasModal()" class="w-full mt-3 py-2 rounded-xl bg-slate-800 text-slate-200 text-[11px] font-bold">← Дополнительно</button>
     </div>
   </div>
 

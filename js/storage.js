@@ -37,7 +37,8 @@ const DEFAULT_STATS = {
   createdAt: 0,
   lastSeen: 0,
   sessions: 0,
-  hardModeNotified: false
+  hardModeNotified: false,
+  tapFarmClosed: false
 };
 
 function freshStats() {
