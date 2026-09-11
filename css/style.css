@@ -722,3 +722,39 @@ body.quality-low .bg-grid { display: none; }
 /* Тап-зоны не меньше 44px по высоте — палец попадает всегда */
 .nav-tab { min-height: 46px; }
 .filter-chip, .prof-tab, .toggle-pill { min-height: 30px; }
+
+/* Сезон 3: на мобильных ничего не вылезает за экран */
+html, body { width: 100%; max-width: 100%; overflow-x: hidden; }
+body.shkola-app { box-sizing: border-box; }
+body.shkola-app > * { max-width: 100%; }
+
+/* Баннер согласия всегда целиком виден и не конфликтует с нижней панелью */
+#cookieBanner {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(1rem, env(safe-area-inset-top, 0px)) 0.75rem max(1rem, env(safe-area-inset-bottom, 0px));
+  background: rgba(2, 4, 8, 0.62);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+#cookieBanner.hidden { display: none; }
+#cookieBanner > div { width: min(100%, 28rem); max-height: min(90vh, 32rem); overflow-y: auto; }
+@media (max-width: 360px) {
+  #cookieBanner > div { padding: 0.8rem; }
+  #cookieBanner .text-2xl { font-size: 1.25rem; }
+}
+
+.extra-menu-button {
+  width: 100%; display: flex; align-items: center; gap: .7rem; text-align: left;
+  padding: .7rem .75rem; border-radius: .85rem; background: rgba(2,6,12,.55);
+  border: 1px solid rgba(51,65,85,.55); color: #e2e8f0; transition: background .18s, transform .15s;
+}
+.extra-menu-button:hover { background: rgba(30,41,59,.9); }
+.extra-menu-button:active { transform: scale(.98); }
+.extra-menu-button span:nth-child(2) { flex: 1; }
+.extra-menu-button b, .extra-menu-button small { display: block; }
+.extra-menu-button small { color: #64748b; font-size: 9px; margin-top: 2px; }
+.case-cover { width: 4.2rem; height: 3.4rem; object-fit: cover; border-radius: .65rem; margin: 0 auto; border: 1px solid rgba(255,255,255,.35); }
