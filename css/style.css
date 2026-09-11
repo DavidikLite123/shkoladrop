@@ -236,7 +236,15 @@ input, select, textarea {
   color: #94a3b8;
   font-weight: 600;
 }
-.stat-tile-value { font-family: 'Chakra Petch', sans-serif; font-weight: 700; font-size: 0.9rem; }
+.stat-tile-value {
+  font-family: 'Chakra Petch', sans-serif;
+  font-weight: 700;
+  font-size: 0.9rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .filter-chip {
   padding: 0.28rem 0.65rem;
