@@ -165,8 +165,20 @@ async function main() {
   t('удаление чужого id — 0 удалено', r.ok && body.removed === 0);
 
   const savePayload = { version: 11, balance: 123456, inventory: [{ id: 'sch_chalk', uid: 'x1', price: 1800 }], user: { id: 'player-999', nick: 'Вова228' }, stats: { level: 5 }, lastSeen: Date.now() };
+  const syncBeforeSave = await j(await fetch(`${BASE}/auth/sync`, { method: 'POST', headers: JSONH, body: JSON.stringify({ uid: 'player-999', nick: 'Вова228' }) }));
   r = await fetch(`${BASE}/save`, { method: 'POST', headers: JSONH, body: JSON.stringify({ uid: 'player-999', nick: 'Вова228', save: savePayload }) });
+  const saveResp = await r.json();
   t('облачное сохранение залито', r.ok);
+  t('сейв-ответ отдаёт уникальный ID (второй канал выдачи)', saveResp.ok && saveResp.tag === syncBeforeSave.tag);
+  t('сейв-ответ отдаёт и галочку верификации', saveResp.verified === true);
+
+  // Второй канал выдаёт ID даже новому игроку, который НИКОГДА не звал sync
+  r = await fetch(`${BASE}/save`, { method: 'POST', headers: JSONH, body: JSON.stringify({ uid: 'player-saveonly', nick: 'Тихоня', save: { ...savePayload, user: { id: 'player-saveonly', nick: 'Тихоня' } } }) });
+  const saveOnly = await r.json();
+  t('игрок без sync получает ID через ответ на /api/save', saveOnly.ok && /^#\d{6}$/.test(saveOnly.tag || ''));
+
+  r = await fetch(`${BASE}/auth/sync`, { method: 'POST', headers: JSONH, body: JSON.stringify({ nick: 'без uid' }) });
+  t('sync без uid → понятная 400 (клиент сам починит uid)', r.status === 400 && !!(await r.json()).error);
   let cloud = await j(await fetch(`${BASE}/save?uid=player-999`));
   t('облачное сохранение читается', cloud.ok && cloud.save.balance === 123456 && Number.isFinite(cloud.updatedAt));
   r = await fetch(`${BASE}/save?uid=player-nobody`);
