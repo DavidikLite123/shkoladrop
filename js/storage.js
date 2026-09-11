@@ -51,7 +51,7 @@ const DEFAULT_STATS = {
   achievements: [],
   unlockedTitles: [],
   catFound: false,
-  idle: { level: 0, pending: 0, lastCollect: 0 },
+  idle: { level: 0, pending: 0, lastCollect: 0, lastTick: 0 },
   createdAt: 0,
   lastSeen: 0,
   sessions: 0,
@@ -301,7 +301,11 @@ const SaveManager = {
     stats.usedVipCodes = Array.isArray(stats.usedVipCodes) ? stats.usedVipCodes : [];
     stats.achievements = Array.isArray(stats.achievements) ? stats.achievements : [];
     stats.unlockedTitles = Array.isArray(stats.unlockedTitles) ? stats.unlockedTitles : [];
-    stats.idle = Object.assign({ level: 0, pending: 0, lastCollect: 0 }, stats.idle || {});
+    stats.idle = Object.assign({ level: 0, pending: 0, lastCollect: 0, lastTick: 0 }, stats.idle || {});
+    stats.idle.level = Math.max(0, Math.floor(Number(stats.idle.level) || 0));
+    stats.idle.pending = Math.max(0, Number(stats.idle.pending) || 0);
+    stats.idle.lastCollect = Number(stats.idle.lastCollect) || 0;
+    stats.idle.lastTick = Number(stats.idle.lastTick) || 0;
     // Признак VIP-статуса — булево на случай если в старом сохранении его вообще не было
     if (typeof stats.vipActive !== 'boolean') stats.vipActive = false;
     if (typeof stats.vipActivatedAt !== 'number') stats.vipActivatedAt = 0;

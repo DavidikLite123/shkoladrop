@@ -124,9 +124,32 @@ function normalizeCode(code) {
   return String(code || '').trim().replace(/\s+/g, '').toUpperCase();
 }
 
+/* Владелец кода в реестре может быть записан как боевой uid ИЛИ как уникальный
+   ID игрока (#878557). Резолвим ID → uid по базе игроков, чтобы автор видел
+   свой кабинет и не мог ввести собственный код. */
+function resolveOwnerUid(entry) {
+  if (!entry) return null;
+  const raw = String(entry.ownerUid || '').trim();
+  if (raw && db.players[raw]) return raw;
+  const tag = String(entry.ownerTag || (raw.startsWith('#') || /^\d{4,8}$/.test(raw) ? raw : '') || '').trim();
+  if (tag) {
+    const norm = tag.startsWith('#') ? tag : '#' + tag;
+    const p = Object.values(db.players).find(pl => pl.tag === norm);
+    if (p) return p.uid;
+  }
+  return raw || null;
+}
+function withResolvedOwner(entry) {
+  return entry ? Object.assign({}, entry, { ownerUid: resolveOwnerUid(entry) }) : null;
+}
+function ownsAuthorCode(entry, pUid) {
+  if (!entry || !pUid) return false;
+  return resolveOwnerUid(entry) === pUid || String(entry.ownerUid) === pUid;
+}
+
 function findAuthorCode(code) {
   const norm = normalizeCode(code);
-  return loadRegistry().codes.find(c => normalizeCode(c.code) === norm) || null;
+  return withResolvedOwner(loadRegistry().codes.find(c => normalizeCode(c.code) === norm) || null);
 }
 
 function royaltyPct() {
@@ -314,7 +337,7 @@ const routes = {
   'GET /api/author-codes': (req, res) => {
     const reg = loadRegistry();
     const out = reg.codes.map(c => ({
-      code: c.code, ownerUid: c.ownerUid, ownerName: c.ownerName,
+      code: c.code, ownerUid: resolveOwnerUid(c), ownerTag: c.ownerTag || null, ownerName: c.ownerName,
       supporters: Object.values(db.supporters).filter(x => x === normalizeCode(c.code)).length
     }));
     send(res, 200, { ok: true, royaltyPercent: royaltyPct(), codes: out });
@@ -588,8 +611,14 @@ const routes = {
     const reason = cleanStr(body.reason, 200);
     const by = cleanStr(body.by, 24) || (role === 'owner' ? 'David Lite' : 'Администрация');
     if (ban) {
+      // ВЛАДЕЛЬЦА проекта (статус 👑 ВЛАДЕЛЕЦ — его выдаёт только сам владелец) забанить нельзя НИКОМУ
+      if (p.status === 'owner') return send(res, 403, { ok: false, error: 'Владельца проекта забанить нельзя 👑' });
       if (!reason && role !== 'owner') return send(res, 400, { ok: false, error: 'Укажи причину бана — это обязательно' });
       if (p.role === 'admin' && role !== 'owner') return send(res, 403, { ok: false, error: 'администратора может забанить только владелец' });
+      // Администрация не трогает игроков с защищёнными статусами (админ/ютубер/легенда) — только владелец
+      if (role !== 'owner' && ['admin', 'youtuber', 'legend'].includes(p.status)) {
+        return send(res, 403, { ok: false, error: 'игрока с таким статусом может забанить только владелец' });
+      }
       p.banned = true; p.banReason = reason || 'без причины'; p.banBy = by; p.banAt = Date.now();
       p.role = null; // забаненный не может быть админом
       if (p.ip) db.bannedIps[p.ip] = { reason: p.banReason, by, at: p.banAt, uid: pUid };
@@ -683,6 +712,7 @@ const routes = {
     const pUid = cleanStr(body.uid, 80);
     const p = db.players[pUid];
     if (!p) return send(res, 404, { ok: false, error: 'игрок не найден' });
+    if (p.status === 'owner') return send(res, 403, { ok: false, error: 'аккаунт владельца удалить нельзя 👑 (сначала сними статус)' });
     const removed = { nick: p.nick, tag: p.tag, emails: [] };
     delete db.players[pUid];
     for (const [email, acc] of Object.entries(db.accounts || {})) {
@@ -784,7 +814,7 @@ const routes = {
   /* Кабинет автора: сколько накоплено по моему коду (uid = владелец кода) */
   'GET /api/author/earnings': (req, res, body, url) => {
     const pUid = cleanStr(url.searchParams.get('uid'), 80);
-    const entry = loadRegistry().codes.find(c => c.ownerUid === pUid);
+    const entry = loadRegistry().codes.find(c => ownsAuthorCode(c, pUid));
     if (!entry) return send(res, 404, { ok: false, error: 'у твоего аккаунта нет кода автора' });
     const e = db.earnings[normalizeCode(entry.code)] || { earned: 0, withdrawn: 0 };
     send(res, 200, {
@@ -797,7 +827,7 @@ const routes = {
   /* Автор забирает накопленные 10% (сервер обнуляет счётчик) */
   'POST /api/author/withdraw': async (req, res, body) => {
     const pUid = cleanStr(body.uid, 80);
-    const entry = loadRegistry().codes.find(c => c.ownerUid === pUid);
+    const entry = loadRegistry().codes.find(c => ownsAuthorCode(c, pUid));
     if (!entry) return send(res, 404, { ok: false, error: 'нет кода автора' });
     const key = normalizeCode(entry.code);
     const e = db.earnings[key] || { earned: 0, withdrawn: 0 };
@@ -817,13 +847,17 @@ const routes = {
     let code = normalizeCode(body.code);
     if (!ownerUid || !ownerName) return send(res, 400, { ok: false, error: 'нужны ownerUid и ownerName' });
     if (!code) code = normalizeCode(ownerName).replace(/[^A-Z0-9]/g, '').slice(0, 10) || ('AUTHOR' + crypto.randomInt(1000));
-    if (!/^[A-Z0-9][A-Z0-9-]{1,17}$/.test(code)) return send(res, 400, { ok: false, error: 'код: 2–18 символов, латиница/цифры' });
+    if (!/^[A-Z0-9][A-Z0-9_-]{1,17}$/.test(code)) return send(res, 400, { ok: false, error: 'код: 2–18 символов, латиница/цифры/_/-' });
     if (findAuthorCode(code)) return send(res, 409, { ok: false, error: 'такой код уже есть' });
 
     const reg = loadRegistry();
+    // владельца можно указать уникальным ID (#878557) — сохраним его отдельно, uid подтянется из базы
+    const byTag = /^#?\d{4,8}$/.test(ownerUid) ? findPlayer(ownerUid) : null;
+    const finalUid = byTag ? byTag.uid : ownerUid;
     // у одного аккаунта — один код: заменяем старый, если был
-    reg.codes = reg.codes.filter(c => c.ownerUid !== ownerUid);
-    const entry = { code, ownerUid, ownerName };
+    reg.codes = reg.codes.filter(c => c.ownerUid !== finalUid && c.ownerUid !== ownerUid);
+    const entry = { code, ownerUid: finalUid, ownerName };
+    if (byTag || /^#?\d{4,8}$/.test(ownerUid)) entry.ownerTag = ownerUid.startsWith('#') ? ownerUid : '#' + ownerUid;
     reg.codes.push(entry);
     try { saveRegistry(reg); } catch (e) { return send(res, 500, { ok: false, error: 'не смог сохранить author-codes.json: ' + e.message }); }
     send(res, 200, { ok: true, entry, registryFile: 'author-codes.json' });

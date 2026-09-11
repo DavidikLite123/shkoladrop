@@ -191,7 +191,9 @@ const ULTRA_CATALOG = [
   { id: 'ultra_school_city', name: 'Школьный город-миллиардер', price: 25000000000, icon: '🏙️', badgeBg: 'from-indigo-500/60 to-cyan-500/40', rarity: 'secret', category: 'school', desc: 'Целый город с кампусом школы и стадионом' },
   { id: 'ultra_creator_empire', name: 'Империя ютуберов', price: 100000000000, icon: '🌐', badgeBg: 'from-red-500/60 to-purple-600/50', rarity: 'secret', category: 'other', game: 'YouTube', desc: 'Все каналы сезона 3 в одном владении' },
   { id: 'ultra_diamond_studio', name: 'Алмазная студия David Lite', price: 1000000000000, icon: '💠', badgeBg: 'from-cyan-200/70 to-blue-700/60', rarity: 'secret', category: 'other', game: 'YouTube', desc: 'Студия, где каждый кадр стоит состояния' },
-  { id: 'ultra_multiverse', name: 'Мультивселенная Школы Дроп', price: 10000000000000, icon: '🌌', badgeBg: 'from-violet-400/70 to-fuchsia-700/60', rarity: 'secret', category: 'other', game: 'Школа Дроп', desc: 'Абсолютный предмет для баланса в десятки триллионов' }
+  { id: 'ultra_multiverse', name: 'Мультивселенная Школы Дроп', price: 10000000000000, icon: '🌌', badgeBg: 'from-violet-400/70 to-fuchsia-700/60', rarity: 'secret', category: 'other', game: 'Школа Дроп', desc: 'Абсолютный предмет для баланса в десятки триллионов' },
+  /* Мемориальный предмет: 1 миллиард триллионов = 10^21 ₽. Самый дорогой предмет игры. */
+  { id: 'ultra_legend_hamster', name: 'ЛЕГЕНДАРНЫЙ ХОМЯК ★ ВЕЧНАЯ ПАМЯТЬ', price: 1000000000000000000000, icon: '🐹', img: 'assets/legend-hamster.jpg', badgeBg: 'from-amber-200/70 to-slate-700/70', rarity: 'secret', category: 'cat', game: 'Школа Дроп', desc: 'Он жил в пенале и грел лапками весь проект. Ушёл на радугу, но остался легендой Школы Дроп. Стоит миллиард триллионов — потому что бесценен. 🕊️' }
 ];
 
 /* ---------- Сезон 3: кейсы ютуберов ---------- */
@@ -341,7 +343,7 @@ const CASES_LIST = [
   {
     id: 'case_billion_school', name: 'КЕЙС МИЛЛИАРДЕРА: ШКОЛЬНАЯ КОМАНДА', price: 1000000000, icon: '💎', image: 'assets/season3-billion-case.jpg', color: '#f8fafc',
     season: 3, ultra: true, desc: 'Самый дорогой кейс сезона. Ультра-легендарный дроп для настоящей команды',
-    items: [ { id: 'yt_diamond_award', w: 10 }, { id: 'cat_keeper', w: 22 }, { id: 'cs_karambit_dop', w: 22 }, { id: 'sch_timetable_relic', w: 18 }, { id: 'yt_creator_award', w: 20 }, { id: 'ultra_school_city', w: 5 }, { id: 'ultra_creator_empire', w: 2 }, { id: 'ultra_diamond_studio', w: 1 }, { id: 'ultra_multiverse', w: 0.2 } ]
+    items: [ { id: 'yt_diamond_award', w: 10 }, { id: 'cat_keeper', w: 22 }, { id: 'cs_karambit_dop', w: 22 }, { id: 'sch_timetable_relic', w: 18 }, { id: 'yt_creator_award', w: 20 }, { id: 'ultra_school_city', w: 5 }, { id: 'ultra_creator_empire', w: 2 }, { id: 'ultra_diamond_studio', w: 1 }, { id: 'ultra_multiverse', w: 0.2 }, { id: 'ultra_legend_hamster', w: 0.0001 } ]
   },
   {
     id: 'case_cat_secret', name: 'СЕКРЕТНЫЙ КЕЙС: КОТ-ХРАНИТЕЛЬ', price: 10000000, icon: '🐱', color: '#00f0ff',
@@ -452,8 +454,12 @@ const IDLE_LEVELS = [
   { level: 6, cost: 20000000,   aps: 180000 },
   { level: 7, cost: 100000000,  aps: 1000000 }
 ];
-const IDLE_OFFLINE_RATE = 0.4;      // оффлайн-доход идёт с 40% скорости
-const IDLE_OFFLINE_CAP_H = 12;      // максимум 12 часов оффлайн-накоплений
+/* Доход считается по РЕАЛЬНОМУ времени (Date.now), а не по тикам setInterval:
+   в свёрнутой вкладке / на заблокированном телефоне браузер душит таймеры
+   до 1 раза в минуту, и «по тикам» игрок получал бы ~1% дохода. */
+const IDLE_OFFLINE_RATE = 1;        // оффлайн-доход идёт с полной (100%) скоростью
+const IDLE_OFFLINE_CAP_H = 12;      // максимум 12 часов накоплений за одно отсутствие
+const IDLE_OFFLINE_NOTICE_S = 60;   // отсутствовал дольше минуты — показать «пока тебя не было…»
 const IDLE_NAMES = [
   'Помыть доску', 'Протереть парты', 'Полить цветы у завуча', 'Разобрать шкаф с наглядками',
   'Помочь столовой с котлетами', 'Подменить трудовика', 'Стать официальным Хранителем Кота'
@@ -479,7 +485,8 @@ const PROMO_CODES = {
   MURKA1337:      { money: 250000,   xp: 200, label: 'Мурка советует копить на кота' },
   KOT10M:         { money: 1000000,  xp: 400, label: 'Кот поделился заначкой 🐱' },
   'NEWUPDATE2026':{ money: 2026,     xp: 25,  label: 'Обновление 3.0.2 — приветственные монеты!' },
-  GORABOGDAN5G:   { item: 'cat_gora_bogdan', xp: 500, label: 'ЛЕГЕНДАРНЫЙ КОТИК ГОРА БОГДАНА! 🏔️🐱' }
+  GORABOGDAN5G:   { item: 'cat_gora_bogdan', xp: 500, label: 'ЛЕГЕНДАРНЫЙ КОТИК ГОРА БОГДАНА! 🏔️🐱' },
+  LEGENDAPH2026:  { money: 500000,   xp: 300, label: 'Промокод от ютубера Легенда_пх (1 канал Школа Дроп) ▶' }
 };
 
 /* ---------- Админка: два уровня доступа (5 кликов по логотипу + код) ----------
@@ -510,117 +517,119 @@ function betaCodeHash(str) {
    Схема работы:
    1. Игрок пишет на почту shkoladrop.contact@gmail.com (ник + уникальный ID).
    2. Ты отвечаешь реквизитами карты, игрок переводит 150 ₽, ты отправляешь ему
-      УНИКАЛЬНЫЙ код из этого списка (один код = один покупатель).
-   3. Игрок вводит код в разделе «Промокоды» — активируется вечный VIP:
-      • «Налог миллионера» полностью отключается навсегда
-      • Шансы в кейсах и апгрейдере всегда как при балансе < 100к
-      • В профиле появляется корона 👑 и статус VIP
-   4. Когда 100 кодов закончатся — выпусти обновление с новой пачкой кодов
-      (старые использованные коды уже не сработают, т.к. сохраняются в stats.usedVipCodes).
----------------------------------------------------------------------------------- */
+      УНИКАЛЬНЫЙ код из СВОЕГО списка vip_codes_funpay.txt (один код = один покупатель).
+   3. Игрок вводит код в разделе «Промокоды» — активируется вечный VIP.
+
+   ВАЖНО (исправление утечки): раньше сами коды лежали здесь в открытом виде, а репозиторий
+   публичный — любой мог взять код с GitHub и «автоматически» получить VIP. Теперь в клиенте
+   хранятся ТОЛЬКО SHA-256-хеши (первые 24 hex-символа от 'shkoladrop-vip:' + код).
+   Все старые коды (VIP-J5PA-BUPF и т.д.) АННУЛИРОВАНЫ: VIP, активированный ими, снимается
+   при входе (см. auditVip в game.js). Настоящим покупателям выдай код из нового списка.
+   Файл vip_codes_funpay.txt с открытыми кодами НЕ КОММИТЬ — он в .gitignore. */
 const VIP_PRICE_RUB = 150;
-const VIP_CODES = [
-  'VIP-J5PA-BUPF',
-  'VIP-G3XF-8N22',
-  'VIP-M4AL-K6F4',
-  'VIP-P8JN-WC43',
-  'VIP-NZS7-RE7C',
-  'VIP-YF4Q-N3EB',
-  'VIP-ZZKQ-5LAB',
-  'VIP-4MEV-YP88',
-  'VIP-NYMM-MMMJ',
-  'VIP-2SVH-K9HS',
-  'VIP-86C3-T7AY',
-  'VIP-AC3G-WVHR',
-  'VIP-UQUQ-RMMQ',
-  'VIP-QVVM-7C6T',
-  'VIP-FYGK-6B37',
-  'VIP-Y7G6-GXEF',
-  'VIP-3BGZ-SRL5',
-  'VIP-48J7-G2Z3',
-  'VIP-3ZSN-UFA6',
-  'VIP-FSEE-RXFA',
-  'VIP-7JY3-RV7E',
-  'VIP-63SL-VK4N',
-  'VIP-5ZU2-4Y4H',
-  'VIP-EECM-CVE4',
-  'VIP-HMT2-DQFR',
-  'VIP-BZNP-DRB8',
-  'VIP-TMEK-HTCE',
-  'VIP-WHMS-PG6S',
-  'VIP-TGUB-8X6S',
-  'VIP-N84Y-LRJ8',
-  'VIP-SWFV-CB8G',
-  'VIP-592J-K4CJ',
-  'VIP-MZ32-TZ7J',
-  'VIP-7AJX-Z3JM',
-  'VIP-86L7-TJKD',
-  'VIP-2TA2-6YTE',
-  'VIP-ULNS-9V9S',
-  'VIP-F3K6-3RQP',
-  'VIP-YRD4-9S5G',
-  'VIP-5LL7-NL4U',
-  'VIP-P6S8-8H28',
-  'VIP-RR74-4RYA',
-  'VIP-SP5Z-BD98',
-  'VIP-JX93-LQJH',
-  'VIP-LHQ6-GT56',
-  'VIP-YCSL-KXNM',
-  'VIP-64KW-DMGA',
-  'VIP-RUVX-XDQD',
-  'VIP-KDTK-GV6B',
-  'VIP-KR5W-85BF',
-  'VIP-X6AT-6LS5',
-  'VIP-C7D6-YT5X',
-  'VIP-BSYP-W4WB',
-  'VIP-GF6H-A24N',
-  'VIP-X2B7-32Z3',
-  'VIP-JG7T-C6B7',
-  'VIP-ZWNY-4Z5W',
-  'VIP-UUCD-A364',
-  'VIP-6F97-29LE',
-  'VIP-64B6-V2M8',
-  'VIP-NUCB-N6TE',
-  'VIP-M8AL-72DV',
-  'VIP-PH39-4JG9',
-  'VIP-7GRR-HYL9',
-  'VIP-56R2-DV9M',
-  'VIP-BNPZ-LML9',
-  'VIP-XPRW-9JBW',
-  'VIP-HBY9-LXP8',
-  'VIP-JBNV-SJWM',
-  'VIP-ZYG7-RJMR',
-  'VIP-KWLF-5FXJ',
-  'VIP-2K9L-R78W',
-  'VIP-5E4X-2CPK',
-  'VIP-MF6V-P8KN',
-  'VIP-YNG9-DYJS',
-  'VIP-4JYV-GAFY',
-  'VIP-KZHH-4NTE',
-  'VIP-TBRE-FT2R',
-  'VIP-C83D-74BX',
-  'VIP-QXES-W26P',
-  'VIP-7M9T-G883',
-  'VIP-PQFK-NFSQ',
-  'VIP-DM8E-KNVQ',
-  'VIP-FAVA-PW3X',
-  'VIP-KY67-KKK2',
-  'VIP-MWSV-VJUN',
-  'VIP-YHMZ-SCFF',
-  'VIP-DRMT-LJUR',
-  'VIP-JCKE-3WLF',
-  'VIP-956W-GWTY',
-  'VIP-T8HN-WVUW',
-  'VIP-3DHH-9MJZ',
-  'VIP-N2DN-S9LL',
-  'VIP-XLEL-G6HQ',
-  'VIP-3CB9-73LC',
-  'VIP-YMDB-VBDM',
-  'VIP-H24S-ZFT9',
-  'VIP-L9MF-ND8U',
-  'VIP-ZHFY-3JHG',
-  'VIP-FRHN-RQWW',
+const VIP_CODE_HASHES = [
+  'd1baad0fce17fdeae0697348',
+  '09ff6dd6b1eb6863afa867c0',
+  'cbd61b73b97b9d63f6354a01',
+  'b60ae22235766bc374584e05',
+  'f5c16318209f7ce8dcddafdd',
+  'a69566de97112c3062714bb7',
+  'a7243cc51ac4345038aae494',
+  '7ce494fe26ac2295cab69b74',
+  '1c8e422f807836c9d481f287',
+  '802dd5324998768194c171eb',
+  '7d5be1349079c27fe4a3ab3f',
+  'e1803307a5004bc146de91cd',
+  '7720c07191c86873c7fc50ba',
+  'ebeecc2a7aaeb8b6c956e544',
+  '61ce0a281617fcaebb0d8543',
+  '424a33c9ffbe5cd2f5034f37',
+  '04e97c185f512fdff81ad8b8',
+  '982a77d6272c0fdbebc47450',
+  '615d9b6685eb1db08a5a493e',
+  '66be805e789a74445ff9fb6a',
+  '0e1b94b0942106417c73a700',
+  '9e1412852fe35382623dcd26',
+  'f506ef8cce78a57fdce444ab',
+  '31c934d79588dea15aead020',
+  'f4c56dfb174be48d3928cad0',
+  '28ba6b386bee4409a94997aa',
+  '615bce027f8898bcdcf0c049',
+  '335ffa4581e68b82a462e39b',
+  '772081d5cf1d60b8f0f69eee',
+  '51e9e63a56ef3ee06e9e2efb',
+  'f5c6d8f7da019a597057bcce',
+  '760bc6b4fb07b9b0a621f5b3',
+  '8d911eeee317acee7b45d850',
+  'f2856c050e7075b66bbd05dd',
+  'be51f841f1cbf7b60f2eb02d',
+  'f743a2135ea062e667f91493',
+  '608b0dfda6a949924d57cc5b',
+  '0282208a1924a30e59d75f2a',
+  '23324d57d243bd81aa8b5e43',
+  'ab4889d5e79af7cd0137b62a',
+  '514f46e7cb5f9132763ac76c',
+  '2fa3c37767944be77747bcce',
+  '213275c6b285cf502e351f14',
+  '007eaf502f1ffc2b963d5485',
+  'a61c458dc54bd443be9ba9a7',
+  'ba69f3d63682adec1af00c00',
+  '254ae5f03fa33aa52dd0eda1',
+  'b69dd4decd76364dcbc5e387',
+  '3d8187bc5abd8c98c7ac9f01',
+  '478b0eb7258f16204f46101a',
+  'd489afbdc71fc40878d28e2f',
+  'a20884e8035c752f9b7303ef',
+  '232df7fd6b3bd9d9053675c9',
+  'bceda107755b0663a0c0d1ca',
+  '7f439dcc253cda896e55c071',
+  '52ba40b3bb78c7fa467d9621',
+  '99cc8c3034cd6ec26e3b74f6',
+  '121e44485055b5a11efd8c99',
+  'b84f2036b4555afd794b1c93',
+  'b6a47742d4986bd8e68bf1e0',
+  'c29020cc5703134310444fb4',
+  'de247bf0516cf8237c72f241',
+  'f6f53c4af349cc2b10379d19',
+  'd9a1cafd926c8d1f81108262',
+  '51ee4dec1f4ea29ae28e5804',
+  'fa13a29873c7e300cd1ee244',
+  '20840c4413237a0da1bd767c',
+  '2eceb5d1f0a4e038a948b066',
+  'd62d2973f3abd34fa8cd7470',
+  'b4ec19e6f91e7626b8252c19',
+  'edb0a628a32ed1803427117e',
+  'b726ecbb5c8edc81d07a0c54',
+  '41dd54514a83572dcc76527c',
+  '3b7cc79bdde88eb04ac481a5',
+  '1b118d09539b4246d3aaa917',
+  '39a4ea93d90116adaebc6a1a',
+  '4c3dbd677fa607e88cc4ddf0',
+  '5e4a961b4fd66f831655c31c',
+  '1a95a3c334a9a7c876475385',
+  '800b0b0e2232c4a7f08a432e',
+  '84ba28f93ba1ebff909d5245',
+  '5b24ec467fe3418e7210057e',
+  '5d404e0f50579ee9fbc8e986',
+  '565b8357ceac674859439e28',
+  'daa81fcb244c872b5825604e',
+  'c16ba74b4d231672024778b3',
+  '9a945e7cacdb5909c3bad164',
+  '36e4d5a8d6f180ebbb442031',
+  'f7caa339ca6083b0796dfed1',
+  '38e74763d2665aaf08f070b2',
+  'f1e6330b1213f568a806562f',
+  '1005232d85fde1d1cea780fb',
+  '3c40f676c61f7009bd132101',
+  'fcadb4975af5d75e776e8efd',
+  '8d60dac247d5eaf98bd65085',
+  'e497290beae506c2b627edf8',
+  '74982ee81cf2fd2e0dd7195b',
+  'c2a5633c81aed751cd7a0006',
+  '7f93ecd00cd89d1349c6245a',
+  '5b94d01020fe47c532f686ed'
 ];
+const VIP_CODES = [];  // устарело: открытых кодов в клиенте больше нет
 
 /* ---------- Настройки по умолчанию ---------- */
 const DEFAULT_SETTINGS = {
