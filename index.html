@@ -35,7 +35,7 @@
     "@type": "VideoGame",
     "name": "ШКОЛА ДРОП 3.0",
     "alternateName": ["Shkola Drop 3.0", "Школа Дроп 3"],
-    "softwareVersion": "3.0.1",
+    "softwareVersion": "3.0.2",
     "description": "Официальный интерактивный игровой симулятор открытия кейсов и честный апгрейдер скинов CS2 от автора David Lite. Сезон 3: коты-предметы, достижения, пассивный фарм и секретный кейс Кота-Хранителя.",
     "genre": ["Симулятор", "Инди-игра", "Кликер", "Рулетка"],
     "playMode": "SinglePlayer",
@@ -73,7 +73,7 @@
 
   <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="assets/icon.svg">
-  <link rel="manifest" href="manifest.webmanifest?v=3.0.1">
+  <link rel="manifest" href="manifest.webmanifest?v=3.0.2">
   <!-- КРИТИЧЕСКИЙ CSS: прокрутка и нижнее меню работают всегда, даже если внешний файл не загрузился -->
   <style>
     /* Прокрутка страницы.
@@ -134,7 +134,7 @@
     html.scroll-locked, html.scroll-locked body { overflow: hidden; }
   </style>
 
-  <link rel="stylesheet" href="css/style.css?v=3.0.1">
+  <link rel="stylesheet" href="css/style.css?v=3.0.2">
 
   <script>
     window.tailwind = window.tailwind || {};
@@ -183,7 +183,7 @@
       <div class="min-w-0">
         <div class="flex items-center space-x-1.5 min-w-0">
           <h1 class="text-xs font-black uppercase tracking-wider text-orange-400 font-cs truncate">ШКОЛА ДРОП</h1>
-          <span id="versionBadge" class="text-[8px] bg-orange-500/20 text-orange-300 font-bold px-1.5 py-0.5 rounded border border-orange-500/40 font-cs flex-shrink-0">v3.0</span>
+          <span id="versionBadge" class="text-[8px] bg-orange-500/20 text-orange-300 font-bold px-1.5 py-0.5 rounded border border-orange-500/40 font-cs flex-shrink-0">v3.0.2</span>
         </div>
         <!-- Клик по автору открывает карточку создателя -->
         <button onclick="openAuthorModal()" class="hidden text-[10px] text-slate-400 hover:text-amber-300 font-medium transition items-center space-x-1 max-w-full truncate">
@@ -210,9 +210,10 @@
       </button>
 
       <!-- Balance Badge -->
-      <div class="bg-slate-800/90 border border-slate-700/70 px-2.5 py-1.5 rounded-lg flex items-center space-x-1.5 max-w-[114px] sm:max-w-[132px] flex-shrink-0" title="Баланс">
+      <div class="bg-slate-800/90 border border-slate-700/70 px-2.5 py-1.5 rounded-lg flex items-center space-x-1.5 max-w-[130px] sm:max-w-[150px] flex-shrink-0" title="Баланс">
         <span class="text-amber-400 text-sm flex-shrink-0">🪙</span>
         <span id="headerBalance" class="font-cs font-bold text-xs text-white truncate">0 ₽</span>
+        <span id="headerVipBadge" class="hidden text-sm flex-shrink-0" title="VIP: налог миллионера отключён навсегда">👑</span>
       </div>
     </div>
   </header>
@@ -568,11 +569,37 @@
       </button>
     </div>
 
+    <!-- VIP STATUS (показывается если активирован) -->
+    <div id="vipStatusCard" class="hidden w-full bg-gradient-to-br from-amber-950/50 via-yellow-900/40 to-orange-950/50 rounded-2xl border border-amber-500/50 p-3 space-y-1.5">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="text-2xl">👑</span>
+          <div>
+            <div class="text-[11px] font-black text-amber-300 uppercase tracking-wider">VIP-СТАТУС АКТИВЕН</div>
+            <div class="text-[10px] text-amber-200/80">Налог миллионера отключён навсегда</div>
+          </div>
+        </div>
+        <span class="text-[9px] font-mono bg-amber-950/60 text-amber-300 px-1.5 py-0.5 rounded border border-amber-700/50">НАВСЕГДА</span>
+      </div>
+      <div class="text-[9.5px] text-amber-100/70">Шансы в кейсах и апгрейдере всегда как при балансе ниже 100 000 ₽ — без скрытых порезок. Спасибо за поддержку проекта! 💎</div>
+    </div>
+
+    <!-- VIP PURCHASE HINT (показывается если VIP не активирован) -->
+    <div id="vipBuyCard" class="w-full bg-gradient-to-br from-fuchsia-950/30 to-slate-900 rounded-2xl border border-fuchsia-500/30 p-3 space-y-2">
+      <div class="flex items-center justify-between">
+        <div class="text-[11px] font-bold text-fuchsia-300 uppercase tracking-wider flex items-center gap-1.5">
+          <span>👑</span><span>VIP-статус (150 ₽)</span>
+        </div>
+        <a href="https://funpay.com/" target="_blank" rel="noopener noreferrer" class="text-[10px] font-bold bg-gradient-to-r from-amber-500 to-orange-500 text-black px-2.5 py-1 rounded-lg font-cs active:scale-95 transition">Купить на FunPay</a>
+      </div>
+      <div class="text-[10px] text-slate-400 leading-relaxed">Отключи «налог миллионера» <b class="text-amber-300">навсегда</b>: шансы в кейсах и апгрейдере всегда будут честными, как при маленьком балансе. После оплаты ты получишь уникальный промокод — введи его ниже.</div>
+    </div>
+
     <!-- PROMO CODES -->
     <div class="w-full bg-slate-900/80 rounded-2xl border border-slate-800 p-3 space-y-2">
-      <div class="text-[11px] font-bold text-amber-300 uppercase tracking-wider">🎫 Промокод</div>
+      <div class="text-[11px] font-bold text-amber-300 uppercase tracking-wider">🎫 Промокод / VIP-код</div>
       <div class="flex space-x-1.5">
-        <input type="text" id="promoInput" placeholder="Например: SHKOLA2" class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 uppercase focus:outline-none focus:border-orange-500">
+        <input type="text" id="promoInput" placeholder="Введи код (например NEWUPDATE2026)" class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 uppercase focus:outline-none focus:border-orange-500">
         <button onclick="redeemPromo()" class="px-3 py-2 rounded-xl bg-orange-500 text-black font-cs font-bold text-[11px] uppercase active:scale-95 transition">Ввести</button>
       </div>
       <div id="promoList" class="flex flex-wrap gap-1.5"></div>
@@ -740,7 +767,7 @@
           </button>
         </div>
         <div class="text-[9px] text-slate-500 leading-relaxed bg-slate-950/70 border border-slate-800 rounded-xl p-2.5">
-          Версия игры: <span id="aboutVersion" class="text-orange-400 font-mono">3.0.1</span> · Обновлено: сентябрь 2026 ·
+          Версия игры: <span id="aboutVersion" class="text-orange-400 font-mono">3.0.2</span> · Обновлено: сентябрь 2026 ·
           Все внутриигровые ценности виртуальные.
         </div>
       </div>
@@ -876,6 +903,10 @@
               <div class="stat-tile-label">Кот-Хранитель</div>
               <div id="statCatFound" class="stat-tile-value text-fuchsia-300 text-xs">не найден</div>
             </div>
+            <div class="stat-tile">
+              <div class="stat-tile-label">VIP-статус</div>
+              <div id="statVipStatus" class="stat-tile-value text-amber-400 text-xs">не активен</div>
+            </div>
           </div>
           <button onclick="exportSaveToClipboard()" class="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-[11px] transition active:scale-95">
             Скопировать резервную копию прогресса
@@ -907,6 +938,7 @@
       </div>
       <div class="space-y-2">
         <button onclick="openProfileModal(); closeExtrasModal()" class="extra-menu-button"><span class="text-xl">👤</span><span><b>Профиль</b><small>Вход, кабинет и достижения</small></span><span>›</span></button>
+        <button onclick="switchTab('farm'); closeExtrasModal(); setTimeout(() => { const input = document.getElementById('promoInput'); if (input) { input.focus(); input.select(); } }, 300);" class="extra-menu-button"><span class="text-xl">🎫</span><span><b>Промокоды</b><small>Введи код и получи награду</small></span><span>›</span></button>
         <button onclick="openSettingsModal(); closeExtrasModal()" class="extra-menu-button"><span class="text-xl">⚙️</span><span><b>Настройки</b><small>Звук, тема, качество и сохранение</small></span><span>›</span></button>
         <button onclick="openCookieSettingsModal(); closeExtrasModal()" class="extra-menu-button"><span class="text-xl">🍪</span><span><b>Файлы cookie</b><small>Согласие и конфиденциальность</small></span><span>›</span></button>
         <button onclick="openAuthorModal(); closeExtrasModal()" class="extra-menu-button"><span class="text-xl">▶️</span><span><b>Об авторе</b><small>David Lite и YouTube</small></span><span>›</span></button>
@@ -1015,7 +1047,7 @@
         </button>
 
         <div class="text-[9px] text-slate-500 text-center leading-relaxed">
-          ШКОЛА ДРОП <span id="settingsVersion" class="font-mono text-orange-400">v3.0.1</span> · David Lite Studio<br>
+          ШКОЛА ДРОП <span id="settingsVersion" class="font-mono text-orange-400">v3.0.2</span> · David Lite Studio<br>
           Прогресс хранится в localStorage и cookie-файлах на твоём устройстве.
         </div>
       </div>
@@ -1364,10 +1396,10 @@
   <div id="toastContainer" class="fixed top-16 right-3 left-3 sm:left-auto sm:w-80 z-[80] flex flex-col items-end space-y-2 pointer-events-none"></div>
 
   <!-- ЛОГИКА ИГРЫ (модульная структура v2.0) -->
-  <script defer src="js/config.js?v=3.0.1"></script>
-  <script defer src="js/storage.js?v=3.0.1"></script>
-  <script defer src="js/ui.js?v=3.0.1"></script>
-  <script defer src="js/game.js?v=3.0.1"></script>
-  <script defer src="js/main.js?v=3.0.1"></script>
+  <script defer src="js/config.js?v=3.0.2"></script>
+  <script defer src="js/storage.js?v=3.0.2"></script>
+  <script defer src="js/ui.js?v=3.0.2"></script>
+  <script defer src="js/game.js?v=3.0.2"></script>
+  <script defer src="js/main.js?v=3.0.2"></script>
 </body>
 </html>
