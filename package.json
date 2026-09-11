@@ -1,0 +1,15 @@
+{
+  "name": "shkoladrop",
+  "version": "3.5.0",
+  "description": "ШКОЛА ДРОП — браузерный симулятор школьных кейсов. Лёгкий игровой сервер: подарки, трейдинг, коды авторов (10%).",
+  "private": true,
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server/index.js",
+    "serve": "node server/index.js",
+    "selftest": "node server/selftest.js",
+    "test": "node server/selftest.js"
+  }
+}
