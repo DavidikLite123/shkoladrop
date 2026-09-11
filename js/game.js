@@ -296,6 +296,7 @@ function viewVisible(id) {
 }
 
 function renderAll() {
+  checkHardModeNotice();
   // Баланс и шапка
   animateNumber($('headerBalance'), state.balance, 420, v => `${fmt(v)} ₽`);
 
@@ -806,16 +807,30 @@ function addFeedItem(isWin, depositItem, targetItem) {
 /* --------------------------------------------------------------------------
    КЕЙСЫ
    -------------------------------------------------------------------------- */
+function casePrice(caseObj) {
+  if (!caseObj) return 0;
+  return state.balance >= HARD_MODE_THRESHOLD ? Math.ceil(caseObj.price * HARD_MODE_CASE_DISCOUNT) : caseObj.price;
+}
+
+function checkHardModeNotice() {
+  if (state.balance >= HARD_MODE_THRESHOLD && !state.stats.hardModeNotified) {
+    state.stats.hardModeNotified = true;
+    Toast.gold('🔥 Сезон 3: режим миллионера активирован! Цены кейсов снижены на 10%, но дропы стали сложнее.', 7000);
+    persist(true);
+  }
+}
+
 function renderCasesUI() {
   const grid = $('casesGrid');
   if (!grid) return;
 
-  $('currentCaseTitle').textContent = `Кейс: ${state.selectedCase.name}`;
-  $('currentCasePrice').textContent = `${fmt(state.selectedCase.price)} ₽`;
+  $('currentCaseTitle').textContent = `${state.selectedCase.season === 3 ? 'Сезон 3 · ' : ''}Кейс: ${state.selectedCase.name}`;
+  const selectedPrice = casePrice(state.selectedCase);
+  $('currentCasePrice').textContent = `${fmt(selectedPrice)} ₽`;
   $('casesCountLabel').textContent = `${CASES_LIST.length} кейсов · ${ALL_MASTER_ITEMS.length} предметов`;
   $('casesOpenedLabel').textContent = `всего: ${fmt(state.stats.casesOpened || 0)}`;
 
-  const enoughMoney = state.balance >= state.selectedCase.price;
+  const enoughMoney = state.balance >= selectedPrice;
   const openBtn = $('btnOpenCase');
   const openText = $('btnOpenCaseText');
   const openX5 = $('btnOpenCaseX5');
@@ -828,15 +843,15 @@ function renderCasesUI() {
   } else {
     openBtn.disabled = !enoughMoney;
     openText.textContent = enoughMoney
-      ? `ОТКРЫТЬ ЗА ${shortMoney(state.selectedCase.price)} ₽`
-      : `НУЖНО ${shortMoney(state.selectedCase.price)} ₽`;
-    const x5Cost = state.selectedCase.price * 5;
+      ? `ОТКРЫТЬ ЗА ${shortMoney(selectedPrice)} ₽`
+      : `НУЖНО ${shortMoney(selectedPrice)} ₽`;
+    const x5Cost = selectedPrice * 5;
     openX5.disabled = state.balance < x5Cost;
     openX5.classList.toggle('opacity-50', state.balance < x5Cost);
     openX5.textContent = state.selectedCase.secret ? 'x5 🔒' : `x5 · ${shortMoney(x5Cost)}₽`;
   }
 
-  const affordableList = CASES_LIST.filter(c => state.balance >= c.price);
+  const affordableList = CASES_LIST.filter(c => state.balance >= casePrice(c));
   const topList = CASES_LIST.filter(c => !c.secret && c.price >= 45000);
   const secretList = CASES_LIST.filter(c => c.secret);
 
@@ -865,14 +880,14 @@ function renderCasesUI() {
 
   visibleCases.forEach(c => {
     const selected = c.id === state.selectedCase.id;
-    const affordable = state.balance >= c.price;
+    const affordable = state.balance >= casePrice(c);
     const card = document.createElement('div');
     card.className = `case-card ${selected ? 'case-card-selected' : ''} ${c.secret ? 'case-card-secret' : ''} ${!affordable && c.secret ? 'case-card-locked' : ''}`;
     card.innerHTML = `
       <div class="text-3xl mb-1 relative z-10">${c.secret && !affordable ? '🔒' : c.icon}</div>
       <div class="text-xs font-bold font-cs ${c.secret ? 'secret-shine' : 'text-white'} leading-tight relative z-10">${escapeHtml(c.name)}</div>
       <div class="text-[10px] text-slate-400 line-clamp-1 my-1 relative z-10">${escapeHtml(c.desc)}</div>
-      <div class="text-xs font-cs font-bold relative z-10" style="color:${c.color}">${fmt(c.price)} ₽</div>
+      <div class="text-xs font-cs font-bold relative z-10" style="color:${c.color}">${fmt(casePrice(c))} ₽</div>
       ${c.secret ? `<div class="text-[9px] text-fuchsia-300 mt-0.5 relative z-10">${affordable ? 'ДОСТУПЕН! ТЫ ЛЕГЕНДА' : 'секретный · нужен 10 000 000 ₽'}</div>` : ''}
     `;
     card.onclick = () => selectCase(c.id);
@@ -1012,8 +1027,9 @@ function currentCaseWinner() {
 function openSelectedCase() {
   if (state.isOpeningCase) return;
   const caseObj = state.selectedCase;
-  if (state.balance < caseObj.price) {
-    Toast.error(`Не хватает монет: нужно ${fmt(caseObj.price)} ₽`);
+  const price = casePrice(caseObj);
+  if (state.balance < price) {
+    Toast.error(`Не хватает монет: нужно ${fmt(price)} ₽`);
     return;
   }
 
@@ -1025,7 +1041,7 @@ function openSelectedCase() {
   audio.init();
   audio.playCoin();
   state.isOpeningCase = true;
-  spendMoney(caseObj.price);
+  spendMoney(price);
   state.stats.casesOpened = (state.stats.casesOpened || 0) + 1;
   if (isSecret) state.stats.secretCases = (state.stats.secretCases || 0) + 1;
   addXp(XP_REWARDS.caseOpen, { silent: true });
@@ -1063,7 +1079,7 @@ function openSelectedCase() {
 function openSelectedCaseMulti(count = 5) {
   if (state.isOpeningCase) return;
   const caseObj = state.selectedCase;
-  const cost = caseObj.price * count;
+  const cost = casePrice(caseObj) * count;
 
   if (caseObj.secret) {
     Toast.error('Секретный кейс открывается только по одному — так задумано 🐱');

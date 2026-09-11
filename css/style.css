@@ -722,3 +722,27 @@ body.quality-low .bg-grid { display: none; }
 /* Тап-зоны не меньше 44px по высоте — палец попадает всегда */
 .nav-tab { min-height: 46px; }
 .filter-chip, .prof-tab, .toggle-pill { min-height: 30px; }
+
+/* Сезон 3: на мобильных ничего не вылезает за экран */
+html, body { width: 100%; max-width: 100%; overflow-x: hidden; }
+body.shkola-app { box-sizing: border-box; }
+body.shkola-app > * { max-width: 100%; }
+
+/* Баннер согласия всегда целиком виден и не конфликтует с нижней панелью */
+#cookieBanner {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(1rem, env(safe-area-inset-top, 0px)) 0.75rem max(1rem, env(safe-area-inset-bottom, 0px));
+  background: rgba(2, 4, 8, 0.62);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+#cookieBanner.hidden { display: none; }
+#cookieBanner > div { width: min(100%, 28rem); max-height: min(90vh, 32rem); overflow-y: auto; }
+@media (max-width: 360px) {
+  #cookieBanner > div { padding: 0.8rem; }
+  #cookieBanner .text-2xl { font-size: 1.25rem; }
+}

@@ -4,8 +4,11 @@
    уровни, награды, промокоды, апгрейды дежурства.
    ========================================================================== */
 
-const APP_VERSION = '2.0.2';
-const SAVE_VERSION = 8;
+const APP_VERSION = '3.0.0';
+const SAVE_VERSION = 9;
+const SEASON_NUMBER = 3;
+const HARD_MODE_THRESHOLD = 100000000;
+const HARD_MODE_CASE_DISCOUNT = 0.9;
 
 /* ---------- Редкости ---------- */
 const RARITIES = {
@@ -113,7 +116,16 @@ const CAT_CATALOG = [
   { id: 'cat_keeper',        name: 'КОТ-ХРАНИТЕЛЬ ШКОЛЫ ★ СЕКРЕТНЫЙ', price: 10000000, icon: '🐱', img: 'assets/secret-cat.png', badgeBg: 'from-cyan-400/60 to-fuchsia-900/70', rarity: 'secret', category: 'cat', desc: 'Легенда школы. Появляется лишь тем, кто дошёл до секретного кейса' }
 ];
 
-const ALL_MASTER_ITEMS = [...SCHOOL_CATALOG, ...CS2_CATALOG, ...OTHER_GAMES_CATALOG, ...CAT_CATALOG];
+/* ---------- Сезон 3: кейсы ютуберов ---------- */
+const SEASON3_CATALOG = [
+  { id: 'yt_creator_award', name: 'Золотая кнопка YouTube', price: 2000000, icon: '🏆', badgeBg: 'from-yellow-400/50 to-orange-700/50', rarity: 'covert', category: 'other', game: 'YouTube', desc: 'Миллион подписчиков и ни одного страйка' },
+  { id: 'yt_diamond_award', name: 'Бриллиантовая кнопка YouTube', price: 100000000, icon: '💎', badgeBg: 'from-cyan-200/60 to-blue-700/60', rarity: 'secret', category: 'other', game: 'YouTube', desc: '100 миллионов подписчиков. Ультра-легендарный предмет сезона 3' },
+  { id: 'yt_play_button', name: 'Серебряная кнопка YouTube', price: 450000, icon: '🥈', badgeBg: 'from-slate-300/50 to-slate-700/50', rarity: 'gold', category: 'other', game: 'YouTube', desc: 'Первая большая награда автора' },
+  { id: 'yt_creator_camera', name: 'Камера ночного блогера', price: 1200000, icon: '📹', badgeBg: 'from-violet-500/50 to-indigo-900/60', rarity: 'covert', category: 'other', game: 'YouTube', desc: 'Снимает даже когда света в кабинете нет' },
+  { id: 'yt_stream_deck', name: 'Пульт стримера', price: 700000, icon: '🎛️', badgeBg: 'from-fuchsia-500/50 to-purple-900/60', rarity: 'classified', category: 'other', game: 'YouTube', desc: 'Одна кнопка — и весь класс в прямом эфире' }
+];
+
+const ALL_MASTER_ITEMS = [...SCHOOL_CATALOG, ...CS2_CATALOG, ...OTHER_GAMES_CATALOG, ...CAT_CATALOG, ...SEASON3_CATALOG];
 const ITEMS_BY_ID = ALL_MASTER_ITEMS.reduce((acc, it) => { acc[it.id] = it; return acc; }, {});
 
 /* ---------- Кейсы (веса = честные шансы, нормализуются автоматически) ---------- */
@@ -190,6 +202,31 @@ const CASES_LIST = [
       { id: 'sch_entire_school', w: 24 }, { id: 'sch_golden_diary', w: 20 }, { id: 'sch_professor_chair', w: 18 },
       { id: 'sch_timetable_relic', w: 20 }, { id: 'cs_m4_howl', w: 10 }, { id: 'cs_karambit_dop', w: 8 }
     ]
+  },
+  {
+    id: 'case_creator', name: 'Кейс начинающего ютубера', price: 2000000, icon: '🎥', color: '#d32ce6',
+    season: 3, desc: 'Камеры, стримы и первая кнопка автора',
+    items: [ { id: 'yt_stream_deck', w: 34 }, { id: 'yt_creator_camera', w: 28 }, { id: 'yt_play_button', w: 22 }, { id: 'yt_creator_award', w: 16 } ]
+  },
+  {
+    id: 'case_streamer', name: 'Кейс большого стрима', price: 8000000, icon: '📡', color: '#eb4b4b',
+    season: 3, desc: 'Большая аудитория и очень редкий дроп',
+    items: [ { id: 'yt_stream_deck', w: 28 }, { id: 'yt_creator_camera', w: 25 }, { id: 'yt_creator_award', w: 30 }, { id: 'yt_diamond_award', w: 2 }, { id: 'cat_murka', w: 15 } ]
+  },
+  {
+    id: 'case_influencer', name: 'Кейс инфлюенсера', price: 25000000, icon: '🌟', color: '#ffd700',
+    season: 3, desc: 'Только для тех, кто собрал огромную аудиторию',
+    items: [ { id: 'yt_play_button', w: 20 }, { id: 'yt_creator_award', w: 38 }, { id: 'yt_creator_camera', w: 25 }, { id: 'yt_diamond_award', w: 3 }, { id: 'cat_professor', w: 14 } ]
+  },
+  {
+    id: 'case_legend_creator', name: 'Кейс легенды YouTube', price: 60000000, icon: '👑', color: '#00f0ff',
+    season: 3, desc: 'Почти финальная ступень к бриллиантовой кнопке',
+    items: [ { id: 'yt_creator_award', w: 38 }, { id: 'yt_diamond_award', w: 7 }, { id: 'yt_creator_camera', w: 20 }, { id: 'sch_timetable_relic', w: 15 }, { id: 'cat_keeper', w: 20 } ]
+  },
+  {
+    id: 'case_my_diamond', name: 'МОЙ КЕЙС: Бриллиантовая кнопка', price: 100000000, icon: '💎', color: '#67e8f9',
+    season: 3, ultra: true, desc: 'Ультра-легендарный кейс. Внутри может выпасть бриллиантовая кнопка YouTube',
+    items: [ { id: 'yt_creator_award', w: 32 }, { id: 'yt_diamond_award', w: 8 }, { id: 'cat_keeper', w: 20 }, { id: 'sch_timetable_relic', w: 20 }, { id: 'cs_karambit_dop', w: 20 } ]
   },
   {
     id: 'case_cat_secret', name: 'СЕКРЕТНЫЙ КЕЙС: КОТ-ХРАНИТЕЛЬ', price: 10000000, icon: '🐱', color: '#00f0ff',

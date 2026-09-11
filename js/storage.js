@@ -7,8 +7,8 @@
 /* --------------------------------------------------------------------------
    1. СХЕМА СОХРАНЕНИЯ
    -------------------------------------------------------------------------- */
-const SAVE_KEY = 'shkola_drop_save_v8';
-const LEGACY_KEYS = ['shkola_drop_save_v7', 'shkola_drop_save_v6'];
+const SAVE_KEY = 'shkola_drop_save_v9';
+const LEGACY_KEYS = ['shkola_drop_save_v8', 'shkola_drop_save_v7', 'shkola_drop_save_v6'];
 
 const DEFAULT_STATS = {
   casesOpened: 0,
@@ -36,7 +36,8 @@ const DEFAULT_STATS = {
   idle: { level: 0, pending: 0, lastCollect: 0 },
   createdAt: 0,
   lastSeen: 0,
-  sessions: 0
+  sessions: 0,
+  hardModeNotified: false
 };
 
 function freshStats() {
@@ -133,11 +134,13 @@ const CookieStore = {
    3. СОГЛАСИЕ НА COOKIE
    -------------------------------------------------------------------------- */
 const Consent = {
+  LOCAL: 'shkola_consent_local',
   COOKIE: 'shkola_consent',
   VERSION: 1,
 
   get() {
-    const data = CookieStore.getJSON(this.COOKIE, null);
+    let data = CookieStore.getJSON(this.COOKIE, null);
+    if (!data) { try { data = JSON.parse(localStorage.getItem(this.LOCAL) || 'null'); } catch (e) {} }
     if (!data || typeof data !== 'object') return null;
     return {
       version: data.version || 0,
@@ -158,6 +161,7 @@ const Consent = {
       cats: Object.assign({ save: true, functional: true, analytics: true }, cats || {})
     };
     CookieStore.setJSON(this.COOKIE, payload, 365);
+    try { localStorage.setItem(this.LOCAL, JSON.stringify(payload)); } catch (e) {}
     return payload;
   },
 
