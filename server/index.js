@@ -483,9 +483,14 @@ const routes = {
       return send(res, 400, { ok: false, error: 'save не похож на сохранение игры' });
     }
     db.saves[pUid] = { save, updatedAt: Date.now() };
-    upsertPlayer(pUid, cleanStr(body.nick, 24));
+    const pl = upsertPlayer(pUid, cleanStr(body.nick, 24));
     dbSave();
-    send(res, 200, { ok: true, updatedAt: db.saves[pUid].updatedAt });
+    // Заодно отдаём уникальный ID и галочку: второй канал выдачи для клиента
+    // (помогает, если стартовый /api/auth/sync не прошёл — сервер спал и т.п.)
+    send(res, 200, {
+      ok: true, updatedAt: db.saves[pUid].updatedAt,
+      tag: pl ? pl.tag : null, verified: !!(pl && pl.verified)
+    });
   },
 
   'GET /api/save': (req, res, body, url) => {

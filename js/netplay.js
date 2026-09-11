@@ -64,6 +64,7 @@ const ServerAPI = {
   },
   async ping(force = false) {
     if (!force && this._online !== null && Date.now() - this._onlineAt < 20000) return this._online;
+    const wasOnline = this._online === true;
     try {
       const { status, data } = await this.req('GET', '/api/ping', null, {}, 4000);
       this._online = status === 200 && data.ok === true;
@@ -72,11 +73,27 @@ const ServerAPI = {
       this._online = false;
     }
     this._onlineAt = Date.now();
-    if (this._online) NetAuthor.flushPending();
+    if (this._online) {
+      NetAuthor.flushPending();
+      // Переход «оффлайн → онлайн»: именно здесь доигрываются всё,
+      // что не удалось, пока сервер спал (выдача уникального ID и т.п.)
+      if (!wasOnline) onServerJustCameOnline();
+    }
     renderServerStatus();
     return this._online;
   }
 };
+
+/* Сервер «ожил» — добиваем то, что не удалось на оффлайн-старте:
+   без этого хука игрок, зашедший пока Render спал, видел бы зелёное
+   «ОНЛАЙН», но уникальный ID так и не получил (sync запускался ровно
+   один раз при загрузке и больше никогда). */
+function onServerJustCameOnline() {
+  if (typeof NetIdentity === 'undefined' || typeof CloudSave === 'undefined') return;
+  if (!state.user) return;
+  if (!state.user.tag) NetIdentity.sync(true); // добрать уникальный ID / галочку
+  CloudSave.startAutoPush();                    // на оффлайн-старте автопуш не стартовал
+}
 
 /* Секрет админки для серверных запросов (совпадает с ADMIN_SECRET на сервере) */
 function adminSecret() {
@@ -98,33 +115,90 @@ function adminChipHtml() {
    ЛИЧНОСТЬ ИГРОКА: уникальный ID с сервера + галочка верификации
    Уникальный ID (#123456) присваивается АВТОМАТИЧЕСКИ при первой
    синхронизации с обновлённой версией и хранится на сервере навсегда.
+
+   ВАЖНО: бесплатный Render засыпает без трафика, поэтому sync() больше не
+   «одна попытка при загрузке»: при неудаче он сам повторяет запрос с растущей
+   паузой, пока сервер не проснётся. Раньше из-за одной попытки при оффлайн-
+   старте индикатор показывал «ОНЛАЙН», а ID так и не выдавался никогда.
    -------------------------------------------------------------------------- */
 const NetIdentity = {
   _syncing: false,
+  _retryTimer: null,
+  _retryN: 0,
+  _gaveUp: false,
+  MAX_RETRIES: 12,
 
-  async sync() {
+  stopRetry() {
+    if (this._retryTimer) { clearTimeout(this._retryTimer); this._retryTimer = null; }
+    this._retryN = 0;
+    this._gaveUp = false;
+  },
+
+  /* Не удалось получить ID — повторить позже (Render просыпается 30–90 секунд).
+     Задержки >= 21с заодно гарантируют, что 20-секундный кэш пинга протухнет. */
+  armRetry() {
+    if (this._retryTimer || !state.user || state.user.tag) return;
+    if (this._retryN >= this.MAX_RETRIES) {
+      if (!this._gaveUp) {
+        this._gaveUp = true;
+        Toast.info('⏳ Сервер сообщества пока молчит (скорее всего, спит). Уникальный ID выдаётся автоматически, как только он оживёт — или нажми «⚡ Включить сервер».', 9000);
+      }
+      return;
+    }
+    const mult = (typeof document !== 'undefined' && document.hidden) ? 3 : 1;
+    const delay = mult * Math.min(60000, 21000 + this._retryN * 12000);
+    this._retryN++;
+    clearTimeout(this._retryTimer);
+    this._retryTimer = setTimeout(() => {
+      this._retryTimer = null;
+      if (!state.user || state.user.tag) { this.stopRetry(); return; }
+      this.sync();
+    }, delay);
+  },
+
+  /* Аккаунты из старых сейвов (до 3.7) иногда переносились без uid — с ним
+     сервер отвечает 400 «нет uid», и ID не выдался бы НИКОГДА. Чиним на лету. */
+  ensureUid() {
+    if (!state.user) return false;
+    if (state.user.id) return true;
+    state.user.id = RNG.uid('player');
+    persist(true);
+    return true;
+  },
+
+  async sync(force = false) {
     if (!state.user || this._syncing) return null;
     this._syncing = true;
+    if (force) { this._retryN = 0; this._gaveUp = false; }
     try {
-      if (!(await ServerAPI.ping())) return null;
-      const { data } = await ServerAPI.req('POST', '/api/auth/sync', {
-        uid: state.user.id, nick: state.user.nick
-      });
-      if (data && data.ok) {
+      if (!this.ensureUid()) return null;
+      let res = null;
+      if (await ServerAPI.ping(force)) {
+        const { data } = await ServerAPI.req('POST', '/api/auth/sync', {
+          uid: state.user.id, nick: state.user.nick
+        }, {}, 15000);
+        res = data;
+      }
+      if (res && res.ok) {
+        this.stopRetry();
         const hadTag = !!state.user.tag;
-        if (data.tag) state.user.tag = data.tag;
-        state.user.verified = !!data.verified;
+        const hadVerified = !!state.user.verified;
+        if (res.tag) state.user.tag = res.tag;
+        state.user.verified = !!res.verified;
         if (!hadTag && state.user.tag) {
           // Первая выдача ID после входа в обновлённую версию
           Toast.gold(`🆔 Твоему аккаунту присвоен уникальный ID: <b class="font-mono">${escapeHtml(state.user.tag)}</b>. По нему тебя найдут друзья в «💬 Сообществе»!`, 9000);
-        } else if (state.user.verified) {
+        } else if (state.user.verified && !hadVerified) {
           Toast.info('✔ Твой аккаунт верифицирован администрацией — галочка видна всем в чате и профиле!', 7000);
         }
         persist(true);
         this.renderEverywhere();
+      } else {
+        this.armRetry();
       }
-      return data;
+      return res;
     } catch (e) {
+      this.armRetry();
       return null;
     } finally {
       this._syncing = false;
@@ -348,7 +422,7 @@ const Community = {
     renderServerStatus();
     this.renderMyId();
     this.refreshChat(true);
-    NetIdentity.sync(); // подхватить свежую галочку/ID, если сервер что-то поменял
+    NetIdentity.sync(true); // подхватить свежую галочку/ID, если сервер что-то поменял
     ServerAPI.ping(true).then(() => this.refreshChat(true));
     // Живое обновление чата, пока окно открыто
     clearInterval(this._pollTimer);
@@ -381,7 +455,13 @@ const Community = {
   },
 
   async copyMyTag() {
-    if (!state.user || !state.user.tag) { Toast.info('ID ещё выдаётся сервером — подожди пару секунд'); return; }
+    if (!state.user) { Toast.error('Сначала создай профиль — сервер выдаст тебе уникальный ID'); return; }
+    if (!state.user.tag) {
+      // ID ещё не получен — не ждём «пару секунд», а добиваемся его прямо сейчас
+      Toast.info('Запрашиваю ID у сервера заново… Если он спит — нажми «⚡ Включить сервер».', 6000);
+      NetIdentity.sync(true);
+      return;
+    }
     const ok = await copyText(state.user.tag);
     Toast[ok ? 'success' : 'info'](ok ? `Уникальный ID скопирован: ${state.user.tag}` : `Твой ID: ${state.user.tag}`);
   },
@@ -570,6 +650,16 @@ const CloudSave = {
       }, {}, 15000);
       if (data.ok) {
         this._lastPushOk = Date.now();
+        // Запасной канал: сервер возвращает уникальный ID в ответе на залив
+        // сейва — игрок получит ID даже если sync() ни разу не прошёл
+        if (data.tag && state.user && !state.user.tag) {
+          state.user.tag = data.tag;
+          if (typeof data.verified === 'boolean') state.user.verified = data.verified;
+          persist(true);
+          NetIdentity.stopRetry();
+          NetIdentity.renderEverywhere();
+          Toast.gold(`🆔 Твоему аккаунту присвоен уникальный ID: <b class="font-mono">${escapeHtml(data.tag)}</b>. По нему тебя найдут друзья в «💬 Сообществе»!`, 9000);
+        }
         if (toast) Toast.success('☁️ Прогресс залит на сервер сообщества!');
         this._renderStatus();
         return true;
@@ -673,6 +763,7 @@ const NetPlay = {
 
   open() {
     renderServerStatus();
+    if (state.user && !state.user.tag) NetIdentity.sync(true); // без ID подарки не найти — добиваемся сразу
     ServerAPI.ping(true).then(() => this.refreshAll());
     Modal.open('netplayModal');
     this.switchTab(this.tab);
@@ -1404,10 +1495,12 @@ function NetBoot() {
 
   ServerAPI.ping(true).then(async on => {
     renderServerStatus();
+    // Уникальный ID запрашиваем ВСЕГДА (даже если сейчас оффлайн): sync() сам
+    // повторит попытку, как только сервер оживёт. Без этого ID не выдавался,
+    // если при загрузке страницы бесплатный Render спал.
+    if (state.user) NetIdentity.sync();
     if (!on) return;
     if (state.user) {
-      // Уникальный ID и галочка (автовыдача ID при входе в обновлённую версию)
-      await NetIdentity.sync();
       // Облачные сейвы: автовосстановление прогресса + фоновая синхронизация
       CloudSave.startAutoPush();
       CloudSave.pullAndRestore(false).then(restored => {
