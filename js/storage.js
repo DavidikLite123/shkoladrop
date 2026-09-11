@@ -57,7 +57,7 @@ const DEFAULT_STATS = {
   sessions: 0,
   hardModeNotified: false,
   richTaxNotified: false,
-  tapFarmClosed: false
+  tapLimitClosed: false
 };
 
 function freshStats() {

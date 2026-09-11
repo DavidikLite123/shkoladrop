@@ -19,7 +19,7 @@
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://shkoladrop.vercel.app/" />
   <meta property="og:title" content="ШКОЛА ДРОП 3.0 — Кейсы ютуберов от David Lite" />
-  <meta property="og:description" content="Сезон 3: кейсы ютуберов, новые предметы и Бриллиантовая кнопка, достижения, пассивный фарм и СЕКРЕТНЫЙ КОТ за 10 млн ₽. Честные шансы без доната!" />
+  <meta property="og:description" content="Сезон 3: кейсы ютуберов, новые предметы и Бриллиантовая кнопка, достижения, пассивный доход и СЕКРЕТНЫЙ КОТ за 10 млн ₽. Честные шансы без доната!" />
   <meta property="og:site_name" content="ШКОЛА ДРОП by David Lite" />
   <meta property="og:locale" content="ru_RU" />
 
@@ -36,7 +36,7 @@
     "name": "ШКОЛА ДРОП 3.0",
     "alternateName": ["Shkola Drop 3.0", "Школа Дроп 3"],
     "softwareVersion": "3.0.2",
-    "description": "Официальный интерактивный игровой симулятор открытия кейсов и честный апгрейдер скинов CS2 от автора David Lite. Сезон 3: коты-предметы, достижения, пассивный фарм и секретный кейс Кота-Хранителя.",
+    "description": "Официальный интерактивный игровой симулятор открытия кейсов и честный апгрейдер скинов CS2 от автора David Lite. Сезон 3: коты-предметы, достижения, пассивный доход и секретный кейс Кота-Хранителя.",
     "genre": ["Симулятор", "Инди-игра", "Кликер", "Рулетка"],
     "playMode": "SinglePlayer",
     "applicationCategory": "Browser Game",
@@ -531,11 +531,11 @@
     <div id="inventoryGrid" class="grid grid-cols-2 gap-2.5 min-h-[240px]"></div>
   </main>
 
-  <!-- ================= TAB 3: FARM (СООБЩЕСТВО + IDLE + DAILY + PROMO) ================= -->
-  <main id="viewFarm" class="view-panel w-full px-4 mt-2 hidden flex flex-col items-center space-y-3">
+  <!-- ================= TAB 3: COMMUNITY (СООБЩЕСТВО + IDLE + DAILY + PROMO) ================= -->
+  <main id="viewCommunity" class="view-panel w-full px-4 mt-2 hidden flex flex-col items-center space-y-3">
     <div class="w-full text-left">
-      <h2 class="font-cs text-sm font-bold uppercase tracking-wider text-slate-200">Фарм и Сообщество</h2>
-      <p class="text-[11px] text-slate-400">Дежурство, награды, промокоды — а вместо мини-игры теперь живой чат школы со своими ID и галочками ✔</p>
+      <h2 class="font-cs text-sm font-bold uppercase tracking-wider text-slate-200">Сообщество</h2>
+      <p class="text-[11px] text-slate-400">Дежурство, награды, промокоды и живой чат школы со своими ID и галочками ✔</p>
     </div>
 
     <!-- СООБЩЕСТВО: чат, уникальные ID, галочки верификации (раньше тут была мини-игра «Перемена») -->
@@ -551,7 +551,7 @@
         <span id="communityMiniStatus" class="text-[8px] font-black px-1.5 py-0.5 rounded uppercase bg-slate-800 text-slate-300 border border-slate-700 flex-shrink-0">…</span>
       </div>
       <div class="mt-2 pt-2 border-t border-cyan-500/20 flex items-center justify-between gap-2">
-        <span class="text-[9.5px] text-slate-400">🆔 Твой ID: <span id="farmMyTag" class="font-mono font-bold text-amber-300">…</span></span>
+        <span class="text-[9.5px] text-slate-400">🆔 Твой ID: <span id="communityMyTag" class="font-mono font-bold text-amber-300">…</span></span>
         <span class="text-[9px] text-cyan-300/80">жми карточку — чат и копируемый ID откроются 👆</span>
       </div>
     </button>
@@ -683,7 +683,7 @@
       <div>
         <span class="text-xs font-bold text-amber-400 uppercase tracking-wider">Стрельнуть мелочь</span>
         <p class="text-[11px] text-slate-400">Быстрый кликер карманных денег (растёт с уровнем)</p>
-        <div id="tapValueLabel" class="text-xs text-slate-300 font-mono mt-0.5">+150 ₽ за каждый тап · лимит фарма 100 000 ₽</div>
+        <div id="tapValueLabel" class="text-xs text-slate-300 font-mono mt-0.5">+150 ₽ за каждый тап · лимит дохода 100 000 ₽</div>
       </div>
       <button id="tapMoneyButton" onclick="tapForMoney(event)" class="w-14 h-14 rounded-2xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 flex items-center justify-center text-3xl shadow-lg active:scale-90 transition select-none">
         🥟
@@ -786,6 +786,13 @@
   </div><!-- /appViewport -->
 
   <!-- НИЖНЯЯ НАВИГАЦИЯ (всегда на экране) -->
+  <!-- Подсказка-указатель на новую вкладку «Сообщество» -->
+  <div id="communityHintBubble" class="hidden fixed left-1/2 z-[46] pointer-events-none" style="bottom: 74px; transform: translateX(-50%);">
+    <div class="pointer-events-auto flex items-center gap-1.5 bg-cyan-500 text-slate-950 font-cs font-bold text-[10px] px-3 py-1.5 rounded-full shadow-lg shadow-cyan-500/40 whitespace-nowrap animate-bounce-slow" onclick="dismissCommunityHint()">
+      <span>👀</span><span>Смотри, новая функция!</span>
+    </div>
+  </div>
+
   <nav id="tabbar" class="tabbar">
   
     <button onclick="switchTab('upgrade')" id="tabUpgrade" class="nav-tab nav-tab-active">
@@ -797,8 +804,9 @@
     <button onclick="switchTab('inventory')" id="tabInv" class="nav-tab">
       <span>🎒</span><span>Рюкзак (<span id="invCountBadge">0</span>)</span>
     </button>
-    <button onclick="switchTab('farm')" id="tabFarm" class="nav-tab">
-      <span>🎮</span><span>Фарм</span>
+    <button onclick="switchTab('community')" id="tabCommunity" class="nav-tab relative">
+      <span id="communityNewBadge" class="hidden absolute -top-1.5 right-1 text-[7px] font-black px-1 py-0.5 rounded-full bg-cyan-500 text-slate-950 uppercase tracking-wide shadow-lg shadow-cyan-500/50" style="animation: livePulse 1.4s ease-in-out infinite;">NEW</span>
+      <span>💬</span><span>Сообщество</span>
     </button>
     <button onclick="switchTab('shop')" id="tabShop" class="nav-tab">
       <span>🏪</span><span>Лавка</span>
@@ -1020,7 +1028,7 @@
       </div>
       <div class="space-y-2">
         <button onclick="openProfileModal(); closeExtrasModal()" class="extra-menu-button"><span class="text-xl">👤</span><span><b>Профиль</b><small>Вход, кабинет и достижения</small></span><span>›</span></button>
-        <button onclick="switchTab('farm'); closeExtrasModal(); setTimeout(() => { const input = document.getElementById('promoInput'); if (input) { input.focus(); input.select(); } }, 300);" class="extra-menu-button"><span class="text-xl">🎫</span><span><b>Промокоды</b><small>Введи код и получи награду</small></span><span>›</span></button>
+        <button onclick="switchTab('community'); closeExtrasModal(); setTimeout(() => { const input = document.getElementById('promoInput'); if (input) { input.focus(); input.select(); } }, 300);" class="extra-menu-button"><span class="text-xl">🎫</span><span><b>Промокоды</b><small>Введи код и получи награду</small></span><span>›</span></button>
         <button onclick="Community.open(); closeExtrasModal()" class="extra-menu-button"><span class="text-xl">💬</span><span><b>Сообщество</b><small>Общий чат школы, уникальные ID и галочки ✔</small></span><span>›</span></button>
         <button onclick="NetPlay.open(); closeExtrasModal()" class="extra-menu-button"><span class="text-xl">🤝</span><span><b>Трейдинг и подарки</b><small>Обмен предметами и гифты друзьям по ID</small></span><span id="netplayDot" class="hidden text-[8px] font-black text-white bg-rose-500 border border-rose-400 min-w-[16px] px-1 py-0.5 rounded-full text-center">1</span></button>
         <button onclick="closeExtrasModal(); openBetaLab()" class="extra-menu-button"><span class="text-xl">🧪</span><span><b>Бета-тест</b><small>Лаборатория 3.6 и закрытый доступ</small></span><span id="betaMenuBadge" class="hidden text-[8px] font-black text-cyan-300 bg-cyan-500/15 border border-cyan-500/40 px-1.5 py-0.5 rounded uppercase">Активен</span></button>
@@ -1045,7 +1053,7 @@
       </div>
       <div id="netOfflineHelp" class="hidden mb-2 rounded-xl border border-amber-500/40 bg-amber-950/30 p-2.5 space-y-1.5">
         <div class="text-[10px] text-amber-200/90 leading-relaxed">
-          😴 <b>Сервер не работает</b> — разбуди его кнопкой или напишите нам на <b class="text-amber-100 select-all">shkoladrop.contact@gmail.com</b> — решим проблему!
+          😴 <b>Сервер не работает</b> — нажми кнопку ниже и подожди, пока сервер оживёт (обычно около минуты). Или напишите нам на <b class="text-amber-100 select-all">shkoladrop.contact@gmail.com</b> — решим проблему!
         </div>
         <button onclick="wakeCommunityServer(this)" class="w-full py-2 rounded-lg bg-amber-500 hover:brightness-110 text-slate-950 font-cs font-bold text-xs uppercase tracking-wider transition active:scale-95">⚡ Включить сервер</button>
       </div>
@@ -1107,7 +1115,7 @@
       <!-- СЕРВЕР СПИТ: кнопка пробуждения + почта поддержки -->
       <div id="commOfflineHelp" class="hidden mb-2 rounded-xl border border-amber-500/40 bg-amber-950/30 p-2.5 space-y-1.5">
         <div class="text-[10px] text-amber-200/90 leading-relaxed">
-          😴 <b>Сервер не работает</b> — бесплатный хостинг уснул. Нажми кнопку ниже, и сервер проснётся за ~минуту. Или напишите нам на почту <b class="text-amber-100 select-all">shkoladrop.contact@gmail.com</b> — решим проблему!
+          😴 <b>Сервер не работает</b> — бесплатный хостинг уснул. Нажми кнопку ниже и подожди, пока сервер оживёт (обычно около минуты). Или напишите нам на почту <b class="text-amber-100 select-all">shkoladrop.contact@gmail.com</b> — решим проблему!
         </div>
         <button onclick="wakeCommunityServer(this)" class="w-full py-2 rounded-lg bg-amber-500 hover:brightness-110 text-slate-950 font-cs font-bold text-xs uppercase tracking-wider transition active:scale-95">⚡ Включить сервер</button>
       </div>
@@ -1644,6 +1652,28 @@
     </div>
   </div>
 
+  <!-- ================= MODAL: ЧТО НОВОГО (после обновления) ================= -->
+  <div id="whatsNewModal" class="app-modal hidden">
+    <div class="modal-card border border-cyan-500/40 max-w-sm w-full text-center">
+      <div class="w-14 h-14 mx-auto rounded-2xl bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-3xl mb-3 shadow-lg">
+        🆕
+      </div>
+      <h3 class="font-cs text-lg font-bold uppercase text-white mb-1">Что нового?</h3>
+      <div id="whatsNewVersion" class="text-[10px] text-cyan-400 font-mono mb-2">Обновление игры</div>
+      <div class="bg-slate-950/80 border border-slate-800 rounded-xl p-3 text-xs text-slate-300 text-left space-y-2 mb-4">
+        <p class="text-[11px] leading-relaxed text-slate-300 flex items-start gap-1.5">
+          <span>💬</span><span>Вкладка «Фарм» стала вкладкой <b class="text-cyan-300">«Сообщество»</b> — чат школы, уникальные ID и галочки верификации теперь на видном месте.</span>
+        </p>
+        <p class="text-[11px] leading-relaxed text-slate-300 flex items-start gap-1.5">
+          <span>😴</span><span>Кнопка «Включить сервер» теперь честно предупреждает: нажми и подожди, пока сервер оживёт (~минуту).</span>
+        </p>
+      </div>
+      <button onclick="closeWhatsNewModal()" class="btn-shine w-full py-3 rounded-xl font-cs font-bold text-xs uppercase tracking-wider bg-gradient-to-r from-cyan-500 to-blue-500 text-black shadow-lg shadow-cyan-500/30 hover:brightness-110 active:scale-95 transition">
+        Хорошо
+      </button>
+    </div>
+  </div>
+
   <!-- ================= RESULT OVERLAY ================= -->
   <div id="resultOverlay" class="fixed inset-0 bg-black/85 backdrop-blur-md z-[70] flex items-center justify-center px-4 hidden opacity-0 transition-all duration-200 pointer-events-none">
     <div id="resultGlow" class="absolute w-72 h-72 rounded-full blur-3xl opacity-40 pointer-events-none"></div>
@@ -1690,7 +1720,7 @@
 
       <!-- сервер спит -->
       <div id="authOffline" class="hidden rounded-xl border border-amber-500/40 bg-amber-950/40 p-2.5 space-y-1.5">
-        <div class="text-[10px] text-amber-200 leading-relaxed">😴 <b>Сервер не работает</b> — напиши нам на почту <b class="select-all text-amber-100">shkoladrop.contact@gmail.com</b> — решим проблему! Или нажми кнопку «включить сервер» — Render просыпается примерно за минуту.</div>
+        <div class="text-[10px] text-amber-200 leading-relaxed">😴 <b>Сервер не работает</b> — нажми кнопку «Включить сервер» ниже и подожди, пока сервер оживёт (обычно около минуты). Или напиши нам на почту <b class="select-all text-amber-100">shkoladrop.contact@gmail.com</b> — решим проблему!</div>
         <button onclick="wakeCommunityServer(this).then(function(ok){ AuthGate.refreshNetworkState(false); })" class="w-full py-2 rounded-lg bg-amber-500 hover:brightness-110 text-slate-950 font-cs font-bold text-xs uppercase tracking-wider transition active:scale-95">⚡ Включить сервер</button>
       </div>
 

@@ -24,9 +24,11 @@ function bootShkolaDrop() {
       // под приветствием, и без этого страница осталась бы нескроллящейся навсегда.
       if (typeof resyncModalState === 'function') resyncModalState();
       showCookieBannerIfNeeded();
+      showWhatsNewIfNeeded();
     } else if (!welcome) {
       if (typeof resyncModalState === 'function') resyncModalState();
       showCookieBannerIfNeeded();
+      showWhatsNewIfNeeded();
     }
 
     console.log(`%c🎒 ШКОЛА ДРОП v${APP_VERSION} Stable`, 'color:#ff5500;font-weight:bold', '— David Lite Studio · Сезон 3');

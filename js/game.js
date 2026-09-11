@@ -337,7 +337,7 @@ function renderAll() {
   if (viewVisible('viewCases')) renderCasesUI();
   if (viewVisible('viewInventory')) renderInventory();
   if (viewVisible('viewShop')) renderShop();
-  if (viewVisible('viewFarm')) renderFarm();
+  if (viewVisible('viewCommunity')) renderCommunityTab();
 
   if (Modal.isOpen('profileModal')) renderProfile();
 
@@ -1693,17 +1693,17 @@ function renderShop() {
   }).join('');
 
   const tapValue = tapMoneyValue();
-  if (state.balance >= 100000 && !state.stats.tapFarmClosed) { state.stats.tapFarmClosed = true; persist(true); }
-  const tapLocked = !!state.stats.tapFarmClosed || state.balance >= 100000;
+  if (state.balance >= 100000 && !state.stats.tapLimitClosed) { state.stats.tapLimitClosed = true; persist(true); }
+  const tapLocked = !!state.stats.tapLimitClosed || state.balance >= 100000;
   const tapButton = $('tapMoneyButton');
   $('tapValueLabel').textContent = tapLocked
-    ? 'Фарм закрыт: достигнут лимит 100 000 ₽'
+    ? 'Доход закрыт: достигнут лимит 100 000 ₽'
     : `+${fmt(tapValue)} ₽ за каждый тап · осталось до лимита: ${fmt(Math.max(0, 100000 - state.balance))} ₽`;
   if (tapButton) {
     tapButton.disabled = tapLocked;
     tapButton.classList.toggle('opacity-40', tapLocked);
     tapButton.classList.toggle('grayscale', tapLocked);
-    tapButton.title = tapLocked ? 'Фарм закрыт после достижения 100 000 ₽' : 'Стрельнуть мелочь';
+    tapButton.title = tapLocked ? 'Доход закрыт после достижения 100 000 ₽' : 'Стрельнуть мелочь';
   }
 }
 
@@ -1736,8 +1736,8 @@ function buySchoolItem(id) {
 }
 
 function tapForMoney(event) {
-  if (state.stats.tapFarmClosed || state.balance >= 100000) {
-    state.stats.tapFarmClosed = true;
+  if (state.stats.tapLimitClosed || state.balance >= 100000) {
+    state.stats.tapLimitClosed = true;
     persist(true);
     uiUpdate();
     Toast.info('«Стрельнуть мелочь» закрыто: достигнут лимит 100 000 ₽.');
@@ -1749,8 +1749,8 @@ function tapForMoney(event) {
   const value = tapMoneyValue();
   state.balance += value;
   if (state.balance >= 100000) {
-    state.stats.tapFarmClosed = true;
-    Toast.gold('Лимит фарма достигнут: 100 000 ₽. «Стрельнуть мелочь» закрыто.', 5000);
+    state.stats.tapLimitClosed = true;
+    Toast.gold('Лимит дохода достигнут: 100 000 ₽. «Стрельнуть мелочь» закрыто.', 5000);
   }
   state.stats.earnedTotal = (state.stats.earnedTotal || 0) + value;
   state.stats.balanceMax = Math.max(state.stats.balanceMax || 0, state.balance);
@@ -1775,7 +1775,7 @@ function nextIdleLevel() {
   return IDLE_LEVELS.find(l => l.level === lvl + 1) || null;
 }
 
-function renderFarm() {
+function renderCommunityTab() {
   const level = state.stats.idle.level || 0;
   const pending = state.stats.idle.pending || 0;
 
@@ -1866,7 +1866,7 @@ function startIdleTicker() {
     if (!aps) return;
     state.stats.idle.pending = (state.stats.idle.pending || 0) + aps;
     state.stats.idle.lastCollect = Date.now();
-    if (viewVisible('viewFarm')) {
+    if (viewVisible('viewCommunity')) {
       $('idlePendingText').textContent = moneyText(state.stats.idle.pending, true);
       $('idlePendingText').title = moneyText(state.stats.idle.pending, false);
       $('btnCollectIdle').disabled = false;
@@ -2660,6 +2660,55 @@ function closeWelcomeDisclaimer() {
   }
   MetaStore.write(Object.assign(MetaStore.read(), { welcomeSeen: true }));
   showCookieBannerIfNeeded();
+  showWhatsNewIfNeeded();
+}
+
+/* --------------------------------------------------------------------------
+   «ЧТО НОВОГО» — короткое окно после обновления игры (один раз на версию)
+   + указатель-подсказка «Смотри, новая функция!» на вкладке «Сообщество»
+   -------------------------------------------------------------------------- */
+function showWhatsNewIfNeeded() {
+  const meta = MetaStore.read();
+  if (meta.whatsNewSeen === WHATS_NEW_VERSION) {
+    showCommunityHintIfNeeded();
+    return;
+  }
+  const modal = $('whatsNewModal');
+  if (!modal) return;
+  const verLabel = $('whatsNewVersion');
+  if (verLabel) verLabel.textContent = `Сезон ${SEASON_NUMBER} · v${APP_VERSION}`;
+  Modal.open('whatsNewModal');
+}
+
+function closeWhatsNewModal() {
+  audio.init();
+  audio.playTick();
+  Modal.close('whatsNewModal');
+  MetaStore.write(Object.assign(MetaStore.read(), { whatsNewSeen: WHATS_NEW_VERSION }));
+  showCommunityHintIfNeeded();
+}
+
+/** Показывает мигающий бейдж «NEW» и всплывающую подсказку над вкладкой «Сообщество»,
+    пока игрок сам туда не заглянет (после этого подсказка больше не нужна). */
+function showCommunityHintIfNeeded() {
+  const meta = MetaStore.read();
+  if (meta.communityTabSeen) return;
+  const badge = $('communityNewBadge');
+  const bubble = $('communityHintBubble');
+  if (badge) badge.classList.remove('hidden');
+  if (bubble) {
+    bubble.classList.remove('hidden');
+    setTimeout(() => dismissCommunityHint(true), 8000); // сама скрывается через 8 сек, бейдж остаётся
+  }
+}
+
+function dismissCommunityHint(bubbleOnly) {
+  const bubble = $('communityHintBubble');
+  if (bubble) bubble.classList.add('hidden');
+  if (bubbleOnly) return;
+  const badge = $('communityNewBadge');
+  if (badge) badge.classList.add('hidden');
+  MetaStore.write(Object.assign(MetaStore.read(), { communityTabSeen: true }));
 }
 
 async function copyContactEmail() {
@@ -2795,14 +2844,14 @@ function switchTab(tab) {
     upgrade: $('viewUpgrade'),
     cases: $('viewCases'),
     inventory: $('viewInventory'),
-    farm: $('viewFarm'),
+    community: $('viewCommunity'),
     shop: $('viewShop')
   };
   const tabs = {
     upgrade: $('tabUpgrade'),
     cases: $('tabCases'),
     inventory: $('tabInv'),
-    farm: $('tabFarm'),
+    community: $('tabCommunity'),
     shop: $('tabShop')
   };
 
@@ -2820,7 +2869,7 @@ function switchTab(tab) {
   if (tab === 'cases') { renderCasesUI(); setupCaseTape(); }
   if (tab === 'inventory') renderInventory();
   if (tab === 'shop') renderShop();
-  if (tab === 'farm') renderFarm();
+  if (tab === 'community') { renderCommunityTab(); dismissCommunityHint(false); }
   if (tab === 'upgrade') renderUpgradeHud();
 
   uiUpdate();
@@ -2845,7 +2894,7 @@ function bindGlobalEvents() {
   window.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
       ['settingsModal', 'profileModal', 'authorModal', 'termsModal', 'cookieModal', 'cookiePolicyModal',
-        'caseOddsModal', 'dailyModal', 'multiResultModal', 'confirmModal', 'communityModal', 'netplayModal', 'extrasModal'].forEach(id => {
+        'caseOddsModal', 'dailyModal', 'multiResultModal', 'confirmModal', 'communityModal', 'netplayModal', 'extrasModal', 'whatsNewModal'].forEach(id => {
           if (Modal.isOpen(id)) Modal.close(id);
         });
       if (Modal.isOpen('itemModal')) closeItemModal();
@@ -2890,7 +2939,7 @@ function initGame() {
   setTargetCategory('all');
   renderCasesUI();
   setupCaseTape();
-  renderFarm();
+  renderCommunityTab();
   renderPromoList();
   renderProfile();
   applyCookieCategoriesToUI();
