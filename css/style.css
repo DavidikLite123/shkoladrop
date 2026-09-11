@@ -39,7 +39,7 @@ body[data-accent="emerald"] {
 /* ---------- База ---------- */
 * { -webkit-tap-highlight-color: transparent; }
 
-html { height: 100%; }
+html { min-height: 100%; }
 
 body {
   background: radial-gradient(circle at 50% 0%, #151a24 0%, var(--bg-deep) 100%);
@@ -52,12 +52,15 @@ body {
 
 /* ---------- Каркас приложения ----------
    Прокрутка — обычная, документом (работает в любом браузере и внутри iframe
-   предпросмотра). Шапка «прилипает» сверху, нижнее меню закреплено снизу. */
+   предпросмотра). Шапка «прилипает» сверху, нижнее меню закреплено снизу.
+   ВАЖНО: <html> не должен быть скролл-контейнером (никаких height:100% +
+   overflow на html) — иначе на iOS и в iframe страница перестаёт прокручиваться. */
 body.shkola-app {
   min-height: 100vh;
-  overflow-x: hidden;
+  overflow-x: clip;
   padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px));
 }
+@supports not (overflow-x: clip) { body.shkola-app { overflow-x: hidden; } }
 
 header {
   padding-top: calc(0.75rem + env(safe-area-inset-top, 0px));
@@ -723,8 +726,10 @@ body.quality-low .bg-grid { display: none; }
 .nav-tab { min-height: 46px; }
 .filter-chip, .prof-tab, .toggle-pill { min-height: 30px; }
 
-/* Сезон 3: на мобильных ничего не вылезает за экран */
-html, body { width: 100%; max-width: 100%; overflow-x: hidden; }
+/* Сезон 3: на мобильных ничего не вылезает за экран.
+   clip вместо hidden — обрезаем горизаль, но НЕ превращаем html в скролл-контейнер. */
+html, body { width: 100%; max-width: 100%; overflow-x: clip; }
+@supports not (overflow-x: clip) { html, body { overflow-x: hidden; } }
 body.shkola-app { box-sizing: border-box; }
 body.shkola-app > * { max-width: 100%; }
 

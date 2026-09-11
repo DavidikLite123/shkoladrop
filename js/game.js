@@ -351,8 +351,11 @@ function renderUpgradeHud() {
     btn.disabled = true;
     btnText.textContent = 'ВЫБЕРИ ЖЕЛАННУЮ ЦЕЛЬ';
   } else {
-    statusBadge.textContent = chance >= 60 ? 'Высокий занос' : (chance >= 20 ? 'Хороший шанс' : 'Рисковый занос');
-    statusBadge.className = 'mt-0.5 text-[9px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700';
+    const tax = richTaxLabel('wheel');
+    statusBadge.textContent = (chance >= 60 ? 'Высокий занос' : (chance >= 20 ? 'Хороший шанс' : 'Рисковый занос')) + tax;
+    statusBadge.className = tax
+      ? 'mt-0.5 text-[9px] px-2 py-0.5 rounded-full bg-rose-950/60 text-rose-300 border border-rose-800/40'
+      : 'mt-0.5 text-[9px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700';
     btn.disabled = state.isRolling;
     btnText.textContent = state.isRolling ? 'КРУТИМ БАРАБАН...' : `АПГРЕЙД (${chance.toFixed(2)}%)`;
   }
@@ -402,7 +405,9 @@ const rouletteCtx = rouletteCanvas ? rouletteCanvas.getContext('2d') : null;
 function calculateChance() {
   if (!state.selectedDeposit || !state.selectedTarget) return 0;
   const raw = (state.selectedDeposit.price / state.selectedTarget.price) * 100;
-  return clamp(raw, 0.05, 95);
+  // Чем больше баланс — тем сильнее «налог миллионера» режет шанс заноса в колесе
+  const nerfed = raw * richTaxWheelFactor();
+  return clamp(nerfed, 0.05, 95);
 }
 
 function calculateMultiplier() {
@@ -817,7 +822,36 @@ function checkHardModeNotice() {
     state.stats.hardModeNotified = true;
     Toast.gold('🔥 Сезон 3: режим миллионера активирован! Цены кейсов снижены на 10%, но дропы стали сложнее.', 7000);
     persist(true);
+    return;
   }
+  // Одноразовое предупреждение, как только включается «налог миллионера»
+  if (richTaxFactor() < 0.995 && !state.stats.richTaxNotified) {
+    state.stats.richTaxNotified = true;
+    Toast.info(`💰 Баланс большой — рандом злится: шансы топовых предметов снижены (налог ×${richTaxFactor().toFixed(2)}).`, 6500);
+    persist(true);
+  }
+}
+
+/** Короткая плашка штрафа для UI — пустая строка, если «налога миллионера» нет */
+function richTaxLabel(kind) {
+  const factor = kind === 'wheel' ? richTaxWheelFactor() : richTaxFactor();
+  if (factor >= 0.995) return '';
+  return ` · 🧱 налог ×${factor.toFixed(2)}`;
+}
+
+/** Процент шанса: мелкие значения показываем точно, а не «0.00%» */
+function fmtChance(pct) {
+  if (!Number.isFinite(pct) || pct <= 0) return '0%';
+  if (pct >= 1) return `${pct.toFixed(2)}%`;
+  if (pct >= 0.01) return `${pct.toFixed(3)}%`;
+  return `${pct.toFixed(5)}%`;
+}
+
+/** «1 из N» — удобно для крошечных шансов */
+function chanceToOne(pct) {
+  if (!Number.isFinite(pct) || pct <= 0) return '—';
+  const n = 100 / pct;
+  return `1 из ${n >= 100 ? Math.round(n).toLocaleString('ru-RU') : n.toFixed(1)}`;
 }
 
 function renderCasesUI() {
@@ -917,12 +951,18 @@ function setCaseFilter(filter) {
   renderCasesUI();
 }
 
-/** Возвращаем страницу к началу при смене вкладки */
+/** Возвращаем страницу к началу при смене вкладки (мгновенно, без плавного «полёта») */
 function scrollViewportTop() {
+  const doc = document.documentElement;
+  const prevBehavior = doc.style.scrollBehavior;
+  doc.style.scrollBehavior = 'auto';   // обходим html { scroll-behavior: smooth }
   try { window.scrollTo(0, 0); } catch (e) {}
-  try { document.documentElement.scrollTop = 0; } catch (e) {}
+  try { doc.scrollTop = 0; } catch (e) {}
+  try { document.body.scrollTop = 0; } catch (e) {}
   const vp = $('appViewport');
   if (vp) vp.scrollTop = 0;
+  if (prevBehavior) doc.style.scrollBehavior = prevBehavior;
+  else doc.style.removeProperty('scroll-behavior');
 }
 
 function renderDropHistory() {
@@ -1208,12 +1248,25 @@ function openCaseOddsModal() {
           <div class="text-[9px]" style="color:${rarity.color}">${rarity.name} · ${fmt(o.item.price)} ₽</div>
         </div>
         <div class="text-right">
-          <div class="font-cs font-bold text-xs text-amber-300">${o.chance.toFixed(2)}%</div>
-          <div class="text-[9px] text-slate-500">≈ ${o.chance.toFixed(1)}/100</div>
+          <div class="font-cs font-bold text-xs text-amber-300">${fmtChance(o.chance)}</div>
+          <div class="text-[9px] text-slate-500">${chanceToOne(o.chance)}</div>
         </div>
       </div>
     `;
   }).join('');
+
+  // Честность превыше всего: показываем ровно те шансы, по которым крутится рандом
+  const tax = caseRichTaxInfo(caseObj);
+  const note = $('oddsRigNote');
+  if (note) {
+    if (tax.factor >= 0.995) {
+      note.className = 'text-[10px] text-emerald-400 mb-2';
+      note.innerHTML = `✅ Баланс ${fmt(state.balance)} ₽ — «налог миллионера» ещё не включён, шансы как в описании кейса.`;
+    } else {
+      note.className = 'text-[10px] text-rose-300 mb-2';
+      note.innerHTML = `🧱 <b>Налог миллионера ×${tax.factor.toFixed(2)}</b> — при балансе ${fmt(state.balance)} ₽ шансы топовых редкостей порезаны на ${tax.topCut.toFixed(0)}%. Ниже — уже итоговые шансы, они же участвуют в рандоме.`;
+    }
+  }
   Modal.open('caseOddsModal');
 }
 
@@ -2583,7 +2636,8 @@ function closeWelcomeDisclaimer() {
   const modal = $('welcomeDisclaimerModal');
   if (modal) {
     modal.classList.add('opacity-0', 'pointer-events-none');
-    setTimeout(() => { modal.remove(); syncModalState(); }, 300);
+    resyncModalState();   // сразу возвращаем прокрутку, не дожидаясь конца анимации
+    setTimeout(() => { modal.remove(); resyncModalState(); }, 300);
   }
   MetaStore.write(Object.assign(MetaStore.read(), { welcomeSeen: true }));
   showCookieBannerIfNeeded();
@@ -2820,6 +2874,7 @@ function initGame() {
   loadGame();
   applySettingsToUI();
   bindGlobalEvents();
+  watchOverlayLock();   // прокрутка не может «залипнуть» заблокированной
   BackgroundFx.init();
 
   // Заглушки на случай отсутствия данных кейсов

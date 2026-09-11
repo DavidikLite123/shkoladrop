@@ -198,16 +198,44 @@ const Toast = {
 };
 
 /* ---------- Модалки ---------- */
+/* Оверлей считается открытым, только если он реально в DOM и не скрыт классом .hidden
+   (а приветствие — ещё и пока не начало гаснуть через .pointer-events-none). */
 function anyOverlayOpen() {
-  return !!document.querySelector('.app-modal:not(.hidden), #itemModal:not(.hidden), #resultOverlay:not(.hidden), #welcomeDisclaimerModal');
+  return !!document.querySelector(
+    '.app-modal:not(.hidden), #itemModal:not(.hidden), #resultOverlay:not(.hidden), ' +
+    '#welcomeDisclaimerModal:not(.hidden):not(.pointer-events-none)'
+  );
 }
 
 /** Единая точка правды: пока открыт любой оверлей — фон не прокручивается.
-    Блокируем через <html>, поэтому обычная прокрутка документа продолжает работать. */
+    Блокируем через <html>, поэтому обычная прокрутка документа продолжает работать.
+    Мемоизация важна двояко: и как экономия, и как страховка от цикла в MutationObserver. */
+let _modalLockCache = null;
 function syncModalState() {
   const open = anyOverlayOpen();
+  if (open === _modalLockCache) return;   // состояние не изменилось — DOM не трогаем
+  _modalLockCache = open;
   document.body.classList.toggle('modal-open', open);
   document.documentElement.classList.toggle('scroll-locked', open);
+}
+
+/** Принудительно пересчитать блокировку (после удаления оверлея из DOM). */
+function resyncModalState() {
+  _modalLockCache = null;
+  syncModalState();
+}
+
+/** Страховка от «залипшего» скролла: все оверлеи — прямые дети <body>, поэтому
+    любое их появление/исчезновение/смена класса сама пересобирает блокировку.
+    Прокрутку больше нельзя заблокировать навсегда, даже если код забыл syncModalState(). */
+function watchOverlayLock() {
+  if (typeof MutationObserver !== 'function' || !document || !document.body) return;
+  if (document.body.dataset.overlayWatch) return;
+  document.body.dataset.overlayWatch = '1';
+  try {
+    new MutationObserver(() => syncModalState())
+      .observe(document.body, { childList: true, attributes: true, attributeFilter: ['class'] });
+  } catch (e) {}
 }
 
 const Modal = {

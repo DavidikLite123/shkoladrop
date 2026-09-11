@@ -35,7 +35,7 @@
     "@type": "VideoGame",
     "name": "ШКОЛА ДРОП 3.0",
     "alternateName": ["Shkola Drop 3.0", "Школа Дроп 3"],
-    "softwareVersion": "3.0.0",
+    "softwareVersion": "3.0.1",
     "description": "Официальный интерактивный игровой симулятор открытия кейсов и честный апгрейдер скинов CS2 от автора David Lite. Сезон 3: коты-предметы, достижения, пассивный фарм и секретный кейс Кота-Хранителя.",
     "genre": ["Симулятор", "Инди-игра", "Кликер", "Рулетка"],
     "playMode": "SinglePlayer",
@@ -73,17 +73,27 @@
 
   <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="assets/icon.svg">
-  <link rel="manifest" href="manifest.webmanifest?v=3.0.0">
+  <link rel="manifest" href="manifest.webmanifest?v=3.0.1">
   <!-- КРИТИЧЕСКИЙ CSS: прокрутка и нижнее меню работают всегда, даже если внешний файл не загрузился -->
   <style>
-    html { -webkit-text-size-adjust: 100%; }
+    /* Прокрутка страницы.
+       Правило одно: скроллится ДОКУМЕНТ (viewport), а не внутренний блок.
+       Поэтому у <html> нет height:100% и нет overflow — иначе браузер превращает
+       <html> в собственный скролл-контейнер фиксированной высоты, и на телефоне /
+       внутри iframe страница перестаёт прокручиваться совсем.
+       Горизонтальное переполнение обрезаем через clip: в отличие от hidden он
+       не создаёт скролл-контейнер (fallback для старых браузеров — hidden,
+       он безопасен, потому что высота у html/body авто). */
+    html { -webkit-text-size-adjust: 100%; min-height: 100%; overflow-x: visible; }
+    @supports not (overflow-x: clip) { html { overflow-x: hidden; } }
     body.shkola-app {
       --accent: #ff5500;
       margin: 0;
       min-height: 100vh;
-      overflow-x: hidden;
+      overflow-x: clip;
       padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px));
     }
+    @supports not (overflow-x: clip) { body.shkola-app { overflow-x: hidden; } }
     body.shkola-app > header { position: sticky; top: 0; z-index: 30; }
     body.shkola-app .tabbar {
       position: fixed;
@@ -124,7 +134,7 @@
     html.scroll-locked, html.scroll-locked body { overflow: hidden; }
   </style>
 
-  <link rel="stylesheet" href="css/style.css?v=3.0.0">
+  <link rel="stylesheet" href="css/style.css?v=3.0.1">
 
   <script>
     window.tailwind = window.tailwind || {};
@@ -730,7 +740,7 @@
           </button>
         </div>
         <div class="text-[9px] text-slate-500 leading-relaxed bg-slate-950/70 border border-slate-800 rounded-xl p-2.5">
-          Версия игры: <span id="aboutVersion" class="text-orange-400 font-mono">3.0.0</span> · Обновлено: сентябрь 2026 ·
+          Версия игры: <span id="aboutVersion" class="text-orange-400 font-mono">3.0.1</span> · Обновлено: сентябрь 2026 ·
           Все внутриигровые ценности виртуальные.
         </div>
       </div>
@@ -1004,7 +1014,7 @@
         </button>
 
         <div class="text-[9px] text-slate-500 text-center leading-relaxed">
-          ШКОЛА ДРОП <span id="settingsVersion" class="font-mono text-orange-400">v3.0.0</span> · David Lite Studio<br>
+          ШКОЛА ДРОП <span id="settingsVersion" class="font-mono text-orange-400">v3.0.1</span> · David Lite Studio<br>
           Прогресс хранится в localStorage и cookie-файлах на твоём устройстве.
         </div>
       </div>
@@ -1209,7 +1219,9 @@
         <button onclick="closeCaseOddsModal()" class="text-slate-400 hover:text-white text-lg leading-none">✕</button>
       </div>
       <p class="text-[10px] text-slate-400 mb-2">Шансы честные и считаются на твоём устройстве (crypto.getRandomValues). Сумма всех шансов = 100%.</p>
-      <div id="oddsList" class="space-y-1.5 max-h-[55vh] overflow-y-auto pr-1"></div>
+      <p id="oddsRigNote" class="text-[10px] text-slate-400 mb-2"></p>
+      <!-- без внутреннего скролла: карточка модалки и так прокручивается целиком -->
+      <div id="oddsList" class="space-y-1.5"></div>
     </div>
   </div>
 
@@ -1351,10 +1363,10 @@
   <div id="toastContainer" class="fixed top-16 right-3 left-3 sm:left-auto sm:w-80 z-[80] flex flex-col items-end space-y-2 pointer-events-none"></div>
 
   <!-- ЛОГИКА ИГРЫ (модульная структура v2.0) -->
-  <script defer src="js/config.js?v=3.0.0"></script>
-  <script defer src="js/storage.js?v=3.0.0"></script>
-  <script defer src="js/ui.js?v=3.0.0"></script>
-  <script defer src="js/game.js?v=3.0.0"></script>
-  <script defer src="js/main.js?v=3.0.0"></script>
+  <script defer src="js/config.js?v=3.0.1"></script>
+  <script defer src="js/storage.js?v=3.0.1"></script>
+  <script defer src="js/ui.js?v=3.0.1"></script>
+  <script defer src="js/game.js?v=3.0.1"></script>
+  <script defer src="js/main.js?v=3.0.1"></script>
 </body>
 </html>
