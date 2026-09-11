@@ -8,12 +8,35 @@
 function $(id) { return document.getElementById(id); }
 function fmt(n) { return Math.round(Number(n) || 0).toLocaleString('ru-RU'); }
 
+const MONEY_SHORT_UNITS = ['', 'к', 'млн', 'млрд', 'трлн', 'квдр', 'квинт', 'секст', 'септ', 'окт', 'нонил', 'децил'];
+
+function trimMoneyDecimals(text) {
+  return String(text)
+    .replace(/\.(\d*?[1-9])0+$/, '.$1')
+    .replace(/\.0+$/, '')
+    .replace('.', ',');
+}
+
 function shortMoney(n) {
   const v = Number(n) || 0;
-  if (Math.abs(v) >= 1e9) return (v / 1e9).toFixed(2).replace('.', ',') + ' млрд';
-  if (Math.abs(v) >= 1e6) return (v / 1e6).toFixed(v >= 1e7 ? 1 : 2).replace('.', ',') + ' млн';
-  if (Math.abs(v) >= 1e3) return (v / 1e3).toFixed(v >= 1e5 ? 0 : 1).replace('.', ',') + 'к';
-  return fmt(v);
+  const abs = Math.abs(v);
+  const sign = v < 0 ? '-' : '';
+  if (abs < 1000) return `${sign}${fmt(abs)}`;
+
+  let unitIndex = Math.min(Math.floor(Math.log10(abs) / 3), MONEY_SHORT_UNITS.length - 1);
+  let scaled = abs / Math.pow(1000, unitIndex);
+
+  if (scaled >= 999.5 && unitIndex < MONEY_SHORT_UNITS.length - 1) {
+    unitIndex += 1;
+    scaled /= 1000;
+  }
+
+  const decimals = scaled >= 100 ? 0 : (scaled >= 10 ? 1 : 2);
+  return `${sign}${trimMoneyDecimals(scaled.toFixed(decimals))}${MONEY_SHORT_UNITS[unitIndex]}`;
+}
+
+function moneyText(n, compact = false) {
+  return `${compact ? shortMoney(n) : fmt(n)} ₽`;
 }
 
 function escapeHtml(str) {

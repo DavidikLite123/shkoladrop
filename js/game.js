@@ -298,7 +298,9 @@ function viewVisible(id) {
 function renderAll() {
   checkHardModeNotice();
   // Баланс и шапка
-  animateNumber($('headerBalance'), state.balance, 420, v => `${fmt(v)} ₽`);
+  const headerBalanceEl = $('headerBalance');
+  animateNumber(headerBalanceEl, state.balance, 420, v => moneyText(v, true));
+  if (headerBalanceEl) headerBalanceEl.title = moneyText(state.balance, false);
 
   if (!$('invCountBadge').dataset.value || Number($('invCountBadge').dataset.value) !== state.inventory.length) {
     $('invCountBadge').dataset.value = String(state.inventory.length);
@@ -860,7 +862,8 @@ function renderCasesUI() {
 
   $('currentCaseTitle').textContent = `${state.selectedCase.season === 3 ? 'Сезон 3 · ' : ''}Кейс: ${state.selectedCase.name}`;
   const selectedPrice = casePrice(state.selectedCase);
-  $('currentCasePrice').textContent = `${fmt(selectedPrice)} ₽`;
+  $('currentCasePrice').textContent = moneyText(selectedPrice, true);
+  $('currentCasePrice').title = moneyText(selectedPrice, false);
   $('casesCountLabel').textContent = `${CASES_LIST.length} кейсов · ${ALL_MASTER_ITEMS.length} предметов`;
   $('casesOpenedLabel').textContent = `всего: ${fmt(state.stats.casesOpened || 0)}`;
 
@@ -1325,7 +1328,8 @@ function renderInventory() {
   $('countCat').textContent = counts.cat;
 
   const totalValue = state.inventory.reduce((sum, i) => sum + i.price, 0);
-  $('invTotalValue').textContent = `${fmt(totalValue)} ₽`;
+  $('invTotalValue').textContent = moneyText(totalValue, true);
+  $('invTotalValue').title = moneyText(totalValue, false);
   const best = state.inventory.reduce((acc, it) => (!acc || it.price > acc.price ? it : acc), null);
   $('invBestItem').textContent = best ? best.name : '—';
   $('invBestItem').title = best ? `${best.name} — ${fmt(best.price)} ₽` : '';
@@ -1820,9 +1824,11 @@ function miniGameLoop(now) {
   mCtx.font = `${36 * scale}px sans-serif`;
   mCtx.fillText('🎒', mPlayerX, pY);
 
-  $('gameScoreText').textContent = `${fmt(mScore)} ₽`;
+  $('gameScoreText').textContent = moneyText(mScore, true);
+  $('gameScoreText').title = moneyText(mScore, false);
   $('gameLivesText').textContent = '❤️'.repeat(Math.max(0, mLives));
-  $('gameBestScore').textContent = `${fmt(Math.max(state.stats.miniBest || 0, mScore))} ₽`;
+  $('gameBestScore').textContent = moneyText(Math.max(state.stats.miniBest || 0, mScore), true);
+  $('gameBestScore').title = moneyText(Math.max(state.stats.miniBest || 0, mScore), false);
 
   mAnimationId = requestAnimationFrame(miniGameLoop);
 }
@@ -1887,14 +1893,17 @@ function renderFarm() {
   const pending = state.stats.idle.pending || 0;
 
   $('idleLevelText').textContent = `ур. ${level}`;
-  $('idleApsText').textContent = `${fmt(idleAps())} ₽/сек`;
-  $('idlePendingText').textContent = `${fmt(pending)} ₽`;
+  $('idleApsText').textContent = `${shortMoney(idleAps())} ₽/сек`;
+  $('idleApsText').title = `${moneyText(idleAps(), false)}/сек`;
+  $('idlePendingText').textContent = moneyText(pending, true);
+  $('idlePendingText').title = moneyText(pending, false);
   $('btnCollectIdle').disabled = pending < 1;
   $('btnCollectIdle').className = pending >= 1
     ? 'px-3 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 font-bold text-[11px] transition active:scale-95'
     : 'px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-slate-500 font-bold text-[11px] cursor-not-allowed';
 
-  $('gameBestScore').textContent = `${fmt(state.stats.miniBest || 0)} ₽`;
+  $('gameBestScore').textContent = moneyText(state.stats.miniBest || 0, true);
+  $('gameBestScore').title = moneyText(state.stats.miniBest || 0, false);
   $('dailyStreakLabel').textContent = `стрик: ${state.stats.dailyStreak || 0}`;
 
   const list = $('idleUpgradeList');
@@ -1973,7 +1982,8 @@ function startIdleTicker() {
     state.stats.idle.pending = (state.stats.idle.pending || 0) + aps;
     state.stats.idle.lastCollect = Date.now();
     if (viewVisible('viewFarm')) {
-      $('idlePendingText').textContent = `${fmt(state.stats.idle.pending)} ₽`;
+      $('idlePendingText').textContent = moneyText(state.stats.idle.pending, true);
+      $('idlePendingText').title = moneyText(state.stats.idle.pending, false);
       $('btnCollectIdle').disabled = false;
       $('btnCollectIdle').className = 'px-3 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 font-bold text-[11px] transition active:scale-95';
     }
@@ -2046,7 +2056,8 @@ function renderDailyModal() {
   }).join('');
 
   $('dailyStreakText').textContent = `${state.stats.dailyStreak || 0} дней`;
-  $('dailyNextText').textContent = `${fmt(DAILY_REWARDS[dayIdx].money)} ₽`;
+  $('dailyNextText').textContent = moneyText(DAILY_REWARDS[dayIdx].money, true);
+  $('dailyNextText').title = moneyText(DAILY_REWARDS[dayIdx].money, false);
 
   const btn = $('btnClaimDaily');
   if (claimedToday) {
@@ -2264,9 +2275,11 @@ function renderProfile() {
   ).join('');
 
   const invValue = state.inventory.reduce((sum, i) => sum + i.price, 0);
-  $('statBalance').textContent = `${fmt(state.balance)} ₽`;
+  $('statBalance').textContent = moneyText(state.balance, true);
+  $('statBalance').title = moneyText(state.balance, false);
   $('statItemCount').textContent = fmt(state.inventory.length);
-  $('statInvValue').textContent = `${shortMoney(invValue)} ₽`;
+  $('statInvValue').textContent = moneyText(invValue, true);
+  $('statInvValue').title = moneyText(invValue, false);
   $('statSchoolRank').textContent = state.stats.catFound
     ? 'Хранитель Кота'
     : (invValue > 10000000 ? 'Легенда школы' : invValue > 1000000 ? 'Гроза школы' : invValue > 100000 ? 'Староста' : 'Любитель');
@@ -2275,9 +2288,11 @@ function renderProfile() {
   $('statUpgrades').textContent = fmt(state.stats.upgradesWon || 0);
   $('statBestDrop').textContent = state.stats.biggestDropName ? `${state.stats.biggestDropName} (${shortMoney(state.stats.biggestDrop)}₽)` : '—';
   $('statBestWin').textContent = state.stats.bestWinChance ? `x${state.stats.bestWinChance.toFixed(1)}` : '—';
-  $('statEarned').textContent = `${shortMoney(state.stats.earnedTotal || 0)} ₽`;
+  $('statEarned').textContent = moneyText(state.stats.earnedTotal || 0, true);
+  $('statEarned').title = moneyText(state.stats.earnedTotal || 0, false);
   $('statSold').textContent = fmt(state.stats.itemsSold || 0);
-  $('statMiniGame').textContent = `${fmt(state.stats.miniBest || 0)} ₽`;
+  $('statMiniGame').textContent = moneyText(state.stats.miniBest || 0, true);
+  $('statMiniGame').title = moneyText(state.stats.miniBest || 0, false);
   $('statCatFound').textContent = state.stats.catFound ? '🏆 НАЙДЕН' : 'не найден';
 
   if (state.profileTab === 'ach') renderAchievements();
