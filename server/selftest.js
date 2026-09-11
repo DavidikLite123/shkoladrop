@@ -92,6 +92,67 @@ async function main() {
   const written = JSON.parse(fs.readFileSync(tmpRegistry, 'utf8'));
   t('код записался в сам файл author-codes.json', written.codes.some(c => c.ownerUid === 'player-777'));
 
+  console.log('\n— Сообщество: уникальные ID, галочки, чат, облачные сейвы —');
+  r = await fetch(`${BASE}/auth/sync`, { method: 'POST', headers: JSONH, body: JSON.stringify({ uid: 'player-999', nick: 'Вова228' }) });
+  body = await r.json();
+  t('sync вернул уникальный ID (#123456)', r.ok && /^#\d{6}$/.test(body.tag));
+  t('по умолчанию верификации нет', body.verified === false);
+
+  r = await fetch(`${BASE}/auth/sync`, { method: 'POST', headers: JSONH, body: JSON.stringify({ uid: 'player-999', nick: 'Вова228' }) });
+  const body2 = await r.json();
+  t('ID выдаётся один раз и не меняется', body2.tag === body.tag);
+
+  r = await fetch(`${BASE}/auth/sync`, { method: 'POST', headers: JSONH, body: JSON.stringify({ uid: 'player-111', nick: 'Ютубер' }) });
+  const sync111 = await r.json();
+  t('второму игроку выдан ДРУГОЙ ID', /^#\d{6}$/.test(sync111.tag) && sync111.tag !== body.tag);
+
+  let pub = await j(await fetch(`${BASE}/players/public?q=${encodeURIComponent(body.tag)}`));
+  t('поиск игрока по уникальному ID', pub.ok && pub.player.uid === 'player-999');
+  pub = await j(await fetch(`${BASE}/players/public?q=${encodeURIComponent('вова228')}`));
+  t('поиск игрока по нику (регистр не важен)', pub.ok && pub.player.uid === 'player-999');
+  r = await fetch(`${BASE}/players/public?q=NOSUCH` , { headers: JSONH });
+  t('неизвестный ID → 404', r.status === 404);
+
+  r = await fetch(`${BASE}/admin/players`, { headers: JSONH });
+  t('список игроков без секрета — 403', r.status === 403);
+  const plist = await j(await fetch(`${BASE}/admin/players`, { headers: ADMIN }));
+  t('админ видит список игроков с ID', plist.ok && plist.players.length >= 2 && plist.players.every(p => p.tag));
+
+  r = await fetch(`${BASE}/admin/players/verify`, { method: 'POST', headers: ADMIN, body: JSON.stringify({ uid: 'player-999', verified: true }) });
+  body = await r.json();
+  t('админ выдал галочку', r.ok && body.verified === true);
+  r = await fetch(`${BASE}/auth/sync`, { method: 'POST', headers: JSONH, body: JSON.stringify({ uid: 'player-999', nick: 'Вова228' }) });
+  body = await r.json();
+  t('sync видит выданную галочку', body.verified === true);
+  r = await fetch(`${BASE}/admin/players/verify`, { method: 'POST', headers: JSONH, body: JSON.stringify({ uid: 'player-999', verified: true }) });
+  t('без секрета галочку выдать нельзя', r.status === 403);
+
+  r = await fetch(`${BASE}/chat`, { method: 'POST', headers: JSONH, body: JSON.stringify({ uid: 'player-999', nick: 'Вова228', text: 'Всем привет с перемены!' }) });
+  t('сообщение в чат отправлено', r.ok);
+  r = await fetch(`${BASE}/admin/chat`, { method: 'POST', headers: ADMIN, body: JSON.stringify({ text: 'Официально: сезон продлён!' }) });
+  t('админ написал официальное сообщение', r.ok);
+  let chat = await j(await fetch(`${BASE}/chat`));
+  t('чат отдаёт сообщения', chat.ok && chat.messages.length === 2);
+  t('у игрока с галочкой сообщение подсвечено', chat.messages[0].verified === true && chat.messages[0].tag === body.tag);
+  t('админ в чате помечен kind=admin', chat.messages[1].kind === 'admin' && chat.messages[1].verified === true);
+  chat = await j(await fetch(`${BASE}/chat?after=${chat.messages[0].at}`));
+  t('дельта-запрос чата работает', chat.ok && chat.messages.length === 1);
+  r = await fetch(`${BASE}/chat`, { method: 'POST', headers: JSONH, body: JSON.stringify({ uid: 'player-111', nick: 'Ютубер', text: '   ' }) });
+  t('пустое сообщение отклонено', r.status === 400);
+  r = await fetch(`${BASE}/admin/chat/delete`, { method: 'POST', headers: ADMIN, body: JSON.stringify({ id: 'msg-nope' }) });
+  body = await r.json();
+  t('удаление чужого id — 0 удалено', r.ok && body.removed === 0);
+
+  const savePayload = { version: 11, balance: 123456, inventory: [{ id: 'sch_chalk', uid: 'x1', price: 1800 }], user: { id: 'player-999', nick: 'Вова228' }, stats: { level: 5 }, lastSeen: Date.now() };
+  r = await fetch(`${BASE}/save`, { method: 'POST', headers: JSONH, body: JSON.stringify({ uid: 'player-999', nick: 'Вова228', save: savePayload }) });
+  t('облачное сохранение залито', r.ok);
+  let cloud = await j(await fetch(`${BASE}/save?uid=player-999`));
+  t('облачное сохранение читается', cloud.ok && cloud.save.balance === 123456 && Number.isFinite(cloud.updatedAt));
+  r = await fetch(`${BASE}/save?uid=player-nobody`);
+  t('нет сохранения → 404', r.status === 404);
+  r = await fetch(`${BASE}/save`, { method: 'POST', headers: JSONH, body: JSON.stringify({ uid: 'player-999', save: { hello: 'world' } }) });
+  t('битый save отклонён', r.status === 400);
+
   console.log('\n— Подарки —');
   const item = { id: 'sch_chalk', uid: 'case-abc', name: 'Коробка цветного мела', icon: '🖍️', price: 1800, rarity: 'restricted', category: 'school' };
   r = await fetch(`${BASE}/gifts`, { method: 'POST', headers: JSONH, body: JSON.stringify({ fromUid: 'player-999', fromNick: 'Вова228', toUid: 'player-111', item }) });

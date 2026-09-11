@@ -1,6 +1,6 @@
 /* ==========================================================================
    ШКОЛА ДРОП 2.0 — js/game.js
-   Ядро игры: апгрейдер, кейсы, рюкзак, магазин, мини-игра, дежурство (idle),
+   Ядро игры: апгрейдер, кейсы, рюкзак, магазин, дежурство (idle),
    ежедневные награды, промокоды, опыт, уровни, достижения, настройки, cookie.
    ========================================================================== */
 
@@ -1739,216 +1739,6 @@ function tapForMoney(event) {
 }
 
 /* --------------------------------------------------------------------------
-   МИНИ-ИГРА «ПЕРЕМЕНА»
-   -------------------------------------------------------------------------- */
-const mCanvas = $('miniGameCanvas');
-const mCtx = (() => {
-  try { return mCanvas ? mCanvas.getContext('2d') : null; } catch (e) { return null; }
-})();
-let mGameRunning = false;
-let mPlayerX = 140;
-let mLives = 3;
-let mScore = 0;
-let mCombo = 0;
-let mDrops = [];
-let mLastDropTime = 0;
-let mAnimationId = null;
-let mLastGameLoopTime = 0;
-
-function initMiniGameCanvas() {
-  if (!mCanvas) return;
-  const rect = mCanvas.getBoundingClientRect();
-  const dpr = Quality.canvasDpr();
-  mCanvas.width = Math.max(200, rect.width * dpr);
-  mCanvas.height = Math.max(200, rect.height * dpr);
-  mPlayerX = mCanvas.width / 2;
-}
-
-function toggleMiniGame() {
-  if (!mCanvas || !mCtx) {
-    Toast.error('Твой браузер не поддерживает canvas — мини-игра недоступна 😔');
-    return;
-  }
-  audio.init();
-  audio.playTick();
-  const overlay = $('gameOverlay');
-  const btn = $('btnGameControl');
-
-  if (!mGameRunning) {
-    initMiniGameCanvas();
-    mGameRunning = true;
-    mLives = 3;
-    mScore = 0;
-    mCombo = 0;
-    mDrops = [];
-    mLastDropTime = 0;
-    overlay.classList.add('hidden');
-    btn.textContent = 'Стоп';
-    btn.className = 'px-4 py-2 rounded-xl bg-red-600 text-white font-cs font-bold text-xs uppercase tracking-wider';
-    mLastGameLoopTime = performance.now();
-    mAnimationId = requestAnimationFrame(miniGameLoop);
-  } else {
-    stopMiniGame();
-  }
-}
-
-function stopMiniGame() {
-  mGameRunning = false;
-  if (mAnimationId) cancelAnimationFrame(mAnimationId);
-  const overlay = $('gameOverlay');
-  const btn = $('btnGameControl');
-  if (overlay) {
-    overlay.innerHTML = `
-      <div class="text-4xl mb-2">🏃‍♂️🎒</div>
-      <div class="font-cs font-bold text-base text-white mb-1">Звонок на перемену!</div>
-      <p class="text-xs text-slate-400 mb-3 max-w-[220px]">Лови пятёрки и пирожки (+₽), рыбки дают жизнь. Три двойки — звонок на урок!</p>
-      <button onclick="toggleMiniGame()" class="px-5 py-2.5 bg-orange-500 text-black rounded-xl font-cs font-bold text-xs uppercase">Погнали!</button>
-    `;
-    overlay.classList.remove('hidden');
-  }
-  if (btn) {
-    btn.textContent = 'Старт игры';
-    btn.className = 'px-4 py-2 rounded-xl bg-orange-500 text-black font-cs font-bold text-xs uppercase tracking-wider hover:brightness-110 active:scale-95 shadow-md';
-  }
-}
-
-function miniGameLoop(now) {
-  if (!mGameRunning) return;
-  const dt = Math.min((now - mLastGameLoopTime) / 1000, 0.1);
-  mLastGameLoopTime = now;
-  const scale = mCanvas.width / 320;
-
-  if (now - mLastDropTime > Math.max(280, 560 - state.stats.level * 12)) {
-    mLastDropTime = now;
-    const roll = RNG.float();
-    let kind;
-    if (roll > 0.42) kind = { good: true, type: RNG.float() > 0.35 ? '5️⃣' : '🥟', value: 220 };
-    else if (roll > 0.34) kind = { good: true, type: '🐟', value: 400, heal: true };
-    else if (roll > 0.14) kind = { good: false, type: RNG.float() > 0.4 ? '2️⃣' : '📏', value: 0 };
-    else kind = { good: true, type: '🐱', value: 900 };
-
-    mDrops.push({
-      x: Math.random() * (mCanvas.width - 40 * scale) + 20 * scale,
-      y: -20,
-      speed: (180 + Math.random() * 130) * (mCanvas.height / 400) * (1 + state.stats.level * 0.02),
-      isGood: kind.good,
-      type: kind.type,
-      value: kind.value,
-      heal: !!kind.heal,
-      size: 26 * scale
-    });
-  }
-
-  for (let i = mDrops.length - 1; i >= 0; i--) {
-    const d = mDrops[i];
-    d.y += d.speed * dt;
-
-    const playerY = mCanvas.height - 40 * scale;
-    const dist = Math.hypot(d.x - mPlayerX, d.y - playerY);
-
-    if (dist < 36 * scale) {
-      if (d.isGood) {
-        audio.playCoin();
-        const comboBonus = Math.round(1 + mCombo * 0.1 * 10) / 10;
-        const gain = Math.round(d.value * comboBonus);
-        mScore += gain;
-        mCombo += 1;
-        addMoney(gain, { silent: true, countEarned: true });
-        if (d.heal && mLives < 5) {
-          mLives += 1;
-          Toast.info('Рыбка! +1 жизнь ❤️', 1600);
-        }
-        floatMoney(mCanvas.getBoundingClientRect().left + (d.x / scale), mCanvas.getBoundingClientRect().top + (d.y / scale), `+${fmt(gain)}₽`);
-      } else {
-        audio.playLoss();
-        haptic(30);
-        mCombo = 0;
-        mLives -= 1;
-        if (mLives <= 0) {
-          mDrops.splice(i, 1);
-          endMiniGame();
-          return;
-        }
-      }
-      mDrops.splice(i, 1);
-      continue;
-    }
-
-    if (d.y > mCanvas.height + 20) mDrops.splice(i, 1);
-  }
-
-  mCtx.clearRect(0, 0, mCanvas.width, mCanvas.height);
-
-  mCtx.strokeStyle = 'rgba(255,255,255,0.04)';
-  mCtx.lineWidth = 1;
-  for (let x = 0; x < mCanvas.width; x += 30 * scale) {
-    mCtx.beginPath();
-    mCtx.moveTo(x, 0);
-    mCtx.lineTo(x, mCanvas.height);
-    mCtx.stroke();
-  }
-
-  mCtx.textAlign = 'center';
-  mCtx.textBaseline = 'middle';
-  mDrops.forEach(d => {
-    mCtx.font = `${d.size}px sans-serif`;
-    mCtx.fillText(d.type, d.x, d.y);
-  });
-
-  const pY = mCanvas.height - 35 * scale;
-  mCtx.font = `${36 * scale}px sans-serif`;
-  mCtx.fillText('🎒', mPlayerX, pY);
-
-  $('gameScoreText').textContent = moneyText(mScore, true);
-  $('gameScoreText').title = moneyText(mScore, false);
-  $('gameLivesText').textContent = '❤️'.repeat(Math.max(0, mLives));
-  $('gameBestScore').textContent = moneyText(Math.max(state.stats.miniBest || 0, mScore), true);
-  $('gameBestScore').title = moneyText(Math.max(state.stats.miniBest || 0, mScore), false);
-
-  mAnimationId = requestAnimationFrame(miniGameLoop);
-}
-
-function endMiniGame() {
-  const score = mScore;
-  mGameRunning = false;
-  if (mAnimationId) cancelAnimationFrame(mAnimationId);
-
-  const isRecord = score > (state.stats.miniBest || 0);
-  if (isRecord) state.stats.miniBest = score;
-  state.stats.miniCaught = (state.stats.miniCaught || 0) + 1;
-
-  audio.playLoss();
-  addXp(XP_REWARDS.miniGameEnd + Math.floor(score / 5000), { silent: true });
-  checkAchievements();
-  persist(true);
-
-  const overlay = $('gameOverlay');
-  const btn = $('btnGameControl');
-  if (overlay) {
-    overlay.innerHTML = `
-      <div class="text-4xl mb-2">🔔</div>
-      <div class="font-cs font-bold text-base text-white mb-1">Звонок на урок!</div>
-      <p class="text-xs text-slate-300 mb-1">Ты налутал: <span class="text-amber-400 font-bold">${fmt(score)} ₽</span></p>
-      ${isRecord ? '<p class="text-[11px] text-emerald-400 font-bold mb-1">🏆 Новый личный рекорд!</p>' : ''}
-      <button onclick="toggleMiniGame()" class="mt-2 px-5 py-2.5 bg-orange-500 text-black rounded-xl font-cs font-bold text-xs uppercase">Сыграть ещё</button>
-    `;
-    overlay.classList.remove('hidden');
-  }
-  if (btn) {
-    btn.textContent = 'Старт игры';
-    btn.className = 'px-4 py-2 rounded-xl bg-orange-500 text-black font-cs font-bold text-xs uppercase tracking-wider hover:brightness-110 active:scale-95 shadow-md';
-  }
-}
-
-function handleGameInput(e) {
-  if (!mGameRunning) return;
-  const rect = mCanvas.getBoundingClientRect();
-  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-  const relX = (clientX - rect.left) * (mCanvas.width / rect.width);
-  mPlayerX = clamp(relX, 30, mCanvas.width - 30);
-}
-
-/* --------------------------------------------------------------------------
    ДЕЖУРСТВО ПО ШКОЛЕ (IDLE)
    -------------------------------------------------------------------------- */
 function idleAps() {
@@ -1977,8 +1767,6 @@ function renderFarm() {
     ? 'px-3 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 font-bold text-[11px] transition active:scale-95'
     : 'px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-slate-500 font-bold text-[11px] cursor-not-allowed';
 
-  $('gameBestScore').textContent = moneyText(state.stats.miniBest || 0, true);
-  $('gameBestScore').title = moneyText(state.stats.miniBest || 0, false);
   $('dailyStreakLabel').textContent = `стрик: ${state.stats.dailyStreak || 0}`;
 
   const list = $('idleUpgradeList');
@@ -2455,6 +2243,9 @@ function submitRegistration() {
   persist(true);
   openProfileModal();
   uiUpdate();
+
+  // Онлайн: сервер сразу выдаёт аккаунту уникальный ID (и галочку, если уже выдана)
+  if (typeof NetIdentity !== 'undefined') NetIdentity.sync();
 }
 
 function logoutProfile() {
@@ -2513,6 +2304,14 @@ function renderProfile() {
   // id аккаунта — нужен друзьям для подарков, а владельцу проекта — для выдачи кода автора
   const uidEl = $('profileUid');
   if (uidEl) uidEl.textContent = state.user ? state.user.id : '—';
+  // Уникальный ID сообщества (выдаёт сервер) и галочка верификации
+  const tagEl = $('profileTag');
+  if (tagEl) tagEl.textContent = (state.user && state.user.tag) ? state.user.tag : '—';
+  const vbEl = $('profileVerifiedBadge');
+  if (vbEl) {
+    vbEl.classList.toggle('hidden', !(state.user && state.user.verified));
+    if (state.user && state.user.verified && typeof verifiedBadgeHtml === 'function') vbEl.innerHTML = verifiedBadgeHtml();
+  }
 
   const invValue = state.inventory.reduce((sum, i) => sum + i.price, 0);
   $('statBalance').textContent = moneyText(state.balance, true);
@@ -2531,8 +2330,9 @@ function renderProfile() {
   $('statEarned').textContent = moneyText(state.stats.earnedTotal || 0, true);
   $('statEarned').title = moneyText(state.stats.earnedTotal || 0, false);
   $('statSold').textContent = fmt(state.stats.itemsSold || 0);
-  $('statMiniGame').textContent = moneyText(state.stats.miniBest || 0, true);
-  $('statMiniGame').title = moneyText(state.stats.miniBest || 0, false);
+  const verEl = $('statVerified');
+  if (verEl) verEl.textContent = (state.user && state.user.verified) ? '✔ ВЕРИФИЦИРОВАН' : 'нет';
+  if (verEl) verEl.className = 'stat-tile-value text-xs ' + ((state.user && state.user.verified) ? 'text-cyan-300' : 'text-slate-400');
   $('statCatFound').textContent = state.stats.catFound ? '🏆 НАЙДЕН' : 'не найден';
   const vipEl = $('statVipStatus');
   if (vipEl) vipEl.textContent = state.stats.vipActive ? '👑 АКТИВЕН' : 'не активен';
@@ -2688,51 +2488,8 @@ async function askResetProgress() {
   setTimeout(() => location.reload(), 900);
 }
 
-function exportSaveToArea() {
-  const text = SaveManager.exportString(snapshot());
-  $('saveExportArea').value = text;
-  Toast.success('Резервная копия выгружена в поле ниже');
-}
-
-async function copySaveToClipboard() {
-  const text = SaveManager.exportString(snapshot());
-  const ok = await copyText(text);
-  Toast[ok ? 'success' : 'error'](ok ? 'Копия прогресса скопирована в буфер обмена' : 'Не удалось скопировать');
-}
-
-async function exportSaveToClipboard() {
-  const text = SaveManager.exportString(snapshot());
-  const ok = await copyText(text);
-  Toast[ok ? 'success' : 'error'](ok ? 'Копия прогресса скопирована. Сохрани её в заметках!' : 'Не удалось скопировать');
-}
-
-async function importSaveFromArea() {
-  const text = $('saveExportArea').value || '';
-  const parsed = SaveManager.parseImport(text);
-  if (!parsed) {
-    Toast.error('Не удалось прочитать сохранение. Проверь текст.');
-    return;
-  }
-  const ok = await ConfirmDialog.ask({
-    icon: '📥',
-    title: 'Импортировать прогресс?',
-    text: 'Текущее сохранение будет заменено данными из резервной копии.',
-    okText: 'Импортировать'
-  });
-  if (!ok) return;
-
-  state.balance = parsed.balance;
-  state.inventory = parsed.inventory;
-  state.user = parsed.user;
-  state.stats = parsed.stats;
-  state.settings = Object.assign({}, DEFAULT_SETTINGS, parsed.settings || {});
-  state.selectedDeposit = state.inventory[0] || null;
-  applySettingsToUI();
-  persist(true);
-  uiUpdate();
-  Toast.success('Прогресс восстановлен из резервной копии!');
-  Modal.close('settingsModal');
-}
+/* Ручной JSON-экспорт/импорт прогресса убран: сохранение синхронизируется
+   с сервером сообщества автоматически (см. CloudSave в js/netplay.js). */
 
 /* --------------------------------------------------------------------------
    COOKIE: БАННЕР, НАСТРОЙКИ, ПОЛИТИКА
@@ -2967,6 +2724,9 @@ function openAdminModal() {
   if (!state.rigReady) return;
   Modal.open('adminModal');
   updateAdminUI();
+  // Онлайн-разделы панели: список игроков с галочками и реестр кодов авторов
+  if (typeof adminLoadPlayers === 'function') adminLoadPlayers();
+  if (typeof renderAdminAuthorList === 'function') renderAdminAuthorList();
 }
 
 function closeAdminModal() { Modal.close('adminModal'); }
@@ -3028,7 +2788,6 @@ function adminMaxLevel() {
 function switchTab(tab) {
   audio.init();
   audio.playTick();
-  if (mGameRunning && tab !== 'farm') stopMiniGame();
   scrollViewportTop();
 
   const views = {
@@ -3060,10 +2819,7 @@ function switchTab(tab) {
   if (tab === 'cases') { renderCasesUI(); setupCaseTape(); }
   if (tab === 'inventory') renderInventory();
   if (tab === 'shop') renderShop();
-  if (tab === 'farm') {
-    setTimeout(initMiniGameCanvas, 60);
-    renderFarm();
-  }
+  if (tab === 'farm') renderFarm();
   if (tab === 'upgrade') renderUpgradeHud();
 
   uiUpdate();
@@ -3085,26 +2841,14 @@ function bindGlobalEvents() {
   const modalGrid = $('modalItemsGrid');
   if (modalGrid) modalGrid.addEventListener('click', handleModalItemsClick);
 
-  if (mCanvas) {
-    mCanvas.addEventListener('mousemove', handleGameInput);
-    mCanvas.addEventListener('touchmove', handleGameInput, { passive: true });
-    mCanvas.addEventListener('touchstart', handleGameInput, { passive: true });
-    mCanvas.addEventListener('click', handleGameInput);
-  }
-
   window.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
       ['settingsModal', 'profileModal', 'authorModal', 'termsModal', 'cookieModal', 'cookiePolicyModal',
-        'caseOddsModal', 'dailyModal', 'multiResultModal', 'confirmModal'].forEach(id => {
+        'caseOddsModal', 'dailyModal', 'multiResultModal', 'confirmModal', 'communityModal', 'netplayModal', 'extrasModal'].forEach(id => {
           if (Modal.isOpen(id)) Modal.close(id);
         });
       if (Modal.isOpen('itemModal')) closeItemModal();
       if (Modal.isOpen('resultOverlay')) closeResultOverlay();
-    }
-    if (mGameRunning) {
-      const scale = mCanvas.width / 320;
-      if (e.key === 'ArrowLeft') mPlayerX = Math.max(30 * scale, mPlayerX - 35 * scale);
-      if (e.key === 'ArrowRight') mPlayerX = Math.min(mCanvas.width - 30 * scale, mPlayerX + 35 * scale);
     }
   });
 

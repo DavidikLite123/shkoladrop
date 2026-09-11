@@ -31,7 +31,7 @@ const REPO_ROOT = path.resolve(__dirname, '..');
 const REGISTRY_FILE = process.env.SHKOLA_REGISTRY_FILE || path.join(REPO_ROOT, 'author-codes.json'); // список кодов авторов (в GitHub)
 const DATA_DIR = process.env.SHKOLA_DATA_DIR || path.join(__dirname, 'data');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
-const SERVER_VERSION = '1.0.0';
+const SERVER_VERSION = '1.1.0'; // +сообщество: уникальные ID, галочки, чат, облачные сейвы
 const MAX_BODY = 512 * 1024; // 512 КБ на запрос
 const MAX_ITEM_PRICE = 100000000000; // защита от абсурдных предметов (100 млрд)
 
@@ -39,13 +39,18 @@ const MAX_ITEM_PRICE = 100000000000; // защита от абсурдных п�
 /* Всё хранится в одном JSON-файле server/data/db.json.
    Структура — простая и чинится руками при необходимости. */
 const dbEmpty = () => ({
-  players: {},      // uid -> { uid, nick, firstSeen, lastSeen }
+  players: {},      // uid -> { uid, nick, tag, verified, firstSeen, lastSeen }
   supporters: {},   // uid игрока -> код автора, который он ввёл
   earnings: {},     // код автора -> { earned, withdrawn }
   gifts: [],        // { id, fromUid, fromNick, toUid, toNick, item, createdAt, claimed }
   trades: [],       // { code, fromUid, fromNick, offer, wantNote, createdAt, status, joined? }
-  deliveries: []    // { id, toUid, toNick, item, source, createdAt, claimed }
+  deliveries: [],   // { id, toUid, toNick, item, source, createdAt, claimed }
+  chat: [],         // { id, uid, nick, tag, text, at, kind } — общий чат сообщества
+  saves: {}         // uid -> { save, updatedAt } — облачный бэкап прогресса
 });
+
+const CHAT_MAX = 200;      // сколько сообщений чата хранить
+const CHAT_TEXT_MAX = 240; // максимальная длина одного сообщения
 
 let db = dbEmpty();
 let saveTimer = null;
@@ -183,12 +188,41 @@ function cleanItem(item) {
 }
 
 /* ---------- Игроки: сервер помнит uid ↔ ник (для подарков по нику) ---------- */
+/* Каждому аккаунту при первом появлении присваивается уникальный публичный
+   ID (tag) вида #482913 — короткий и удобный, чтобы искать друзей в чате.
+   Выдаётся автоматически и один раз, дальше живёт в базе навсегда. */
+function genPlayerTag() {
+  let tag;
+  const used = new Set(Object.values(db.players).map(p => p.tag));
+  do {
+    tag = '#' + String(crypto.randomInt(100000, 1000000)); // #100000–#999999
+  } while (used.has(tag));
+  return tag;
+}
+
 function upsertPlayer(uidValue, nick) {
-  if (!uidValue) return;
-  const p = db.players[uidValue] || { uid: uidValue, nick: '', firstSeen: Date.now() };
+  if (!uidValue) return null;
+  let p = db.players[uidValue];
+  const isNew = !p;
+  if (!p) p = { uid: uidValue, nick: '', verified: false, firstSeen: Date.now() };
+  if (typeof p.verified !== 'boolean') p.verified = false; // старые записи
   if (nick) p.nick = nick;
+  if (!p.tag) p.tag = genPlayerTag(); // автовыдача уникального ID при входе в обновлённую версию
   p.lastSeen = Date.now();
   db.players[uidValue] = p;
+  return p;
+}
+
+function findPlayer(query) {
+  const q = cleanStr(query, 80);
+  if (!q) return null;
+  if (db.players[q]) return db.players[q]; // точный uid
+  const norm = q.startsWith('#') ? q : '#' + q;
+  return Object.values(db.players).find(p =>
+    p.tag === norm ||
+    String(p.tag).replace('#', '') === q ||
+    (p.nick && String(p.nick).toLowerCase() === q.toLowerCase())
+  ) || null;
 }
 
 function findPlayerUidByNick(nick) {
@@ -205,7 +239,9 @@ const routes = {
   'GET /api/ping': (req, res) => {
     send(res, 200, {
       ok: true, server: 'shkoladrop', version: SERVER_VERSION,
-      royaltyPercent: royaltyPct(), time: Date.now()
+      royaltyPercent: royaltyPct(), time: Date.now(),
+      players: Object.keys(db.players).length,
+      chat: db.chat.length
     });
   },
 
@@ -219,14 +255,15 @@ const routes = {
     send(res, 200, { ok: true, royaltyPercent: royaltyPct(), codes: out });
   },
 
-  /* Синхронизация аккаунта: сервер запоминает uid и ник игрока */
+  /* Синхронизация аккаунта: сервер запоминает uid и ник игрока,
+     выдаёт уникальный ID (tag) и возвращает галочку верификации */
   'POST /api/auth/sync': async (req, res, body) => {
     const pUid = cleanStr(body.uid, 80);
     const nick = cleanStr(body.nick, 24);
     if (!pUid) return send(res, 400, { ok: false, error: 'нет uid' });
-    upsertPlayer(pUid, nick);
+    const p = upsertPlayer(pUid, nick);
     dbSave();
-    send(res, 200, { ok: true, nick });
+    send(res, 200, { ok: true, nick, tag: p ? p.tag : null, verified: !!(p && p.verified) });
   },
 
   /* Найти uid по нику (для подарков «по нику») */
@@ -234,6 +271,122 @@ const routes = {
     const nick = url.searchParams.get('nick');
     const found = findPlayerUidByNick(nick);
     send(res, 200, { ok: true, found, uid: found });
+  },
+
+  /* Публичная карточка игрока по уникальному ID (#123456), нику или uid —
+     то, что показывает «Сообщество» при поиске */
+  'GET /api/players/public': (req, res, body, url) => {
+    const p = findPlayer(url.searchParams.get('q'));
+    if (!p) return send(res, 404, { ok: false, error: 'Игрок с таким ID не найден' });
+    send(res, 200, {
+      ok: true,
+      player: {
+        uid: p.uid, nick: p.nick || 'Игрок', tag: p.tag,
+        verified: !!p.verified, lastSeen: p.lastSeen
+      }
+    });
+  },
+
+  /* -------------------- ЧАТ СООБЩЕСТВА -------------------- */
+  /* Последние сообщения; verified подставляется СВЕЖИМ из базы —
+     если админ выдал галочку, она видна даже на старых сообщениях */
+  'GET /api/chat': (req, res, body, url) => {
+    const limit = Math.max(1, Math.min(100, Number(url.searchParams.get('limit')) || 60));
+    const after = Number(url.searchParams.get('after')) || 0; // дельта-запрос: только новые
+    const msgs = db.chat.filter(m => m.at > after).slice(-limit).map(m => {
+      const p = m.uid && db.players[m.uid];
+      return Object.assign({}, m, {
+        verified: m.kind === 'admin' ? true : !!(p && p.verified),
+        tag: (p && p.tag) || m.tag || null
+      });
+    });
+    send(res, 200, { ok: true, messages: msgs, players: Object.keys(db.players).length });
+  },
+
+  /* Написать в чат (нужен uid аккаунта — привязка к профилю и галочке) */
+  'POST /api/chat': async (req, res, body) => {
+    const pUid = cleanStr(body.uid, 80);
+    const text = cleanStr(body.text, CHAT_TEXT_MAX);
+    if (!pUid) return send(res, 400, { ok: false, error: 'нет uid — создай профиль' });
+    if (!text) return send(res, 400, { ok: false, error: 'пустое сообщение' });
+    const p = upsertPlayer(pUid, cleanStr(body.nick, 24));
+    db.chat.push({
+      id: uid('msg'), uid: pUid, kind: 'player',
+      nick: cleanStr(body.nick, 24) || (p && p.nick) || 'Игрок',
+      tag: p ? p.tag : null,
+      text, at: Date.now()
+    });
+    if (db.chat.length > CHAT_MAX) db.chat = db.chat.slice(-CHAT_MAX);
+    dbSave();
+    send(res, 200, { ok: true });
+  },
+
+  /* ---- АДМИН: официальное сообщение в чат от имени проекта ---- */
+  'POST /api/admin/chat': async (req, res, body) => {
+    if (!isAdmin(req)) return send(res, 403, { ok: false, error: 'нет доступа' });
+    const text = cleanStr(body.text, CHAT_TEXT_MAX);
+    if (!text) return send(res, 400, { ok: false, error: 'пустое сообщение' });
+    db.chat.push({ id: uid('msg'), uid: null, kind: 'admin', nick: 'David Lite (АДМИН)', tag: null, text, at: Date.now() });
+    if (db.chat.length > CHAT_MAX) db.chat = db.chat.slice(-CHAT_MAX);
+    dbSave();
+    send(res, 200, { ok: true });
+  },
+
+  /* ---- АДМИН: удалить сообщение из чата (модерация) ---- */
+  'POST /api/admin/chat/delete': async (req, res, body) => {
+    if (!isAdmin(req)) return send(res, 403, { ok: false, error: 'нет доступа' });
+    const id = cleanStr(body.id, 80);
+    const before = db.chat.length;
+    db.chat = db.chat.filter(m => m.id !== id);
+    if (db.chat.length !== before) dbSave();
+    send(res, 200, { ok: true, removed: before - db.chat.length });
+  },
+
+  /* ---- АДМИН: список зарегистрированных игроков (с ID и галочками) ---- */
+  'GET /api/admin/players': (req, res) => {
+    if (!isAdmin(req)) return send(res, 403, { ok: false, error: 'нет доступа' });
+    const players = Object.values(db.players)
+      .sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0))
+      .map(p => ({
+        uid: p.uid, nick: p.nick || 'Игрок', tag: p.tag || null,
+        verified: !!p.verified, firstSeen: p.firstSeen || 0, lastSeen: p.lastSeen || 0
+      }));
+    send(res, 200, { ok: true, players });
+  },
+
+  /* ---- АДМИН: выдать / снять галочку верификации ---- */
+  'POST /api/admin/players/verify': async (req, res, body) => {
+    if (!isAdmin(req)) return send(res, 403, { ok: false, error: 'нет доступа' });
+    const pUid = cleanStr(body.uid, 80);
+    const p = db.players[pUid];
+    if (!p) return send(res, 404, { ok: false, error: 'игрок не найден' });
+    p.verified = !!body.verified;
+    dbSave();
+    send(res, 200, { ok: true, uid: pUid, verified: p.verified });
+  },
+
+  /* -------------------- ОБЛАЧНОЕ СОХРАНЕНИЕ ПРОГРЕССА -------------------- */
+  /* Клиент периодически заливает снапшот прогресса; при входе с любого
+     устройства прогресс восстанавливается с сервера автоматически. */
+  'POST /api/save': async (req, res, body) => {
+    const pUid = cleanStr(body.uid, 80);
+    if (!pUid) return send(res, 400, { ok: false, error: 'нет uid' });
+    const save = body.save;
+    if (!save || typeof save !== 'object') return send(res, 400, { ok: false, error: 'нет save' });
+    if (!Number.isFinite(save.balance) || !Array.isArray(save.inventory)) {
+      return send(res, 400, { ok: false, error: 'save не похож на сохранение игры' });
+    }
+    db.saves[pUid] = { save, updatedAt: Date.now() };
+    upsertPlayer(pUid, cleanStr(body.nick, 24));
+    dbSave();
+    send(res, 200, { ok: true, updatedAt: db.saves[pUid].updatedAt });
+  },
+
+  'GET /api/save': (req, res, body, url) => {
+    const pUid = cleanStr(url.searchParams.get('uid'), 80);
+    const entry = db.saves[pUid];
+    if (!entry) return send(res, 404, { ok: false, error: 'на сервере нет сохранения для этого аккаунта' });
+    send(res, 200, { ok: true, save: entry.save, updatedAt: entry.updatedAt });
   },
 
   /* Игрок вводит код автора (спонсорство) */

@@ -1,28 +1,34 @@
 /* ==========================================================================
    ШКОЛА ДРОП — js/netplay.js
-   Онлайн-функции: спонсорство (код автора + 10% автору), подарки и трейдинг.
+   Онлайн-функции: сообщество (чат + уникальные ID + галочки верификации),
+   облачные сохранения, спонсорство (код автора + 10% автору),
+   подарки и трейдинг.
+
+   СЕРВЕР СООБЩЕСТВА ЗАШИТ В ИГРУ: https://shkoladrop.onrender.com
+   (лёгкий server/index.js, Node без зависимостей). Если сервер не отвечает,
+   спонсорство работает локально, а чат/подарки/обмен и облако ждут онлайна.
 
    Реестр кодов авторов — файл author-codes.json в корне репозитория (GitHub):
    сайт читает его напрямую, сервер тоже (и админка умеет в него дописывать).
-   Сервер — лёгкий server/index.js (Node без зависимостей). Если сервер не
-   запущен, спонсорство работает локально, а подарки/трейдинг показывают
-   подсказку, как его запустить (docs/SERVER_START.md).
    ========================================================================== */
 
 /* --------------------------------------------------------------------------
    БАЗОВЫЙ СЛОЙ: адрес сервера, пинг, запросы
    -------------------------------------------------------------------------- */
+const COMMUNITY_SERVER_URL = 'https://shkoladrop.onrender.com'; // сервер сообщества — зашит
+
 const ServerAPI = {
   _online: null,
   _onlineAt: 0,
 
-  /* Адрес API: ручной из настроек админа (localStorage) → текущий origin */
+  /* Адрес API: зашитый сервер сообщества. Ручной адрес из админки — только
+     для отладки другого сервера (localStorage shkola_server_url). */
   base() {
     try {
       const manual = localStorage.getItem('shkola_server_url');
       if (manual) return manual.replace(/\/+$/, '');
     } catch (e) {}
-    return location.origin;
+    return COMMUNITY_SERVER_URL;
   },
 
   setManual(url) {
@@ -59,6 +65,7 @@ const ServerAPI = {
     try {
       const { status, data } = await this.req('GET', '/api/ping', null, {}, 4000);
       this._online = status === 200 && data.ok === true;
+      if (this._online && data.players != null) this._playersCount = data.players;
     } catch (e) {
       this._online = false;
     }
@@ -66,6 +73,69 @@ const ServerAPI = {
     if (this._online) NetAuthor.flushPending();
     renderServerStatus();
     return this._online;
+  }
+};
+
+/* Секрет админки для серверных запросов (совпадает с ADMIN_SECRET на сервере) */
+function adminSecret() {
+  try { return localStorage.getItem('shkola_admin_secret') || 'david-admin-1337'; }
+  catch (e) { return 'david-admin-1337'; }
+}
+
+/* Галочка верификации — единый вид по всей игре (чат, профиль, списки) */
+function verifiedBadgeHtml(title) {
+  const t = title || 'Верифицированный аккаунт — галочка выдана администрацией проекта';
+  return `<span title="${t}" class="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-gradient-to-br from-sky-400 to-cyan-500 text-slate-950 align-middle flex-shrink-0" style="font-size:9px;line-height:1">✔</span>`;
+}
+
+function adminChipHtml() {
+  return `<span title="Официальное сообщение администрации" class="inline-flex items-center px-1 py-px rounded bg-amber-500/20 border border-amber-500/50 text-amber-300 font-black align-middle" style="font-size:8px">🛠 АДМИН</span>`;
+}
+
+/* --------------------------------------------------------------------------
+   ЛИЧНОСТЬ ИГРОКА: уникальный ID с сервера + галочка верификации
+   Уникальный ID (#123456) присваивается АВТОМАТИЧЕСКИ при первой
+   синхронизации с обновлённой версией и хранится на сервере навсегда.
+   -------------------------------------------------------------------------- */
+const NetIdentity = {
+  _syncing: false,
+
+  async sync() {
+    if (!state.user || this._syncing) return null;
+    this._syncing = true;
+    try {
+      if (!(await ServerAPI.ping())) return null;
+      const { data } = await ServerAPI.req('POST', '/api/auth/sync', {
+        uid: state.user.id, nick: state.user.nick
+      });
+      if (data && data.ok) {
+        const hadTag = !!state.user.tag;
+        if (data.tag) state.user.tag = data.tag;
+        state.user.verified = !!data.verified;
+        if (!hadTag && state.user.tag) {
+          // Первая выдача ID после входа в обновлённую версию
+          Toast.gold(`🆔 Твоему аккаунту присвоен уникальный ID: <b class="font-mono">${escapeHtml(state.user.tag)}</b>. По нему тебя найдут друзья в «💬 Сообществе»!`, 9000);
+        } else if (state.user.verified) {
+          Toast.info('✔ Твой аккаунт верифицирован администрацией — галочка видна всем в чате и профиле!', 7000);
+        }
+        persist(true);
+        this.renderEverywhere();
+      }
+      return data;
+    } catch (e) {
+      return null;
+    } finally {
+      this._syncing = false;
+    }
+  },
+
+  /* Обновить все места, где видны ID и галочка */
+  renderEverywhere() {
+    if (typeof renderProfile === 'function') {
+      try { renderProfile(); } catch (e) {}
+    }
+    Community.renderMyId();
+    renderServerStatus();
   }
 };
 
@@ -257,7 +327,342 @@ const AuthorCabinet = {
 };
 
 /* --------------------------------------------------------------------------
-   ПОДАРКИ И ТРЕЙДИНГ (нужен запущенный server/index.js)
+   СООБЩЕСТВО: статус сервера, мой уникальный ID, поиск игроков, общий чат
+   -------------------------------------------------------------------------- */
+const Community = {
+  _pollTimer: null,
+  _lastSignature: '',
+  _found: null,
+
+  open() {
+    if (!state.user) {
+      Toast.info('Сначала создай профиль — сервер выдаст тебе уникальный ID, и можно общаться!');
+      if (typeof openProfileModal === 'function') openProfileModal();
+      return;
+    }
+    audio.init();
+    audio.playTick();
+    Modal.open('communityModal');
+    renderServerStatus();
+    this.renderMyId();
+    this.refreshChat(true);
+    NetIdentity.sync(); // подхватить свежую галочку/ID, если сервер что-то поменял
+    ServerAPI.ping(true).then(() => this.refreshChat(true));
+    // Живое обновление чата, пока окно открыто
+    clearInterval(this._pollTimer);
+    this._pollTimer = setInterval(() => {
+      if (Modal.isOpen('communityModal') && ServerAPI.isOnline()) this.refreshChat(false);
+    }, 6000);
+  },
+
+  close() {
+    clearInterval(this._pollTimer);
+    this._pollTimer = null;
+    Modal.close('communityModal');
+  },
+
+  /* Мой уникальный ID во всех местах */
+  renderMyId() {
+    const hasUser = !!state.user;
+    const tag = hasUser && state.user.tag;
+    const el = $('commMyTag');
+    if (el) el.textContent = tag || (hasUser ? 'выдаётся…' : '#…');
+    const badge = $('commMyVerified');
+    if (badge) {
+      badge.classList.toggle('hidden', !(hasUser && state.user.verified));
+      if (hasUser && state.user.verified) badge.innerHTML = verifiedBadgeHtml();
+    }
+    const cnt = $('commPlayersCount');
+    if (cnt && ServerAPI._playersCount != null) cnt.textContent = fmt(ServerAPI._playersCount);
+  },
+
+  async copyMyTag() {
+    if (!state.user || !state.user.tag) { Toast.info('ID ещё выдаётся сервером — подожди пару секунд'); return; }
+    const ok = await copyText(state.user.tag);
+    Toast[ok ? 'success' : 'info'](ok ? `Уникальный ID скопирован: ${state.user.tag}` : `Твой ID: ${state.user.tag}`);
+  },
+
+  /* -------- ПОИСК ИГРОКА ПО УНИКАЛЬНОМУ ID / НИКУ -------- */
+  async findPlayer() {
+    const input = $('commFindInput');
+    const q = ((input && input.value) || '').trim();
+    if (!q) { Toast.error('Введи уникальный ID (#123456), ник или id аккаунта'); return; }
+    if (!(await this._needOnline())) return;
+
+    const box = $('commFindResult');
+    if (box) box.innerHTML = '<div class="net-empty">Ищем игрока…</div>';
+    const { data } = await ServerAPI.req('GET', `/api/players/public?q=${encodeURIComponent(q)}`);
+    if (!data.ok || !data.player) {
+      this._found = null;
+      if (box) box.innerHTML = `<div class="net-empty">${escapeHtml(data.error || 'Игрок не найден')} (поиск работает среди тех, кто уже заходил с онлайн-сервером)</div>`;
+      return;
+    }
+    const p = data.player;
+    this._found = p;
+    const seenAgo = p.lastSeen ? Math.max(1, Math.round((Date.now() - p.lastSeen) / 60000)) : null;
+    const seenText = seenAgo == null ? '' : (seenAgo < 60 ? `был(а) ${seenAgo} мин назад` : seenAgo < 60 * 24 ? `был(а) ${Math.round(seenAgo / 60)} ч назад` : `был(а) ${Math.round(seenAgo / 60 / 24)} дн назад`);
+    if (box) box.innerHTML = `
+      <div class="net-row">
+        <div class="min-w-0">
+          <div class="text-[10.5px] font-bold text-slate-200 truncate flex items-center gap-1">${escapeHtml(p.nick)}${p.verified ? verifiedBadgeHtml() : ''}</div>
+          <div class="text-[10px] text-slate-400 truncate">ID <span class="font-mono text-amber-300">${escapeHtml(p.tag || '—')}</span>${seenText ? ' · ' + seenText : ''}</div>
+        </div>
+        <button onclick="Community.giftToFound()" class="net-btn">🎁 Подарить</button>
+      </div>`;
+    audio.playWin();
+  },
+
+  giftToFound() {
+    if (!this._found) return;
+    const uid = this._found.uid;
+    this.close();
+    NetPlay.open();
+    NetPlay.switchTab('gifts');
+    setTimeout(() => {
+      const t = $('netGiftTarget');
+      if (t) { t.value = uid; t.focus(); }
+      Toast.info(`Дарим игроку ${escapeHtml(this._found.nick)} — осталось выбрать предмет 🎁`);
+    }, 250);
+  },
+
+  /* -------- ОБЩИЙ ЧАТ -------- */
+  async refreshChat(force = false) {
+    const list = $('commChatList');
+    if (!list) return;
+    if (!ServerAPI.isOnline() && !(await ServerAPI.ping())) {
+      list.innerHTML = '<div class="net-empty">Сервер оффлайн — чат появится, как только связь восстановится.</div>';
+      return;
+    }
+    const { data } = await ServerAPI.req('GET', '/api/chat?limit=60');
+    if (!data.ok) return;
+    if (ServerAPI._playersCount != null || data.players != null) {
+      ServerAPI._playersCount = data.players != null ? data.players : ServerAPI._playersCount;
+      const cnt = $('commPlayersCount');
+      if (cnt) cnt.textContent = fmt(ServerAPI._playersCount || 0);
+    }
+    const msgs = data.messages || [];
+    const signature = msgs.length + '|' + (msgs.length ? msgs[msgs.length - 1].id : 'x') + '|' + msgs.map(m => (m.verified ? 1 : 0)).join('');
+    if (signature === this._lastSignature && !force) return; // ничего нового — не мельтешим
+    this._lastSignature = signature;
+    this._renderMessages(msgs, force);
+  },
+
+  _renderMessages(msgs, scrollHard = false) {
+    const list = $('commChatList');
+    if (!list) return;
+    const nearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 70;
+    if (!msgs.length) {
+      list.innerHTML = '<div class="net-empty">Пока тихо. Напиши первым — школа ждёт! 🏫</div>';
+      return;
+    }
+    const canModerate = !!state.rigReady; // админ видит крестики удаления
+    list.innerHTML = msgs.map(m => {
+      const time = new Date(m.at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+      const isAdmin = m.kind === 'admin';
+      const isMe = state.user && m.uid === state.user.id;
+      const cls = isAdmin
+        ? 'bg-amber-950/40 border-amber-600/50'
+        : isMe
+          ? 'bg-cyan-950/40 border-cyan-800/50'
+          : 'bg-slate-900/70 border-slate-800/70';
+      const head = isAdmin
+        ? `<span class="font-bold text-amber-300">${escapeHtml(m.nick)}</span> ${adminChipHtml()}`
+        : `<span class="font-bold ${isMe ? 'text-cyan-300' : 'text-slate-200'}">${escapeHtml(m.nick)}</span>${m.verified ? ' ' + verifiedBadgeHtml() : ''}${m.tag ? ` <span class="font-mono text-[8.5px] text-slate-500">${escapeHtml(m.tag)}</span>` : ''}`;
+      const del = canModerate && m.id
+        ? `<button onclick="Community.adminDeleteMessage('${m.id}')" title="Удалить сообщение (админ)" class="text-slate-500 hover:text-rose-400 transition text-[10px] leading-none flex-shrink-0">✕</button>`
+        : '';
+      return `<div class="border rounded-lg px-2 py-1 ${cls}">
+        <div class="flex items-center gap-1 min-w-0">
+          <div class="text-[9.5px] truncate flex-1">${head}</div>
+          <span class="text-[8px] text-slate-500 font-mono flex-shrink-0">${time}</span>${del}
+        </div>
+        <div class="text-[10.5px] text-slate-200 break-words leading-snug">${escapeHtml(m.text)}</div>
+      </div>`;
+    }).join('');
+    if (scrollHard || nearBottom) list.scrollTop = list.scrollHeight;
+  },
+
+  async send() {
+    const input = $('commChatInput');
+    const text = ((input && input.value) || '').trim();
+    if (!text) { Toast.error('Напиши что-нибудь 🙂'); return; }
+    if (!state.user) { Toast.error('Создай профиль, чтобы писать в чат'); return; }
+    if (!(await this._needOnline())) return;
+    const { data } = await ServerAPI.req('POST', '/api/chat', { uid: state.user.id, nick: state.user.nick, text });
+    if (!data.ok) { Toast.error(data.error || 'Сообщение не отправлено'); return; }
+    if (input) input.value = '';
+    audio.playCoin();
+    this._lastSignature = ''; // принудительно перерисуем
+    this.refreshChat(true);
+  },
+
+  /* Модерация: админ удаляет сообщение (кнопка ✕ видна только при rigReady) */
+  async adminDeleteMessage(id) {
+    if (!state.rigReady) return;
+    const { data } = await ServerAPI.req('POST', '/api/admin/chat/delete', { id }, { 'x-admin-secret': adminSecret() });
+    if (!data.ok) { Toast.error(data.error || 'Не удалось удалить'); return; }
+    Toast.info('Сообщение удалено из чата');
+    this._lastSignature = '';
+    this.refreshChat(true);
+  },
+
+  openTrading() {
+    this.close();
+    NetPlay.open();
+  },
+
+  async _needOnline() {
+    const on = await ServerAPI.ping(true);
+    if (!on) {
+      Toast.error('Сервер оффлайн! Сообщество работает, когда сервер доступен: ' + COMMUNITY_SERVER_URL);
+      renderServerStatus();
+    }
+    return on;
+  }
+};
+
+/* --------------------------------------------------------------------------
+   ОБЛАЧНОЕ СОХРАНЕНИЕ ПРОГРЕССА
+   Прогресс САМ восстанавливается через сервер: клиент регулярно заливает
+   снапшот на сервер сообщества, а при входе подтягивает копию, если она
+   свежее локальной. Ручной JSON-бэкап из настроек больше не нужен.
+   -------------------------------------------------------------------------- */
+const CloudSave = {
+  _pushTimer: null,
+  _restored: false,
+  _lastPushOk: 0,
+
+  startAutoPush() {
+    if (this._pushTimer) return;
+    this._pushTimer = setInterval(() => {
+      if (ServerAPI.isOnline() && state.user) this.push(false);
+    }, 45000);
+    // На выходе со страницы — мгновенный снапшот через sendBeacon
+    window.addEventListener('pagehide', () => this._beacon());
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) this._beacon();
+    });
+  },
+
+  _beacon() {
+    try {
+      if (!state.user || !ServerAPI.isOnline() || typeof navigator === 'undefined' || !navigator.sendBeacon) return;
+      const payload = JSON.stringify({ uid: state.user.id, nick: state.user.nick, save: snapshot() });
+      navigator.sendBeacon(ServerAPI.base() + '/api/save', new Blob([payload], { type: 'text/plain' }));
+    } catch (e) {}
+  },
+
+  /* Залить прогресс на сервер */
+  async push(toast = false) {
+    if (!state.user) return false;
+    if (!(await ServerAPI.ping())) {
+      if (toast) Toast.error('Сервер оффлайн — синхронизация подождёт');
+      this._renderStatus();
+      return false;
+    }
+    try {
+      const { data } = await ServerAPI.req('POST', '/api/save', {
+        uid: state.user.id, nick: state.user.nick, save: snapshot()
+      }, {}, 15000);
+      if (data.ok) {
+        this._lastPushOk = Date.now();
+        if (toast) Toast.success('☁️ Прогресс залит на сервер сообщества!');
+        this._renderStatus();
+        return true;
+      }
+    } catch (e) {}
+    if (toast) Toast.error('Не удалось залить прогресс на сервер');
+    this._renderStatus();
+    return false;
+  },
+
+  /* Подтянуть прогресс с сервера и восстановить.
+     manual=true — из настроек, с подсказками; false — тихое автовосстановление на входе. */
+  async pullAndRestore(manual = false) {
+    if (!state.user) {
+      if (manual) Toast.error('Сначала создай профиль — сервер узнает тебя по аккаунту');
+      return false;
+    }
+    if (!(await ServerAPI.ping(manual))) {
+      if (manual) Toast.error('Сервер оффлайн — облачное восстановление сейчас недоступно');
+      return false;
+    }
+    const { status, data } = await ServerAPI.req('GET', `/api/save?uid=${encodeURIComponent(state.user.id)}`, null, {}, 15000);
+    if (status !== 200 || !data.ok || !data.save) {
+      if (manual) Toast.info('На сервере пока нет твоей копии — она появится после первой синхронизации (залью прямо сейчас).');
+      this.push(false);
+      return false;
+    }
+
+    const serverSeen = Number(data.save.lastSeen) || Number(data.updatedAt) || 0;
+    const localSeen = state.stats.lastSeen || 0;
+    const invLen = Array.isArray(data.save.inventory) ? data.save.inventory.length : 0;
+    const differs =
+      (Number.isFinite(data.save.balance) && data.save.balance !== state.balance) ||
+      invLen !== state.inventory.length ||
+      ((data.save.stats && data.save.stats.level) || 1) !== (state.stats.level || 1);
+
+    if (!differs) {
+      if (manual) Toast.success('Локальный прогресс совпадает с сервером — всё актуально! ☁️');
+      return false;
+    }
+    // Серверная копия заметно старше — не откатываем игрока назад без спроса
+    if (!manual && serverSeen && localSeen && serverSeen < localSeen - 60000) return false;
+
+    let proceed = true;
+    if (manual) {
+      proceed = await ConfirmDialog.ask({
+        icon: '☁️',
+        title: 'Восстановить прогресс?',
+        text: `На сервере копия от <b>${new Date(serverSeen || Date.now()).toLocaleString('ru-RU')}</b>: баланс <b class="text-amber-300">${fmt(data.save.balance || 0)} ₽</b>, предметов <b>${invLen}</b>.<br>Текущий локальный прогресс будет заменён.`,
+        okText: 'Восстановить',
+        danger: false
+      });
+    }
+    if (!proceed) return false;
+
+    const parsed = SaveManager.normalize(data.save);
+    state.balance = parsed.balance;
+    state.inventory = parsed.inventory;
+    state.stats = parsed.stats;
+    // Профиль подменяем ТОЛЬКО если локального ещё нет и id совпадает — аккаунт не потеряется
+    if (!state.user && parsed.user && !state.user) state.user = parsed.user;
+    if (state.user && parsed.user && parsed.user.id === state.user.id) {
+      state.user = Object.assign({}, parsed.user, { tag: state.user.tag, verified: state.user.verified });
+    }
+    state.selectedDeposit = state.inventory[0] || null;
+    auditInventory();
+    persist(true);
+    uiUpdate();
+    if (typeof renderProfile === 'function') renderProfile();
+    this._restored = true;
+    audio.playSecret();
+    Fx.burst(120, ['#22d3ee', '#10b981']);
+    Toast.gold('☁️ Прогресс автоматически восстановлен с сервера сообщества!', 7000);
+    if (manual && Modal.isOpen('settingsModal')) Modal.close('settingsModal');
+    return true;
+  },
+
+  /* Строка состояния в настройках */
+  _renderStatus() {
+    const el = $('cloudSaveStatus');
+    if (!el) return;
+    const online = ServerAPI.isOnline();
+    if (!state.user) {
+      el.textContent = 'Синхронизация: будет включена после создания профиля';
+      el.className = 'text-[9.5px] font-mono text-slate-500';
+    } else if (this._lastPushOk) {
+      el.textContent = `Синхронизация: АКТИВНА · копия на сервере от ${new Date(this._lastPushOk).toLocaleTimeString('ru-RU')}`;
+      el.className = 'text-[9.5px] font-mono text-emerald-400';
+    } else {
+      el.textContent = online ? 'Синхронизация: готовится первый залив…' : 'Синхронизация: ждёт онлайн-сервер';
+      el.className = 'text-[9.5px] font-mono ' + (online ? 'text-amber-300' : 'text-rose-400');
+    }
+  }
+};
+
+/* --------------------------------------------------------------------------
+   ПОДАРКИ И ТРЕЙДИНГ (нужен онлайн-сервер сообщества)
    -------------------------------------------------------------------------- */
 const NetPlay = {
   tab: 'gifts',
@@ -312,11 +717,21 @@ const NetPlay = {
     const target = ($('netGiftTarget').value || '').trim();
     if (!state.user) { Toast.error('Сначала создай профиль — нужен ник и id аккаунта'); return; }
     if (!item) { Toast.error('Выбери предмет из рюкзака'); return; }
-    if (!target) { Toast.error('Укажи id аккаунта или ник получателя'); return; }
+    if (!target) { Toast.error('Укажи уникальный ID, ник или id аккаунта получателя'); return; }
     if (!(await this._needOnline())) return;
 
     const body = { fromUid: state.user.id, fromNick: state.user.nick, item: this._wireItem(item) };
-    if (/^player-/.test(target)) body.toUid = target; else body.toNick = target;
+    // Уникальный ID вида #123456 (или 123456) — сначала находим игрока на сервере
+    if (/^#\d{4,8}$/.test(target) || /^\d{6}$/.test(target)) {
+      const res = await ServerAPI.req('GET', `/api/players/public?q=${encodeURIComponent(target)}`);
+      if (!res.data.ok || !res.data.player) { Toast.error('Игрок с таким ID не найден'); return; }
+      if (res.data.player.uid === state.user.id) { Toast.error('Это же твой ID 😄'); return; }
+      body.toUid = res.data.player.uid;
+    } else if (/^player-/.test(target)) {
+      body.toUid = target;
+    } else {
+      body.toNick = target;
+    }
 
     const { status, data } = await ServerAPI.req('POST', '/api/gifts', body);
     if (status !== 200 || !data.ok) { Toast.error(data.error || 'Не удалось отправить подарок'); return; }
@@ -433,6 +848,8 @@ const NetPlay = {
     this._fillItemSelect('netTradeJoinItem');
     const myIdEl = $('netMyUid');
     if (myIdEl) myIdEl.textContent = state.user ? state.user.id : 'создай профиль';
+    const myTagEl = $('netMyTag');
+    if (myTagEl) myTagEl.textContent = state.user && state.user.tag ? state.user.tag : '—';
     if (!state.user || !(await ServerAPI.ping())) {
       this._setList('netIncomingList', '<div class="net-empty">Сервер оффлайн — см. подсказку выше ☝️</div>');
       this._setList('netMyTradesList', '');
@@ -485,7 +902,7 @@ const NetPlay = {
   async _needOnline() {
     const on = await ServerAPI.ping(true);
     if (!on) {
-      Toast.error('Сервер оффлайн! Подарки и обмен работают только с запущенным server/index.js — гайд: меню ⋮ → «Как запустить сервер» (или docs/SERVER_START.md).');
+      Toast.error('Сервер оффлайн! Подарки и обмен работают через сервер сообщества: ' + COMMUNITY_SERVER_URL);
       renderServerStatus();
     }
     return on;
@@ -496,19 +913,38 @@ const NetPlay = {
    ИНДИКАТОРЫ И ЗАГРУЗКА
    -------------------------------------------------------------------------- */
 function renderServerStatus() {
-  const el = $('netServerStatus');
-  if (!el) return;
   const online = ServerAPI.isOnline();
-  el.innerHTML = online
-    ? `<span class="text-emerald-400">●</span> Сервер онлайн — подарки и обмен работают`
-    : `<span class="text-rose-400">●</span> Сервер оффлайн — спонсорство работает локально, а для подарков/обмена запусти server/index.js (гайд в <b>docs/SERVER_START.md</b>)`;
+  const statusText = online
+    ? `<span class="text-emerald-400">●</span> Сервер онлайн — чат, подарки и обмен работают`
+    : `<span class="text-rose-400">●</span> Сервер оффлайн — сообщество временно недоступно (${COMMUNITY_SERVER_URL.replace('https://', '')})`;
+  const chipCls = online
+    ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/40'
+    : 'bg-rose-500/15 text-rose-300 border border-rose-500/40';
+  const chipText = online ? 'ОНЛАЙН' : 'ОФФЛАЙН';
+
+  // Модалка трейдинга
+  const el = $('netServerStatus');
+  if (el) el.innerHTML = statusText;
   const chip = $('netServerChip');
   if (chip) {
-    chip.textContent = online ? 'ОНЛАЙН' : 'ОФФЛАЙН';
-    chip.className = 'text-[8px] font-black px-1.5 py-0.5 rounded uppercase ' + (online
-      ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/40'
-      : 'bg-rose-500/15 text-rose-300 border border-rose-500/40');
+    chip.textContent = chipText;
+    chip.className = 'text-[8px] font-black px-1.5 py-0.5 rounded uppercase ' + chipCls;
   }
+  // Модалка сообщества
+  const el2 = $('commServerStatus');
+  if (el2) el2.innerHTML = statusText;
+  const chip2 = $('commServerChip');
+  if (chip2) {
+    chip2.textContent = chipText;
+    chip2.className = 'text-[8px] font-black px-1.5 py-0.5 rounded uppercase ' + chipCls;
+  }
+  // Карточка на экране «Фарм»
+  const mini = $('communityMiniStatus');
+  if (mini) {
+    mini.textContent = chipText;
+    mini.className = 'text-[8px] font-black px-1.5 py-0.5 rounded uppercase border flex-shrink-0 ' + chipCls;
+  }
+  CloudSave._renderStatus();
 }
 
 function updateNetBadge(count) {
@@ -518,15 +954,72 @@ function updateNetBadge(count) {
   dot.textContent = count > 9 ? '9+' : count;
 }
 
-/* Админка: адрес сервера + выдача кодов авторов */
+/* --------------------------------------------------------------------------
+   АДМИНКА: игроки сообщества, галочки, чат, адрес сервера, коды авторов
+   -------------------------------------------------------------------------- */
 function adminSaveServerUrl() {
   const input = $('adminServerUrl');
   ServerAPI.setManual(input ? input.value : '');
-  Toast.info('Адрес сервера сохранён. Проверяю связь...');
+  Toast.info(input && input.value.trim() ? 'Адрес сервера сохранён. Проверяю связь...' : 'Возвращаю зашитый сервер сообщества. Проверяю связь...');
   ServerAPI.ping(true).then(on => {
     Toast[on ? 'gold' : 'error'](on ? 'Сервер отвечает! Онлайн-функции активны 🚀' : 'Не отвечает. Проверь: сервер запущен? адрес верный?');
     renderServerStatus();
   });
+}
+
+/* Список зарегистрированных игроков + выдача галочек */
+async function adminLoadPlayers(manual = false) {
+  const box = $('adminPlayersList');
+  if (!box) return;
+  if (manual) box.innerHTML = '<div class="net-empty">Загружаю список игроков…</div>';
+  if (!(await ServerAPI.ping())) {
+    box.innerHTML = '<div class="net-empty">Сервер оффлайн — список игроков недоступен.</div>';
+    return;
+  }
+  const { data } = await ServerAPI.req('GET', '/api/admin/players', null, { 'x-admin-secret': adminSecret() });
+  if (!data.ok) {
+    box.innerHTML = `<div class="net-empty">${escapeHtml(data.error || 'Не удалось загрузить игроков')}</div>`;
+    return;
+  }
+  const players = data.players || [];
+  if (ServerAPI._playersCount !== players.length) {
+    ServerAPI._playersCount = players.length;
+    Community.renderMyId();
+  }
+  box.innerHTML = players.map(p => {
+    const agoMin = p.lastSeen ? Math.max(0, Math.round((Date.now() - p.lastSeen) / 60000)) : null;
+    const ago = agoMin == null ? '' : (agoMin < 1 ? 'онлайн сейчас' : agoMin < 60 ? `${agoMin} мин назад` : agoMin < 60 * 24 ? `${Math.round(agoMin / 60)} ч назад` : `${Math.round(agoMin / 60 / 24)} дн назад`);
+    const btn = p.verified
+      ? `<button onclick="adminToggleVerify('${p.uid}', false)" class="net-btn" style="background:linear-gradient(135deg,#f59e0b,#d97706)" title="Снять галочку">✔ убрать</button>`
+      : `<button onclick="adminToggleVerify('${p.uid}', true)" class="net-btn" title="Выдать галочку верификации">✔ выдать</button>`;
+    return `<div class="net-row">
+      <div class="min-w-0">
+        <div class="text-[10.5px] font-bold text-slate-200 truncate flex items-center gap-1">${escapeHtml(p.nick)}${p.verified ? verifiedBadgeHtml() : ''}</div>
+        <div class="text-[9px] text-slate-500 truncate">ID <span class="font-mono text-amber-300">${escapeHtml(p.tag || '—')}</span> · <span class="font-mono">${escapeHtml(p.uid)}</span>${ago ? ' · ' + ago : ''}</div>
+      </div>${btn}
+    </div>`;
+  }).join('') || '<div class="net-empty">Пока никто не заходил с онлайн-сервером.</div>';
+}
+
+async function adminToggleVerify(uid, grant) {
+  const { data } = await ServerAPI.req('POST', '/api/admin/players/verify', { uid, verified: grant }, { 'x-admin-secret': adminSecret() });
+  if (!data.ok) { Toast.error(data.error || 'Сервер отклонил запрос'); return; }
+  audio.playSecret();
+  Toast.gold(grant ? '✔ Галочка верификации выдана! Игрок увидит её в профиле и чате.' : 'Галочка снята с аккаунта.');
+  adminLoadPlayers();
+}
+
+/* Официальное сообщение в общий чат от имени администрации */
+async function adminSendChat() {
+  const input = $('adminChatInput');
+  const text = ((input && input.value) || '').trim();
+  if (!text) { Toast.error('Напиши текст сообщения'); return; }
+  if (!(await ServerAPI.ping())) { Toast.error('Сервер оффлайн — чат недоступен'); return; }
+  const { data } = await ServerAPI.req('POST', '/api/admin/chat', { text }, { 'x-admin-secret': adminSecret() });
+  if (!data.ok) { Toast.error(data.error || 'Не отправлено'); return; }
+  if (input) input.value = '';
+  audio.playSecret();
+  Toast.gold('📢 Официальное сообщение отправлено в общий чат!');
 }
 
 async function adminIssueAuthorCode() {
@@ -536,8 +1029,7 @@ async function adminIssueAuthorCode() {
   if (!ownerUid || !ownerName) { Toast.error('Заполни id аккаунта и ник владельца кода'); return; }
 
   if (await ServerAPI.ping(true)) {
-    const secret = localStorage.getItem('shkola_admin_secret') || 'david-admin-1337';
-    const { status, data } = await ServerAPI.req('POST', '/api/admin/author-codes', { ownerUid, ownerName, code }, { 'x-admin-secret': secret });
+    const { status, data } = await ServerAPI.req('POST', '/api/admin/author-codes', { ownerUid, ownerName, code }, { 'x-admin-secret': adminSecret() });
     if (!data.ok) { Toast.error(data.error || 'Сервер отклонил выдачу кода'); return; }
     Toast.gold(`✅ Код автора <b class="font-mono">${escapeHtml(data.entry.code)}</b> выдан для ${escapeHtml(data.entry.ownerName)} и записан в author-codes.json на сервере!`, 8000);
   } else {
@@ -577,12 +1069,21 @@ function NetBoot() {
   NetAuthor.renderCard();
   renderServerStatus();
   const urlInput = $('adminServerUrl');
-  if (urlInput && ServerAPI.base() !== location.origin) urlInput.value = ServerAPI.base();
+  if (urlInput) urlInput.value = ServerAPI.base(); // показываем зашитый сервер сообщества
   renderAdminAuthorList();
 
   ServerAPI.ping(true).then(async on => {
+    renderServerStatus();
     if (!on) return;
-    if (state.user) ServerAPI.req('POST', '/api/auth/sync', { uid: state.user.id, nick: state.user.nick }).catch(() => {});
+    if (state.user) {
+      // Уникальный ID и галочка (автовыдача ID при входе в обновлённую версию)
+      await NetIdentity.sync();
+      // Облачные сейвы: автовосстановление прогресса + фоновая синхронизация
+      CloudSave.startAutoPush();
+      CloudSave.pullAndRestore(false).then(restored => {
+        if (!restored) CloudSave.push(false); // свежая локальная копия — сразу в облако
+      });
+    }
     NetAuthor.flushPending();
     AuthorCabinet.refresh();
     // Тихая проверка входящих — точка на кнопке меню
