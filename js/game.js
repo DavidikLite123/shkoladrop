@@ -1744,18 +1744,16 @@ function nextIdleLevel() {
 }
 
 function renderCommunityTab() {
+  accrueIdle();
   const level = state.stats.idle.level || 0;
-  const pending = state.stats.idle.pending || 0;
 
+  const aps = idleAps();
   $('idleLevelText').textContent = `ур. ${level}`;
-  $('idleApsText').textContent = `${shortMoney(idleAps())} ₽/сек`;
-  $('idleApsText').title = `${moneyText(idleAps(), false)}/сек`;
-  $('idlePendingText').textContent = moneyText(pending, true);
-  $('idlePendingText').title = moneyText(pending, false);
-  $('btnCollectIdle').disabled = pending < 1;
-  $('btnCollectIdle').className = pending >= 1
-    ? 'px-3 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 font-bold text-[11px] transition active:scale-95'
-    : 'px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-slate-500 font-bold text-[11px] cursor-not-allowed';
+  $('idleApsText').textContent = aps ? `${shortMoney(aps)} ₽/сек` : '0 ₽/сек';
+  $('idleApsText').title = aps
+    ? `${moneyText(aps, false)}/сек · ${moneyText(aps * 60, false)}/мин · ${moneyText(aps * 3600, false)}/час`
+    : 'Купи первый уровень дежурства — доход начнёт капать каждую секунду';
+  renderIdlePending();
 
   $('dailyStreakLabel').textContent = `стрик: ${state.stats.dailyStreak || 0}`;
 
@@ -1803,21 +1801,25 @@ function buyIdleLevel(level) {
   }
   audio.init();
   audio.playCoin();
+  accrueIdle();                 // старая ставка досчитывается до этого момента
   spendMoney(cfg.cost);
   state.stats.idle.level = level;
-  state.stats.idle.lastCollect = Date.now();
+  state.stats.idle.lastTick = Date.now();
+  if (!state.stats.idle.lastCollect) state.stats.idle.lastCollect = Date.now();
   Toast.success(`Дежурство ур. ${level}: +${fmt(cfg.aps)} ₽/сек`);
   addXp(40 + level * 20);
+  renderCommunityTab();         // «Доход в секунду» обновляется сразу, не дожидаясь кадра
   uiUpdate();
   persist(true);
 }
 
 function collectIdle() {
+  accrueIdle();
   const pending = Math.floor(state.stats.idle.pending || 0);
   if (pending < 1) return;
   audio.init();
   audio.playCoin();
-  state.stats.idle.pending = 0;
+  state.stats.idle.pending = Math.max(0, (state.stats.idle.pending || 0) - pending);
   state.stats.idle.lastCollect = Date.now();
   state.stats.idleCollected = (state.stats.idleCollected || 0) + pending;
   addMoney(pending, { silent: true, countEarned: true });
@@ -1828,33 +1830,87 @@ function collectIdle() {
   persist(true);
 }
 
-function startIdleTicker() {
-  setInterval(() => {
-    const aps = idleAps();
-    if (!aps) return;
-    state.stats.idle.pending = (state.stats.idle.pending || 0) + aps;
-    state.stats.idle.lastCollect = Date.now();
-    if (viewVisible('viewCommunity')) {
-      $('idlePendingText').textContent = moneyText(state.stats.idle.pending, true);
-      $('idlePendingText').title = moneyText(state.stats.idle.pending, false);
-      $('btnCollectIdle').disabled = false;
-      $('btnCollectIdle').className = 'px-3 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 font-bold text-[11px] transition active:scale-95';
-    }
-    if (Math.random() < 0.08) persist();
-  }, 1000);
+/* Начисление по РЕАЛЬНОМУ времени. Раньше «pending += aps» делалось на каждый
+   тик setInterval(1000): в фоновой вкладке / на заблокированном телефоне
+   браузер режет таймеры до 1 раза в минуту (Chrome — до 1 раза в час), поэтому
+   игрок получал ~1% дохода вместо 100%. Теперь считаем секунды между двумя
+   моментами времени (idle.lastTick) — сколько бы тиков ни пропало.
+   Возвращает начисленную сумму. */
+function accrueIdle(now = Date.now()) {
+  const idle = state.stats.idle;
+  const aps = idleAps();
+  if (!aps) { idle.lastTick = now; return 0; }
+  const last = Number(idle.lastTick) || Number(idle.lastCollect) || now;
+  const elapsed = clamp((now - last) / 1000, 0, IDLE_OFFLINE_CAP_H * 3600);
+  idle.lastTick = now;
+  if (elapsed <= 0) return 0;
+  const earned = aps * elapsed;
+  idle.pending = (idle.pending || 0) + earned;
+  return earned;
 }
 
+function renderIdlePending() {
+  const pending = state.stats.idle.pending || 0;
+  const textEl = $('idlePendingText');
+  const btn = $('btnCollectIdle');
+  if (textEl) {
+    textEl.textContent = moneyText(pending, true);
+    textEl.title = moneyText(pending, false);
+  }
+  if (btn) {
+    btn.disabled = pending < 1;
+    btn.className = pending >= 1
+      ? 'px-3 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 font-bold text-[11px] transition active:scale-95'
+      : 'px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-slate-500 font-bold text-[11px] cursor-not-allowed';
+  }
+}
+
+let idleTickerTimer = null;
+function startIdleTicker() {
+  if (idleTickerTimer) return;
+  let sinceSave = 0;
+  idleTickerTimer = setInterval(() => {
+    const earned = accrueIdle();
+    if (!earned) return;
+    if (viewVisible('viewCommunity')) renderIdlePending();
+    // Сохраняем не чаще раза в ~10 с — накопленное не теряется при закрытии вкладки
+    sinceSave += 1;
+    if (sinceSave >= 10) { sinceSave = 0; persist(); }
+  }, 1000);
+
+  // Вернулись из фона — досчитать пропущенное сразу, а не ждать следующий тик
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { accrueIdle(); persist(true); return; }
+    const earned = accrueIdle();
+    if (earned && viewVisible('viewCommunity')) renderIdlePending();
+  });
+  window.addEventListener('focus', () => {
+    const earned = accrueIdle();
+    if (earned && viewVisible('viewCommunity')) renderIdlePending();
+  });
+}
+
+/* Оффлайн-доход при входе: время с последнего сохранения (lastSeen / lastTick)
+   до сейчас — по полной ставке, с потолком IDLE_OFFLINE_CAP_H часов. */
 function applyOfflineIdleIncome() {
   const aps = idleAps();
-  if (!aps) return;
-  const lastSeen = state.prevLastSeen || state.stats.lastSeen || Date.now();
-  const elapsed = Math.max(0, Math.min((Date.now() - lastSeen) / 1000, IDLE_OFFLINE_CAP_H * 3600));
-  if (elapsed < 60) return;
+  const idle = state.stats.idle;
+  if (!aps) { idle.lastTick = Date.now(); return; }
+  // Точка отсчёта: последний тик (самая точная) → последнее сохранение → сейчас
+  const lastTick = Number(idle.lastTick) || 0;
+  const lastSeen = Number(state.prevLastSeen) || 0;
+  const from = lastTick || lastSeen || Date.now();
+  const elapsed = clamp((Date.now() - from) / 1000, 0, IDLE_OFFLINE_CAP_H * 3600);
   const earned = Math.floor(aps * elapsed * IDLE_OFFLINE_RATE);
+  idle.lastTick = Date.now();
   if (earned < 1) return;
-  state.stats.idle.pending = (state.stats.idle.pending || 0) + earned;
+  idle.pending = (idle.pending || 0) + earned;
+  persist();
+  if (elapsed < IDLE_OFFLINE_NOTICE_S) return;
+  const mins = Math.round(elapsed / 60);
+  const capped = elapsed >= IDLE_OFFLINE_CAP_H * 3600;
   setTimeout(() => {
-    Toast.info(`Пока тебя не было (${Math.round(elapsed / 60)} мин), дежурство накопило <b>${fmt(earned)} ₽</b>. Забери в разделе «Фарм»!`, 6000);
+    Toast.info(`Пока тебя не было (${mins >= 60 ? `${Math.floor(mins / 60)} ч ${mins % 60} мин` : `${mins} мин`}${capped ? `, лимит ${IDLE_OFFLINE_CAP_H} ч` : ''}), дежурство накопило <b>${fmt(earned)} ₽</b>. Забери во вкладке «Сообщество»!`, 6000);
   }, 1400);
 }
 
@@ -2078,6 +2134,36 @@ function redeemPromo() {
   renderPromoList();
   uiUpdate();
   persist(true);
+}
+
+function renderPromoList() {
+  const box = $('promoList');
+  if (!box) return;
+  const used = Array.isArray(state.stats.promosUsed) ? state.stats.promosUsed : [];
+  if (!used.length) {
+    const vipHint = state.stats.vipActive
+      ? '<br><span class="text-amber-400">👑 VIP-статус активен — налог миллионера отключён навсегда!</span>'
+      : `<br><span class="text-fuchsia-400">VIP за ${VIP_PRICE_RUB}₽ отключает налог миллионера навсегда</span>`;
+    box.innerHTML = `<span class="text-[10px] text-slate-500">Пока ни один код не активирован. Подсказка: следи за видео David Lite 🎬<br><span class="text-fuchsia-400">Коды обновления 3.0.2: NEWUPDATE2026, GORABOGDAN5G</span>${vipHint}</span>`;
+    return;
+  }
+  box.innerHTML = used.map(code => {
+    const isVip = code.startsWith('VIP-') && VIP_CODES.includes(code);
+    if (isVip) {
+      return `<span class="text-[9px] px-2 py-0.5 rounded-full bg-amber-950/70 border border-amber-600/60 text-amber-300 font-mono" title="VIP активирован навечно">👑 ${escapeHtml(code)} ✓ · ВЕЧНЫЙ VIP</span>`;
+    }
+    const p = PROMO_CODES[code];
+    let rewardLabel = '';
+    if (p) {
+      if (p.item) {
+        const it = ITEMS_BY_ID[p.item];
+        rewardLabel = ' · ' + (it ? it.name : 'предмет');
+      } else if (p.money) {
+        rewardLabel = ' · ' + fmt(p.money) + '₽';
+      }
+    }
+    return `<span class="text-[9px] px-2 py-0.5 rounded-full bg-emerald-950/60 border border-emerald-800 text-emerald-300 font-mono">${escapeHtml(code)} ✓${rewardLabel}</span>`;
+  }).join('');
 }
 
 /* --------------------------------------------------------------------------
@@ -2877,7 +2963,9 @@ function adminGrantCat() {
 
 function adminMaxLevel() {
   if (!state.rigReady || !adminHas('maxlevel')) return;
+  accrueIdle();
   state.stats.idle.level = IDLE_LEVELS.length;
+  state.stats.idle.lastTick = Date.now();
   addXp(900000);
   Toast.gold('Максимальное дежурство и опыт выданы');
   uiUpdate();
@@ -2979,6 +3067,7 @@ function bindGlobalEvents() {
    -------------------------------------------------------------------------- */
 function initGame() {
   loadGame();
+  applyOfflineIdleIncome();   // ДО первого рендера: иначе accrueIdle() съест оффлайн-время без уведомления
   applySettingsToUI();
   bindGlobalEvents();
   watchOverlayLock();   // прокрутка не может «залипнуть» заблокированной
@@ -3006,7 +3095,6 @@ function initGame() {
   addFeedItem(false, ITEMS_BY_ID['sch_eraser'], ITEMS_BY_ID['cs_ak_vulcan']);
 
   scrollViewportTop();
-  applyOfflineIdleIncome();
   startIdleTicker();
   checkAchievements();
 
