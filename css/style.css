@@ -940,3 +940,67 @@ body.shkola-app > * { max-width: 100%; }
 
 /* На слабом железе — без неоновых пульсаций */
 body.quality-low .version-badge-beta { animation: none; box-shadow: 0 0 6px rgba(34, 211, 238, .4); }
+
+/* ==========================================================================
+   NETPLAY — трейдинг, подарки, спонсорство (js/netplay.js)
+   ========================================================================== */
+.net-tab {
+  padding: .45rem .3rem;
+  border-radius: .7rem;
+  background: rgba(15, 23, 42, .85);
+  border: 1px solid rgba(51, 65, 85, .6);
+  color: #94a3b8;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  transition: background .15s, transform .12s;
+}
+.net-tab:active { transform: scale(.97); }
+.net-tab.net-tab-active {
+  background: linear-gradient(135deg, rgba(34, 211, 238, .25), rgba(8, 145, 178, .15));
+  border-color: rgba(34, 211, 238, .55);
+  color: #67e8f9;
+}
+.net-select, .net-input {
+  width: 100%;
+  background: #020617;
+  border: 1px solid #1e293b;
+  border-radius: .7rem;
+  padding: .55rem .7rem;
+  font-size: 11px;
+  color: #fff;
+  outline: none;
+}
+.net-select:focus, .net-input:focus { border-color: #22d3ee; }
+.net-input::placeholder { color: #475569; }
+.net-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .6rem;
+  background: rgba(2, 6, 23, .7);
+  border: 1px solid rgba(51, 65, 85, .5);
+  border-radius: .7rem;
+  padding: .55rem .7rem;
+}
+.net-empty {
+  text-align: center;
+  color: #64748b;
+  font-size: 10.5px;
+  padding: .9rem .4rem;
+}
+.net-btn {
+  flex-shrink: 0;
+  padding: .35rem .7rem;
+  border-radius: .6rem;
+  background: linear-gradient(135deg, #06b6d4, #0891b2);
+  color: #020617;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+  transition: transform .12s, filter .15s;
+}
+.net-btn:hover { filter: brightness(1.1); }
+.net-btn:active { transform: scale(.95); }
+.net-btn-danger { background: linear-gradient(135deg, #f43f5e, #e11d48); color: #fff; }

@@ -1145,6 +1145,8 @@ function openSelectedCase() {
   audio.playCoin();
   state.isOpeningCase = true;
   spendMoney(price);
+  // Спонсорство: 10% от стоимости кейса — владельцу введённого кода автора
+  if (typeof NetAuthor !== 'undefined') NetAuthor.trackCaseSpend(price, caseObj.id);
   state.stats.casesOpened = (state.stats.casesOpened || 0) + 1;
   if (isSecret) state.stats.secretCases = (state.stats.secretCases || 0) + 1;
   addXp(XP_REWARDS.caseOpen, { silent: true });
@@ -1197,6 +1199,8 @@ function openSelectedCaseMulti(count = 5) {
   audio.playCoin();
   state.isOpeningCase = true;
   spendMoney(cost);
+  // Спонсорство: 10% от стоимости открытия — автору кода
+  if (typeof NetAuthor !== 'undefined') NetAuthor.trackCaseSpend(cost, caseObj.id);
   state.stats.casesOpened = (state.stats.casesOpened || 0) + count;
   addXp(XP_REWARDS.caseOpen * count, { silent: true });
 
@@ -2506,6 +2510,10 @@ function renderProfile() {
     `<span class="text-[9px] px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-300 font-bold">${escapeHtml(t)}</span>`
   ).join('');
 
+  // id аккаунта — нужен друзьям для подарков, а владельцу проекта — для выдачи кода автора
+  const uidEl = $('profileUid');
+  if (uidEl) uidEl.textContent = state.user ? state.user.id : '—';
+
   const invValue = state.inventory.reduce((sum, i) => sum + i.price, 0);
   $('statBalance').textContent = moneyText(state.balance, true);
   $('statBalance').title = moneyText(state.balance, false);
@@ -3159,6 +3167,9 @@ function initGame() {
 
   // Лаборатория 3.6 Beta: восстановить состояние тестовой ветки (ник «Тест», бейдж, бета-кейсы)
   if (typeof BetaMode !== 'undefined') BetaMode.onBoot();
+
+  // Онлайн-функции: спонсорство, подарки, трейдинг (js/netplay.js)
+  if (typeof NetBoot === 'function') NetBoot();
 
   // Первое сохранение нового формата
   persist(true);

@@ -1,0 +1,8 @@
+# Runtime-база сервера (создаётся автоматически при запуске node server/index.js)
+server/data/db.json
+server/data/db.json.tmp
+
+# Node / всякое
+node_modules/
+*.log
+.DS_Store
