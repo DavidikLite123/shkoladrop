@@ -6,3 +6,6 @@ server/data/db.json.tmp
 node_modules/
 *.log
 .DS_Store
+
+# VIP-коды в открытом виде — только у владельца, в репозиторий НЕ попадают (в клиенте лишь хеши)
+vip_codes_funpay.txt

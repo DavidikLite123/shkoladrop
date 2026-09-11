@@ -250,6 +250,36 @@ async function main() {
   r = await fetch(`${BASE}/admin/players/status`, { method: 'POST', headers: ADMIN, body: JSON.stringify({ uid: 'player-999', status: 'scam' }) });
   body = await r.json();
   t('владелец выдал статус scam', r.ok && body.status === 'scam');
+
+  // ---- Защита владельца: со статусом owner забанить нельзя ни админу, ни владельцу ----
+  r = await fetch(`${BASE}/auth/sync`, { method: 'POST', headers: JSONH, body: JSON.stringify({ uid: 'player-boss', nick: 'DavidLite' }) });
+  r = await fetch(`${BASE}/admin/players/status`, { method: 'POST', headers: ADMIN, body: JSON.stringify({ uid: 'player-boss', status: 'owner' }) });
+  t('владелец поставил себе статус owner', r.ok);
+  r = await fetch(`${BASE}/admin/players/ban`, { method: 'POST', headers: STAFF, body: JSON.stringify({ uid: 'player-boss', banned: true, reason: 'попытка переворота' }) });
+  t('администрация НЕ может забанить владельца (403)', r.status === 403);
+  r = await fetch(`${BASE}/admin/players/ban`, { method: 'POST', headers: ADMIN, body: JSON.stringify({ uid: 'player-boss', banned: true, reason: 'случайно' }) });
+  t('даже владельческий секрет не банит аккаунт со статусом owner (защита от случайности)', r.status === 403);
+  r = await fetch(`${BASE}/admin/players/delete`, { method: 'POST', headers: ADMIN, body: JSON.stringify({ uid: 'player-boss' }) });
+  t('аккаунт владельца нельзя удалить', r.status === 403);
+  let bossList = await j(await fetch(`${BASE}/admin/players`, { headers: ADMIN }));
+  t('владелец не забанен', bossList.players.some(p => p.uid === 'player-boss' && !p.banned));
+  // ютубера/легенду админ не банит, владелец — может
+  r = await fetch(`${BASE}/admin/players/status`, { method: 'POST', headers: ADMIN, body: JSON.stringify({ uid: 'player-999', status: 'youtuber' }) });
+  r = await fetch(`${BASE}/admin/players/ban`, { method: 'POST', headers: STAFF, body: JSON.stringify({ uid: 'player-999', banned: true, reason: 'x' }) });
+  t('администрация не банит ютубера (403)', r.status === 403);
+  r = await fetch(`${BASE}/admin/players/status`, { method: 'POST', headers: ADMIN, body: JSON.stringify({ uid: 'player-999', status: 'scam' }) });
+
+  // ---- Код автора, привязанный по уникальному ID (#tag), а не по uid ----
+  r = await fetch(`${BASE}/auth/sync`, { method: 'POST', headers: JSONH, body: JSON.stringify({ uid: 'player-legenda', nick: 'Легенда_пх' }) });
+  const legenda = await r.json();
+  r = await fetch(`${BASE}/admin/author-codes`, { method: 'POST', headers: ADMIN, body: JSON.stringify({ ownerUid: legenda.tag, ownerName: 'Легенда_пх', code: 'LEGENDA_PH' }) });
+  body = await r.json();
+  t('код автора выдан по уникальному ID игрока', r.ok && body.entry.ownerUid === 'player-legenda' && body.entry.ownerTag === legenda.tag);
+  r = await fetch(`${BASE}/author/earnings?uid=player-legenda`);
+  body = await r.json();
+  t('автор видит свой кабинет по коду, выданному через ID', r.ok && body.code === 'LEGENDA_PH');
+  r = await fetch(`${BASE}/author-codes/apply`, { method: 'POST', headers: JSONH, body: JSON.stringify({ uid: 'player-legenda', nick: 'Легенда_пх', code: 'legenda_ph' }) });
+  t('свой собственный код (по ID) ввести нельзя', r.status === 400);
   r = await fetch(`${BASE}/admin/players/status`, { method: 'POST', headers: ADMIN, body: JSON.stringify({ uid: 'player-999', status: 'hacker' }) });
   t('неизвестный статус → 400', r.status === 400);
   chat = await j(await fetch(`${BASE}/chat`));

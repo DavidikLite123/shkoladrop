@@ -797,6 +797,7 @@ const CloudSave = {
     uiUpdate();
     if (typeof renderProfile === 'function') renderProfile();
     this._restored = true;
+    if (typeof auditVip === 'function') auditVip();
     audio.playSecret();
     Fx.burst(120, ['#22d3ee', '#10b981']);
     Toast.gold('☁️ Прогресс автоматически восстановлен с сервера сообщества!', 7000);
@@ -1514,7 +1515,8 @@ function adminRenderPlayers() {
       ? `<button onclick="adminSetRole('${p.uid}', null)" class="adm-act" style="background:linear-gradient(135deg,#0ea5e9,#0369a1)" title="Снять права администратора">🛡 снять</button>`
       : `<button onclick="adminSetRole('${p.uid}', 'admin')" class="adm-act" style="background:linear-gradient(135deg,#38bdf8,#6366f1)" title="Назначить администратором (значок 🛡 АДМИН)">🛡 админ</button>`);
     if (has('dm')) btns.push(`<button onclick="adminOpenDm('${p.uid}', '${escapeHtml(p.nick).replace(/'/g, '')}')" class="adm-act" style="background:linear-gradient(135deg,#0ea5e9,#2563eb)" title="Написать игроку личное сообщение">✉ написать</button>`);
-    if (has('ban')) btns.push(p.banned
+    const protectedByStatus = p.status === 'owner' || (state.adminRole !== 'owner' && ['admin', 'youtuber', 'legend'].includes(p.status));
+    if (has('ban') && !protectedByStatus) btns.push(p.banned
       ? `<button onclick="adminToggleBan('${p.uid}', false)" class="adm-act" style="background:linear-gradient(135deg,#22c55e,#15803d)" title="Разбанить">✅ разбан</button>`
       : `<button onclick="adminOpenBan('${p.uid}', '${escapeHtml(p.nick).replace(/'/g, '')}')" class="adm-act" style="background:linear-gradient(135deg,#f43f5e,#be123c)" title="Забанить (с причиной; чат, смена ника и новые аккаунты с этого IP закрыты)">⛔ бан</button>`);
     if (has('status')) btns.push(`<select onchange="adminSetStatus('${p.uid}', this.value)" class="adm-act" style="background:#1e293b;border:1px solid #334155" title="Статус игрока (плашка у ника)">
@@ -1629,7 +1631,9 @@ async function adminOpenPlayer(uid) {
   const nm = (typeof fmt === 'function') ? fmt : (x => x);
   const actions = [];
   if (has('dm')) actions.push(`<button onclick="adminOpenDm('${p.uid}', '${escapeHtml(p.nick).replace(/'/g, '')}')" class="py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-[11px]">✉ Написать ему</button>`);
-  if (has('ban')) actions.push(p.banned
+  const protectedByStatus = p.status === 'owner' || (state.adminRole !== 'owner' && ['admin', 'youtuber', 'legend'].includes(p.status));
+  if (p.status === 'owner') actions.push(`<div class="py-2 rounded-xl bg-amber-500/10 border border-amber-500/40 text-amber-300 font-bold text-[10px] text-center">👑 Владельца забанить нельзя</div>`);
+  if (has('ban') && !protectedByStatus) actions.push(p.banned
     ? `<button onclick="adminToggleBan('${p.uid}', false)" class="py-2 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-[11px]">✅ Разбанить</button>`
     : `<button onclick="adminOpenBan('${p.uid}', '${escapeHtml(p.nick).replace(/'/g, '')}')" class="py-2 rounded-xl bg-rose-700 hover:bg-rose-600 text-white font-bold text-[11px]">⛔ Забанить</button>`);
   if (has('verify')) actions.push(`<button onclick="adminToggleVerify('${p.uid}', ${!p.verified}).then(()=>adminOpenPlayer('${p.uid}'))" class="py-2 rounded-xl bg-cyan-800 hover:bg-cyan-700 text-white font-bold text-[11px]">${p.verified ? '✔ Снять галочку' : '✔ Выдать галочку'}</button>`);
