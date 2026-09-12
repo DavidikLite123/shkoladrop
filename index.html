@@ -1527,8 +1527,21 @@
           <div class="text-[9px] text-slate-500 leading-relaxed">Сервер сообщества зашит в игру: <span class="font-mono text-cyan-400">https://shkoladrop.onrender.com</span>. Поле нужно только для теста другого адреса (пусто = вернуть зашитый).</div>
         </div>
 
+        <div data-admin-perm="server" class="bg-emerald-950/30 border border-emerald-800/50 rounded-xl p-2.5 space-y-1.5">
+          <div class="text-[10px] uppercase tracking-wider text-emerald-300 font-bold">💾 Resilient Backup — localStorage как бэкап сервера</div>
+          <div class="text-[9px] text-slate-400 leading-relaxed">Сохраняет ВСЕХ игроков, их сейвы, статусы, галочки, роли в localStorage твоего телефона. Если сервер сотрётся — при следующем входе телефон сам перезальёт их на сервер. ID игроков никогда не меняется случайно — UID-lock в vault.</div>
+          <button id="adminBackupSaveBtn" onclick="AdminVaultBackup.saveAllToLocal()" class="w-full py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-[10px]">💾 Сохранить все данные в localStorage</button>
+          <button id="adminBackupRestoreBtn" onclick="AdminVaultBackup.restoreFromLocal()" class="w-full py-2 rounded-lg bg-cyan-700 hover:bg-cyan-600 text-white font-bold text-[10px]">♻️ Восстановить на сервер из localStorage</button>
+          <div class="flex gap-1.5">
+            <button onclick="AdminVaultBackup.renderStatus()" class="flex-1 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-[9px]">↻ статус</button>
+            <button onclick="AdminVaultBackup.clearBackup()" class="flex-1 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-rose-300 font-bold text-[9px]">🧹 удалить бэкап</button>
+          </div>
+          <div id="adminBackupStatus" class="text-[9px] font-mono text-slate-500">Бэкапа в localStorage нет</div>
+          <div class="text-[8px] text-slate-500 leading-relaxed">Vault ключи: <span class="font-mono">shkola_uid_lock_v1</span>, <span class="font-mono">shkola_identity_vault_v1</span>, <span class="font-mono">shkola_players_vault_v1</span>, <span class="font-mono">shkola_status_ledger_v1</span>, <span class="font-mono">shkola_admin_full_backup_v1</span> — переживают вайп. Сервер будится телефоном автоматически.</div>
+        </div>
+
         <div data-admin-perm="authorcodes" class="bg-purple-950/30 border border-purple-800/50 rounded-xl p-2.5 space-y-1.5">
-          <div class="text-[10px] uppercase tracking-wider text-purple-300 font-bold">💜 Выдать код автора (только владелец проекта)</div>
+          <div class="text-[10px] uppercase tracking-wider text-purple-300 font-bold">💜 Выдать / сменить ID-код автора (только владелец проекта)</div>
           <input type="text" id="adminCodeOwnerUid" placeholder="id аккаунта владельца (player-…)" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-2 text-[10.5px] text-white font-mono focus:outline-none focus:border-purple-500">
           <input type="text" id="adminCodeOwnerName" placeholder="Имя/ник, который увидят игроки" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-2 text-[10.5px] text-white focus:outline-none focus:border-purple-500">
           <input type="text" id="adminCodeValue" placeholder="Код (необязательно — сгенерируем)" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-2 text-[10.5px] text-white font-mono uppercase focus:outline-none focus:border-purple-500">

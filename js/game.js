@@ -2306,25 +2306,27 @@ function renderPromoList() {
     const vipHint = state.stats.vipActive
       ? '<br><span class="text-amber-400">👑 VIP-статус активен — налог миллионера отключён навсегда!</span>'
       : `<br><span class="text-fuchsia-400">VIP за ${VIP_PRICE_RUB}₽ отключает налог миллионера навсегда</span>`;
-    box.innerHTML = `<span class="text-[10px] text-slate-500">Пока ни один код не активирован. Подсказка: следи за видео David Lite 🎬<br><span class="text-fuchsia-400">Коды сезона 3.5 / версии 4.0: YTDAVID4, APOLOGY35, SORRY39, SERVERONLINE35, GIFT4YOU, SHKOLA4LIFE, COMEBACK35, CLOUDSAVE4, ONLINE35, THANKS35</span><br><span class="text-cyan-400">Старые: NEWUPDATE2026, GORABOGDAN5G, LEGENDAPH2026</span>${vipHint}</span>`;
+    // Промокоды скрыты — только владелец знает их. Показываем только подсказку без списка.
+    box.innerHTML = `<span class="text-[10px] text-slate-500">Пока ни один код не активирован. Подсказка: следи за видео David Lite 🎬<br><span class="text-slate-400">Промокоды скрыты — их знает только владелец. Введи код, если он у тебя есть.</span>${vipHint}</span>`;
     return;
   }
   box.innerHTML = used.map(code => {
-    const isVip = code.startsWith('VIP-') && VIP_CODES.includes(code);
+    const isVip = code.startsWith('VIP-') && (typeof VIP_CODES !== 'undefined' && VIP_CODES.includes(code));
     if (isVip) {
-      return `<span class="text-[9px] px-2 py-0.5 rounded-full bg-amber-950/70 border border-amber-600/60 text-amber-300 font-mono" title="VIP активирован навечно">👑 ${escapeHtml(code)} ✓ · ВЕЧНЫЙ VIP</span>`;
+      return `<span class="text-[9px] px-2 py-0.5 rounded-full bg-amber-950/70 border border-amber-600/60 text-amber-300 font-mono" title="VIP активирован навечно">👑 ✓ · ВЕЧНЫЙ VIP</span>`;
     }
-    const p = PROMO_CODES[code];
+    const p = (typeof PROMO_CODES !== 'undefined' && PROMO_CODES[code]) ? PROMO_CODES[code] : null;
     let rewardLabel = '';
     if (p) {
       if (p.item) {
-        const it = ITEMS_BY_ID[p.item];
+        const it = (typeof ITEMS_BY_ID !== 'undefined' && ITEMS_BY_ID[p.item]) ? ITEMS_BY_ID[p.item] : null;
         rewardLabel = ' · ' + (it ? it.name : 'предмет');
       } else if (p.money) {
         rewardLabel = ' · ' + fmt(p.money) + '₽';
       }
     }
-    return `<span class="text-[9px] px-2 py-0.5 rounded-full bg-emerald-950/60 border border-emerald-800 text-emerald-300 font-mono">${escapeHtml(code)} ✓${rewardLabel}</span>`;
+    // Не показываем сам код — только факт активации и награду, чтобы коды не утекали
+    return `<span class="text-[9px] px-2 py-0.5 rounded-full bg-emerald-950/60 border border-emerald-800 text-emerald-300 font-mono">✓ активирован${rewardLabel}</span>`;
   }).join('');
 }
 
@@ -3194,6 +3196,7 @@ function openAdminModal() {
   // Онлайн-разделы панели: список игроков с галочками и реестр кодов авторов
   if (typeof adminLoadPlayers === 'function') adminLoadPlayers();
   if (adminHas('authorcodes') && typeof renderAdminAuthorList === 'function') renderAdminAuthorList();
+  if (typeof AdminVaultBackup !== 'undefined' && typeof AdminVaultBackup.renderStatus === 'function') AdminVaultBackup.renderStatus();
 }
 
 /* Показываем только те блоки панели, на которые у роли есть права */

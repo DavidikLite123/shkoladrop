@@ -283,18 +283,38 @@ function genPlayerTag() {
   return tag;
 }
 
-function upsertPlayer(uidValue, nick, ip) {
+function upsertPlayer(uidValue, nick, ip, extra) {
   if (!uidValue) return null;
   let p = db.players[uidValue];
   const isNew = !p;
   if (!p) p = { uid: uidValue, nick: '', verified: false, firstSeen: Date.now() };
-  if (typeof p.verified !== 'boolean') p.verified = false; // старые записи
+  if (typeof p.verified !== 'boolean') p.verified = false;
   if (typeof p.banned !== 'boolean') p.banned = false;
   if (!('role' in p)) p.role = null;
   if (!('status' in p)) p.status = null;
-  // Ник обновляем, только если он не занят другим игроком (уникальность ников)
   if (nick && !nickTakenBy(nick, uidValue)) p.nick = nick;
-  if (!p.tag) p.tag = genPlayerTag(); // автовыдача уникального ID при входе в обновлённую версию
+  // tag: если игрока нет — генерируем, но если extra.tag передан и свободен — используем его (восстановление из vault)
+  if (!p.tag) {
+    if (extra && extra.tag && /^#\d{4,8}$/.test(extra.tag)) {
+      const used = Object.values(db.players).some(pl => pl.tag === extra.tag && pl.uid !== uidValue);
+      p.tag = used ? genPlayerTag() : extra.tag;
+    } else {
+      p.tag = genPlayerTag();
+    }
+  } else if (extra && extra.tag && p.tag !== extra.tag) {
+    // если сервер стёрся и tag пропал — но в extra старый tag и он свободен — восстановим
+    // (только если текущий tag был сгенерирован заново после вайпа)
+    // для безопасности — не перетираем если tag уже есть, кроме случая восстановления
+  }
+  // extra может содержать verified/role/status для восстановления из vault (только если у игрока их нет)
+  if (extra) {
+    if (extra.verified && !p.verified) p.verified = true;
+    if (extra.role && !p.role) p.role = extra.role;
+    if (extra.status && !p.status) p.status = extra.status;
+    if (extra.email && !accountEmailOf(uidValue)) {
+      // email привязывается через accounts, не здесь
+    }
+  }
   p.lastSeen = Date.now();
   if (ip) p.ip = ip;
   db.players[uidValue] = p;
@@ -757,7 +777,19 @@ const routes = {
       return send(res, 400, { ok: false, error: 'save не похож на сохранение игры' });
     }
     db.saves[pUid] = { save, updatedAt: Date.now() };
-    const pl = upsertPlayer(pUid, cleanStr(body.nick, 24), clientIp(req));
+    const extra = save.user ? {
+      tag: save.user.tag || null,
+      verified: !!save.user.verified,
+      role: save.user.role || null,
+      status: save.user.status || null
+    } : null;
+    const pl = upsertPlayer(pUid, cleanStr(body.nick, 24), clientIp(req), extra);
+    // если в save есть verified/role/status и у игрока их нет — восстанавливаем
+    if (pl && extra) {
+      if (extra.verified && !pl.verified) pl.verified = true;
+      if (extra.role && !pl.role) pl.role = extra.role;
+      if (extra.status && !pl.status) pl.status = extra.status;
+    }
     dbSave();
     // Заодно отдаём уникальный ID и галочку: второй канал выдачи для клиента
     // (помогает, если стартовый /api/auth/sync не прошёл — сервер спал и т.п.)
@@ -885,6 +917,168 @@ const routes = {
       seasonNotice: db.meta ? db.meta.seasonNotice : null,
       seasonApology: db.meta ? db.meta.seasonApology : null
     });
+  },
+
+  /* ---- АДМИН: дамп всех данных для бэкапа в localStorage телефона ---- */
+  'GET /api/admin/dump': (req, res) => {
+    if (!isOwner(req)) return send(res, 403, { ok: false, error: 'только владелец может делать полный дамп' });
+    // отдаём всё кроме слишком больших полей, но достаточно для восстановления
+    const players = Object.values(db.players);
+    const saves = db.saves;
+    const accountsCount = Object.keys(db.accounts || {}).length;
+    const supporters = db.supporters;
+    const earnings = db.earnings;
+    const chat = db.chat.slice(-100);
+    const dmsCount = db.dms.length;
+    const giftsCount = db.gifts.length;
+    const tradesCount = db.trades.length;
+    send(res, 200, {
+      ok: true,
+      at: Date.now(),
+      version: SERVER_VERSION,
+      players,
+      saves,
+      supporters,
+      earnings,
+      chat,
+      meta: db.meta,
+      counts: {
+        players: players.length,
+        saves: Object.keys(saves).length,
+        accounts: accountsCount,
+        supporters: Object.keys(supporters).length,
+        chat: chat.length,
+        dms: dmsCount,
+        gifts: giftsCount,
+        trades: tradesCount
+      }
+    });
+  },
+
+  /* ---- АДМИН: восстановить из бэкапа localStorage телефона ---- */
+  'POST /api/admin/restore': async (req, res, body) => {
+    if (!isOwner(req)) return send(res, 403, { ok: false, error: 'только владелец может восстанавливать' });
+    const backup = body.backup;
+    if (!backup || typeof backup !== 'object') return send(res, 400, { ok: false, error: 'нет backup' });
+    let restoredPlayers = 0, restoredSaves = 0, restoredStatuses = 0;
+    try {
+      // players из backup.players или backup.dump.players
+      const playersList = (backup.players && Array.isArray(backup.players) ? backup.players : [])
+        .concat(backup.dump && backup.dump.players ? backup.dump.players : [])
+        .concat(backup.playersDetailed ? backup.playersDetailed.map(d => d.player).filter(Boolean) : []);
+      const uniq = {};
+      playersList.forEach(p => { if (p && p.uid) uniq[p.uid] = p; });
+      Object.values(uniq).forEach(p => {
+        const uid = cleanStr(p.uid, 80);
+        if (!uid) return;
+        const existing = db.players[uid];
+        if (!existing) {
+          db.players[uid] = {
+            uid, nick: cleanStr(p.nick || 'Игрок', 24), tag: p.tag && /^#\d{4,8}$/.test(p.tag) ? p.tag : null,
+            verified: !!p.verified, role: p.role || null, status: p.status || null,
+            banned: !!p.banned, banReason: p.banReason || null, banBy: p.banBy || null, banAt: p.banAt || null,
+            firstSeen: p.firstSeen || Date.now(), lastSeen: p.lastSeen || Date.now(), ip: p.ip || null
+          };
+          if (!db.players[uid].tag) db.players[uid].tag = genPlayerTag();
+          restoredPlayers++;
+        } else {
+          // обновляем только если у существующего нет статуса/галочки/роли, а в бэкапе есть
+          if (p.tag && !existing.tag) { existing.tag = p.tag; restoredStatuses++; }
+          if (p.verified && !existing.verified) { existing.verified = true; restoredStatuses++; }
+          if (p.role && !existing.role) { existing.role = p.role; restoredStatuses++; }
+          if (p.status && !existing.status) { existing.status = p.status; restoredStatuses++; }
+          if (p.nick && !existing.nick) existing.nick = p.nick;
+          if (p.banned && !existing.banned) { existing.banned = true; existing.banReason = p.banReason || null; }
+        }
+      });
+      // saves
+      const savesSource = (backup.dump && backup.dump.saves) ? backup.dump.saves : {};
+      const detailed = backup.playersDetailed || [];
+      detailed.forEach(d => {
+        if (d && d.player && d.player.uid && d.save) {
+          const uid = cleanStr(d.player.uid, 80);
+          if (!db.saves[uid]) {
+            db.saves[uid] = { save: d.save, updatedAt: Date.now() };
+            restoredSaves++;
+          }
+        }
+      });
+      Object.keys(savesSource).forEach(uidKey => {
+        const uid = cleanStr(uidKey, 80);
+        if (!db.saves[uid] && savesSource[uidKey]) {
+          db.saves[uid] = savesSource[uidKey];
+          restoredSaves++;
+        }
+      });
+      // supporters / earnings из dump
+      if (backup.dump && backup.dump.supporters) {
+        Object.keys(backup.dump.supporters).forEach(k => {
+          if (!db.supporters[k]) db.supporters[k] = backup.dump.supporters[k];
+        });
+      }
+      if (backup.dump && backup.dump.earnings) {
+        Object.keys(backup.dump.earnings).forEach(k => {
+          if (!db.earnings[k]) db.earnings[k] = backup.dump.earnings[k];
+        });
+      }
+      // playersVault из backup
+      if (backup.playersVault && typeof backup.playersVault === 'object') {
+        Object.values(backup.playersVault).forEach(p => {
+          if (!p || !p.uid) return;
+          const uid = cleanStr(p.uid, 80);
+          if (!db.players[uid]) {
+            db.players[uid] = {
+              uid, nick: cleanStr(p.nick || 'Игрок', 24), tag: p.tag || null,
+              verified: !!p.verified, role: p.role || null, status: p.status || null,
+              firstSeen: Date.now(), lastSeen: Date.now()
+            };
+            if (!db.players[uid].tag) db.players[uid].tag = genPlayerTag();
+            restoredPlayers++;
+          }
+        });
+      }
+      dbSave();
+      send(res, 200, { ok: true, restoredPlayers, restoredSaves, restoredStatuses, totalPlayers: Object.keys(db.players).length });
+    } catch (e) {
+      send(res, 500, { ok: false, error: 'ошибка восстановления: ' + e.message });
+    }
+  },
+
+  /* ---- АДМИН: сменить ownerUid у существующего кода автора ---- */
+  'POST /api/admin/author-codes/update': async (req, res, body) => {
+    if (!isOwner(req)) return send(res, 403, { ok: false, error: 'только владелец меняет id-коды авторов' });
+    const code = normalizeCode(body.code);
+    const newOwnerUidRaw = cleanStr(body.ownerUid, 80);
+    const newOwnerName = body.ownerName ? cleanStr(body.ownerName, 60) : null;
+    if (!code) return send(res, 400, { ok: false, error: 'нужен code' });
+    if (!newOwnerUidRaw) return send(res, 400, { ok: false, error: 'нужен ownerUid' });
+    const reg = loadRegistry();
+    const idx = reg.codes.findIndex(c => normalizeCode(c.code) === code);
+    if (idx === -1) return send(res, 404, { ok: false, error: 'код не найден' });
+    const byTag = /^#?\d{4,8}$/.test(newOwnerUidRaw) ? findPlayer(newOwnerUidRaw) : null;
+    const finalUid = byTag ? byTag.uid : newOwnerUidRaw;
+    reg.codes[idx].ownerUid = finalUid;
+    if (newOwnerName) reg.codes[idx].ownerName = newOwnerName;
+    if (byTag || /^#?\d{4,8}$/.test(newOwnerUidRaw)) {
+      reg.codes[idx].ownerTag = newOwnerUidRaw.startsWith('#') ? newOwnerUidRaw : '#' + newOwnerUidRaw;
+    } else {
+      delete reg.codes[idx].ownerTag;
+    }
+    try { saveRegistry(reg); } catch (e) { return send(res, 500, { ok: false, error: 'не смог сохранить author-codes.json: ' + e.message }); }
+    send(res, 200, { ok: true, entry: reg.codes[idx] });
+  },
+
+  /* ---- АДМИН: удалить код автора ---- */
+  'POST /api/admin/author-codes/delete': async (req, res, body) => {
+    if (!isOwner(req)) return send(res, 403, { ok: false, error: 'только владелец удаляет коды' });
+    const code = normalizeCode(body.code);
+    if (!code) return send(res, 400, { ok: false, error: 'нужен code' });
+    const reg = loadRegistry();
+    const before = reg.codes.length;
+    reg.codes = reg.codes.filter(c => normalizeCode(c.code) !== code);
+    if (reg.codes.length === before) return send(res, 404, { ok: false, error: 'код не найден' });
+    try { saveRegistry(reg); } catch (e) { return send(res, 500, { ok: false, error: 'не смог сохранить: ' + e.message }); }
+    send(res, 200, { ok: true, removed: code });
   },
 
   /* -------------------- ПОДАРКИ -------------------- */

@@ -3,6 +3,8 @@
    Файлы cookie (согласие, категории, настройки, метаданные, бэкап прогресса),
    localStorage-сохранение и ВАЙП СЕЗОНА 3.7 (прогресс обнуляется,
    ник и уникальный ID аккаунта переносятся).
+   + RESILIENT VAULT 4.0: двойное сохранение в localStorage + сервер,
+     UID-lock, ledger статусов, админ-бэкап всех игроков.
    ========================================================================== */
 
 /* --------------------------------------------------------------------------
@@ -268,6 +270,178 @@ const MetaStore = {
 };
 
 /* --------------------------------------------------------------------------
+   5.5 RESILIENT VAULT — двойное сохранение: localStorage + сервер
+   --------------------------------------------------------------------------
+   Идея: все критичные данные (id, tag, статусы, галочки, роли, vip, автор-код,
+   баланс, инвентарь) дублируются в отдельные ключи localStorage, которые
+   переживают даже полный вайп сейва. Если сервер стёрся — при следующем
+   входе игра берёт данные из vault и сама перезаливает их на сервер.
+   Телефон админа может сохранить ВСЕХ игроков в один бэкап и потом
+   восстановить их на чистый сервер одной кнопкой.
+   -------------------------------------------------------------------------- */
+const IdentityVault = {
+  UID_LOCK: 'shkola_uid_lock_v1',
+  VAULT: 'shkola_identity_vault_v1',
+  PLAYERS: 'shkola_players_vault_v1',
+  STATUS_LEDGER: 'shkola_status_ledger_v1',
+  ADMIN_BACKUP: 'shkola_admin_full_backup_v1',
+  AUTHOR_CODES: 'shkola_author_codes_vault_v1',
+
+  /* ---- UID lock: id никогда не меняется случайно ---- */
+  getUidLock() {
+    try { return localStorage.getItem(this.UID_LOCK) || null; } catch (e) { return null; }
+  },
+  setUidLock(uid) {
+    if (!uid) return;
+    try { localStorage.setItem(this.UID_LOCK, String(uid)); } catch (e) {}
+  },
+  clearUidLock() {
+    try { localStorage.removeItem(this.UID_LOCK); } catch (e) {}
+  },
+
+  /* ---- Основной vault: мой профиль + баланс + инвентарь + статусы ---- */
+  loadVault() {
+    try {
+      const raw = localStorage.getItem(this.VAULT);
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch (e) { return null; }
+  },
+  saveVault(obj) {
+    try {
+      const prev = this.loadVault() || {};
+      const merged = Object.assign({}, prev, obj, { at: Date.now() });
+      localStorage.setItem(this.VAULT, JSON.stringify(merged));
+      if (obj && obj.user && obj.user.id) this.setUidLock(obj.user.id);
+      if (obj && obj.uid) this.setUidLock(obj.uid);
+      return true;
+    } catch (e) { return false; }
+  },
+  saveFromSnapshot(snap) {
+    if (!snap || typeof snap !== 'object') return;
+    const u = snap.user || null;
+    const s = snap.stats || {};
+    const payload = {
+      uid: u ? u.id : (s ? s.uid : null) || this.getUidLock(),
+      user: u ? Object.assign({}, u) : null,
+      balance: snap.balance,
+      inventory: Array.isArray(snap.inventory) ? snap.inventory.slice(0, 200) : [],
+      stats: {
+        level: s.level, xp: s.xp, vipActive: !!s.vipActive, vipCode: s.vipCode || '',
+        authorCode: s.authorCode || null, promosUsed: s.promosUsed || [],
+        betaTester: !!s.betaTester, achievements: s.achievements || [],
+        biggestDrop: s.biggestDrop, biggestDropName: s.biggestDropName
+      },
+      settings: snap.settings || null,
+      at: Date.now()
+    };
+    if (u) {
+      payload.tag = u.tag || null;
+      payload.nick = u.nick || null;
+      payload.verified = !!u.verified;
+      payload.role = u.role || null;
+      payload.status = u.status || null;
+      payload.email = u.email || null;
+    }
+    this.saveVault(payload);
+    if (u && u.id) this.setUidLock(u.id);
+    // также сохраняем игрока в общий vault
+    if (u && u.id) this.savePlayer(u);
+  },
+
+  /* ---- Vault игроков: все известные игроки (для админ-бэкапа) ---- */
+  loadPlayersVault() {
+    try {
+      const raw = localStorage.getItem(this.PLAYERS);
+      if (!raw) return {};
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch (e) { return {}; }
+  },
+  savePlayer(player) {
+    if (!player || !player.uid) return;
+    try {
+      const all = this.loadPlayersVault();
+      all[player.uid] = Object.assign({}, all[player.uid] || {}, player, { _vaultAt: Date.now() });
+      localStorage.setItem(this.PLAYERS, JSON.stringify(all));
+    } catch (e) {}
+  },
+  savePlayersBulk(playersArray) {
+    if (!Array.isArray(playersArray)) return;
+    try {
+      const all = this.loadPlayersVault();
+      playersArray.forEach(p => {
+        if (!p || !p.uid) return;
+        all[p.uid] = Object.assign({}, all[p.uid] || {}, p, { _vaultAt: Date.now() });
+      });
+      localStorage.setItem(this.PLAYERS, JSON.stringify(all));
+    } catch (e) {}
+  },
+  clearPlayersVault() {
+    try { localStorage.removeItem(this.PLAYERS); } catch (e) {}
+  },
+
+  /* ---- Ledger статусов: кто кому когда выдал статус/галочку/роль ---- */
+  loadStatusLedger() {
+    try {
+      const raw = localStorage.getItem(this.STATUS_LEDGER);
+      if (!raw) return [];
+      const arr = JSON.parse(raw);
+      return Array.isArray(arr) ? arr : [];
+    } catch (e) { return []; }
+  },
+  logStatus(entry) {
+    if (!entry || !entry.uid) return;
+    try {
+      const ledger = this.loadStatusLedger();
+      ledger.push(Object.assign({ at: Date.now() }, entry));
+      const trimmed = ledger.slice(-500);
+      localStorage.setItem(this.STATUS_LEDGER, JSON.stringify(trimmed));
+    } catch (e) {}
+    this.savePlayer({
+      uid: entry.uid, tag: entry.tag || null, nick: entry.nick || null,
+      status: entry.status !== undefined ? entry.status : null,
+      verified: entry.verified !== undefined ? !!entry.verified : undefined,
+      role: entry.role !== undefined ? entry.role : undefined
+    });
+  },
+
+  /* ---- Автор-коды vault: чтобы id-код авторов можно было менять локально ---- */
+  loadAuthorCodesVault() {
+    try {
+      const raw = localStorage.getItem(this.AUTHOR_CODES);
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch (e) { return null; }
+  },
+  saveAuthorCodesVault(data) {
+    try { localStorage.setItem(this.AUTHOR_CODES, JSON.stringify(data)); return true; } catch (e) { return false; }
+  },
+
+  /* ---- Админ-бэкап всего сервера ---- */
+  loadAdminBackup() {
+    try {
+      const raw = localStorage.getItem(this.ADMIN_BACKUP);
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch (e) { return null; }
+  },
+  saveAdminBackup(backup) {
+    try {
+      const payload = Object.assign({ at: Date.now(), version: (typeof SAVE_VERSION !== 'undefined' ? SAVE_VERSION : 14) }, backup);
+      localStorage.setItem(this.ADMIN_BACKUP, JSON.stringify(payload));
+      return true;
+    } catch (e) { return false; }
+  },
+  clearAdminBackup() {
+    try { localStorage.removeItem(this.ADMIN_BACKUP); } catch (e) {}
+  },
+  hasAdminBackup() {
+    return !!this.loadAdminBackup();
+  }
+};
+
+/* --------------------------------------------------------------------------
    6. МЕНЕДЖЕР СОХРАНЕНИЙ
    -------------------------------------------------------------------------- */
 const SaveManager = {
@@ -307,16 +481,13 @@ const SaveManager = {
     stats.idle.pending = Math.max(0, Number(stats.idle.pending) || 0);
     stats.idle.lastCollect = Number(stats.idle.lastCollect) || 0;
     stats.idle.lastTick = Number(stats.idle.lastTick) || 0;
-    // Признак VIP-статуса — булево на случай если в старом сохранении его вообще не было
     if (typeof stats.vipActive !== 'boolean') stats.vipActive = false;
     if (typeof stats.vipActivatedAt !== 'number') stats.vipActivatedAt = 0;
     if (typeof stats.vipCode !== 'string') stats.vipCode = '';
-    // То же для бета-доступа и тестовой ветки 3.6
     if (typeof stats.betaTester !== 'boolean') stats.betaTester = false;
     if (typeof stats.betaActivatedAt !== 'number') stats.betaActivatedAt = 0;
     if (typeof stats.betaMode !== 'boolean') stats.betaMode = false;
     if (typeof stats.betaSavedNick !== 'string') stats.betaSavedNick = '';
-    // Спонсорство и сеть
     if (!stats.authorCode || typeof stats.authorCode !== 'object' || !stats.authorCode.code) stats.authorCode = null;
     ['authorRoyaltyLocal', 'authorRoyaltyPending', 'netGiftsSent', 'netGiftsReceived', 'netTradesDone'].forEach(k => {
       if (!Number.isFinite(stats[k])) stats[k] = 0;
@@ -327,19 +498,15 @@ const SaveManager = {
     data.lastSeen = raw.lastSeen || Date.now();
     data.version = SAVE_VERSION;
 
-    // Предметы из старых версий без нужных полей — достраиваем из каталога
     data.inventory = data.inventory.map(inv => {
-      const proto = ITEMS_BY_ID[inv.id];
+      const proto = (typeof ITEMS_BY_ID !== 'undefined' && ITEMS_BY_ID[inv.id]) ? ITEMS_BY_ID[inv.id] : null;
       return Object.assign({}, proto || {}, inv, { uid: inv.uid || 'legacy_' + inv.id + '_' + Math.random().toString(36).slice(2, 7) });
     });
 
     return data;
   },
 
-  /** Чтение: localStorage (v14) → cookie-бэкап v14 → ПОЛНЫЙ ВАЙП СЕЗОНА 3.9/3.5.
-      Все старые версии (v13 и ниже) сбрасываются ПОЛНОСТЬЮ: и прогресс, и аккаунт.
-      При обнаружении старого сохранения выставляется флаг hadOldSave — чтобы показать
-      одноразовое уведомление «прости, твой аккаунт был сброшен» + подарок-извинение. */
+  /** Чтение: localStorage (v14) → cookie-бэкап v14 → vault → вайп */
   load() {
     let raw = null;
 
@@ -349,16 +516,79 @@ const SaveManager = {
     } catch (e) {}
 
     if (!raw) {
-      // cookie-бэкап принимается ТОЛЬКО текущей версии (см. readCookieBackup),
-      // чтобы старый бэкап не воскресил вайпнутый прогресс
       const cookieBackup = this.readCookieBackup();
       if (cookieBackup) raw = cookieBackup;
     }
 
-    if (raw) return { data: this.normalize(raw), migrated: false, fresh: false, wiped: false, carriedUser: false, hadOldSave: false };
+    // ---- Если есть основной сейв — применяем vault поверх для защиты от случайной смены id ----
+    if (raw) {
+      let data = this.normalize(raw);
+      try {
+        const uidLock = IdentityVault.getUidLock();
+        const vault = IdentityVault.loadVault();
+        // UID-lock: id никогда не меняется случайно
+        if (uidLock) {
+          if (data.user && data.user.id && data.user.id !== uidLock) {
+            // если в сейве новый id, а в lock старый — оставляем старый (защита)
+            // но если сейв явно новее и vault подтверждает новый id — обновим lock
+            if (vault && vault.uid && vault.uid === data.user.id) {
+              IdentityVault.setUidLock(data.user.id);
+            } else if (vault && vault.user && vault.user.id === uidLock) {
+              data.user.id = uidLock;
+            } else {
+              // по умолчанию доверяем lock, если vault старше
+              data.user.id = uidLock;
+            }
+          }
+          if (!data.user && vault && vault.user && vault.user.id === uidLock) {
+            data.user = vault.user;
+          }
+        }
+        // Vault восстанавливает критичные поля если они пропали
+        if (vault && vault.user) {
+          if (!data.user) {
+            data.user = vault.user;
+          } else {
+            if (vault.user.tag && !data.user.tag) data.user.tag = vault.user.tag;
+            if (vault.user.verified && !data.user.verified) data.user.verified = true;
+            if (vault.user.role && !data.user.role) data.user.role = vault.user.role;
+            if (vault.user.status && !data.user.status) data.user.status = vault.user.status;
+            if (vault.user.email && !data.user.email) data.user.email = vault.user.email;
+            if (vault.tag && !data.user.tag) data.user.tag = vault.tag;
+          }
+          // баланс/инвентарь из vault если локальный пустой
+          if (vault.balance && data.balance < 2000 && vault.balance > data.balance) data.balance = vault.balance;
+          if (vault.inventory && vault.inventory.length && !data.inventory.length) data.inventory = vault.inventory;
+          if (vault.stats) {
+            if (vault.stats.vipActive && !data.stats.vipActive) data.stats.vipActive = true;
+            if (vault.stats.authorCode && !data.stats.authorCode) data.stats.authorCode = vault.stats.authorCode;
+          }
+        }
+      } catch (e) {}
+      return { data, migrated: false, fresh: false, wiped: false, carriedUser: false, hadOldSave: false };
+    }
+
+    // ---- Нет основного сейва — пробуем восстановить из vault (сервер стёрся, но localStorage жив) ----
+    try {
+      const vault = IdentityVault.loadVault();
+      if (vault && vault.user && vault.uid) {
+        const fromVault = {
+          version: SAVE_VERSION,
+          balance: vault.balance || 2000,
+          inventory: vault.inventory || [],
+          user: vault.user,
+          stats: Object.assign(freshStats(), vault.stats || {}),
+          settings: vault.settings || Object.assign({}, (typeof DEFAULT_SETTINGS !== 'undefined' ? DEFAULT_SETTINGS : {})),
+          createdAt: vault.at || Date.now(),
+          lastSeen: Date.now()
+        };
+        const data = this.normalize(fromVault);
+        // помечаем что это восстановление из vault
+        return { data, migrated: false, fresh: false, wiped: false, carriedUser: true, hadOldSave: true, oldUser: null, fromVault: true };
+      }
+    } catch (e) {}
 
     // ---------- ПОЛНЫЙ ВАЙП СЕЗОНА 3.9 ----------
-    // Проверяем, был ли вообще какой-то старый прогресс (чтобы показать уведомление о сбросе)
     let hadOldSave = false;
     let carriedUser = null;
     try {
@@ -379,13 +609,9 @@ const SaveManager = {
     } catch (e) {}
 
     const data = this.defaultData();
-    // v13 — ПОЛНЫЙ сброс аккаунтов: личность НЕ переносим, игрок начинает заново
-    // (старый ник/ID остаются только для флага уведомления)
     return { data: data, migrated: false, fresh: true, wiped: true, carriedUser: !!carriedUser, hadOldSave: !!hadOldSave, oldUser: carriedUser || null };
   },
 
-  /** Вытащить личность (ник/id/галочку) из сохранений старых версий — для вайпа 3.7.
-      Возвращает профиль в актуальном виде: обязательно с полем .id (боевой uid аккаунта). */
   _carriedFrom(u) {
     if (!u || !u.nick) return null;
     const out = Object.assign({}, u);
@@ -407,7 +633,6 @@ const SaveManager = {
         if (carried) return carried;
       } catch (e) {}
     }
-    // Проверим ещё и старый cookie-бэкап v11 — вдруг там сохранились ник/ID
     try {
       const compact = this.readCookieJson();
       const carried = this._carriedFrom(compact && compact.u);
@@ -416,7 +641,6 @@ const SaveManager = {
     return null;
   },
 
-  /** Данные старой версии (используется кнопкой «восстановить старое сохранение», если она ещё присутствует) */
   readLegacy() {
     for (const key of LEGACY_KEYS) {
       try {
@@ -435,7 +659,7 @@ const SaveManager = {
     return null;
   },
 
-  /** Основная запись: localStorage + компактная копия в cookie */
+  /** Основная запись: localStorage + компактная копия в cookie + vault */
   save(data) {
     if (!Consent.saveAllowed()) return false;
 
@@ -453,11 +677,8 @@ const SaveManager = {
 
     this.writeCookieBackup(data);
 
-    // Метаданные — всегда, они крошечные и относятся к обязательным.
-    // ВАЖНО: пишем поверх уже сохранённого, иначе теряются флаги вроде welcomeSeen
-    // (из-за этого приветственное окно показывалось каждый заход и блокировало прокрутку).
     MetaStore.write(Object.assign(MetaStore.read(), {
-      version: APP_VERSION,
+      version: (typeof APP_VERSION !== 'undefined' ? APP_VERSION : '4.0'),
       saveVersion: SAVE_VERSION,
       lastSeen: Date.now(),
       level: data.stats.level,
@@ -469,10 +690,16 @@ const SaveManager = {
       balanceHint: data.balance
     }));
 
+    // ---- Двойное сохранение: vault + uid-lock ----
+    try {
+      IdentityVault.saveFromSnapshot(data);
+      if (data.user && data.user.id) IdentityVault.setUidLock(data.user.id);
+      if (data.user) IdentityVault.savePlayer(data.user);
+    } catch (e) {}
+
     return lsOk;
   },
 
-  /** Компактная резервная копия прогресса в cookie (до 3 блоков) */
   writeCookieBackup(data) {
     this.clearCookieBackup();
     if (!Consent.saveAllowed()) return false;
@@ -509,7 +736,6 @@ const SaveManager = {
     return true;
   },
 
-  /** Сырой JSON cookie-бэкапа (любой версии) — для вайп-переноса ника/ID */
   readCookieJson() {
     const count = parseInt(CookieStore.get(this.chunkPrefix + 'count') || '0', 10);
     if (!count || count < 1 || count > COOKIE_MAX_CHUNKS) return null;
@@ -529,15 +755,13 @@ const SaveManager = {
   readCookieBackup() {
     const compact = this.readCookieJson();
     if (!compact) return null;
-    // Принимаем бэкап ТОЛЬКО актуальной версии — иначе после вайпа
-    // старый бэкап вернёт игроку весь сброшенный прогресс
     if (compact.v !== SAVE_VERSION) return null;
     try {
       return {
         version: compact.v || SAVE_VERSION,
         balance: compact.b,
         inventory: (compact.i || []).map(x => {
-          const proto = ITEMS_BY_ID[x.id] || {};
+          const proto = (typeof ITEMS_BY_ID !== 'undefined' && ITEMS_BY_ID[x.id]) ? ITEMS_BY_ID[x.id] : {};
           return Object.assign({}, proto, { uid: x.uid, wonAt: x.wonAt });
         }),
         user: compact.u || null,
@@ -572,13 +796,23 @@ const SaveManager = {
     } catch (e) {}
     this.clearCookieBackup();
     CookieStore.remove(MetaStore.COOKIE_META);
+    // ВАЖНО: vault НЕ чистим — он должен пережить вайп, чтобы восстановить данные с сервера
+    // IdentityVault остаётся для автовосстановления
   },
 
-  /** Текстовая резервная копия для ручного бэкапа */
+  clearAllIncludingVault() {
+    this.clearAll();
+    try {
+      localStorage.removeItem(IdentityVault.UID_LOCK);
+      localStorage.removeItem(IdentityVault.VAULT);
+      // PLAYERS и STATUS_LEDGER и ADMIN_BACKUP тоже можно очистить по желанию, но по умолчанию оставляем
+    } catch (e) {}
+  },
+
   exportString(data) {
     return JSON.stringify({
       app: 'shkola-drop',
-      version: APP_VERSION,
+      version: (typeof APP_VERSION !== 'undefined' ? APP_VERSION : '4.0'),
       exportedAt: new Date().toISOString(),
       data: data
     });
