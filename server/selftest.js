@@ -415,14 +415,14 @@ async function main() {
   console.log('\n— Сезон 3.5: подарок-извинение + обязательный онлайн (без вайпа) —');
   // Проверяем что /api/ping теперь отдаёт сезон 3.5 и подарок
   let ping = await j(await fetch(`${BASE}/ping`));
-  t('ping сезона 3.5: version 1.6.0', ping.ok && ping.version === '1.6.0');
+  t('ping сезона 3.5 / версии 4.0: version 2.0.0', ping.ok && ping.version === '2.0.0');
   t('ping сезона 3.5: season=3.5-apology', ping.season === '3.5-apology');
   t('ping сезона 3.5: seasonNotice=3.5', ping.seasonNotice === '3.5');
   t('ping сезона 3.5: apologyGift есть (gift_apology_35)', ping.apologyGift && ping.apologyGift.giftId === 'gift_apology_35');
 
   // overview тоже должен отдавать сезон
   const ov2 = await j(await fetch(`${BASE}/admin/overview`, { headers: ADMIN }));
-  t('overview сезона 3.5: version 1.6.0 + season 3.5', ov2.ok && ov2.version === '1.6.0' && ov2.season === '3.5-apology');
+  t('overview сезона 3.5 / 4.0: version 2.0.0 + season 3.5', ov2.ok && ov2.version === '2.0.0' && ov2.season === '3.5-apology');
   t('overview сезона 3.5: seasonNotice + apology', ov2.seasonNotice === '3.5' && ov2.seasonApology && ov2.seasonApology.giftId === 'gift_apology_35');
 
   // Проверяем что база НЕ вайпается при рестарте (сезон 3.5 без вайпа)
