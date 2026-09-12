@@ -2306,7 +2306,7 @@ function renderPromoList() {
     const vipHint = state.stats.vipActive
       ? '<br><span class="text-amber-400">👑 VIP-статус активен — налог миллионера отключён навсегда!</span>'
       : `<br><span class="text-fuchsia-400">VIP за ${VIP_PRICE_RUB}₽ отключает налог миллионера навсегда</span>`;
-    box.innerHTML = `<span class="text-[10px] text-slate-500">Пока ни один код не активирован. Подсказка: следи за видео David Lite 🎬<br><span class="text-fuchsia-400">Коды обновления 3.0.2: NEWUPDATE2026, GORABOGDAN5G</span>${vipHint}</span>`;
+    box.innerHTML = `<span class="text-[10px] text-slate-500">Пока ни один код не активирован. Подсказка: следи за видео David Lite 🎬<br><span class="text-fuchsia-400">Коды сезона 3.5 / версии 4.0: YTDAVID4, APOLOGY35, SORRY39, SERVERONLINE35, GIFT4YOU, SHKOLA4LIFE, COMEBACK35, CLOUDSAVE4, ONLINE35, THANKS35</span><br><span class="text-cyan-400">Старые: NEWUPDATE2026, GORABOGDAN5G, LEGENDAPH2026</span>${vipHint}</span>`;
     return;
   }
   box.innerHTML = used.map(code => {
