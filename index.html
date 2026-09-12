@@ -945,6 +945,24 @@
               <div id="statSchoolRank" class="stat-tile-value text-fuchsia-300 text-xs">Любитель</div>
             </div>
           </div>
+
+          <!-- 4.1 Перерождение -->
+          <div id="rebirthBlock" class="bg-gradient-to-br from-slate-900 to-slate-950 border border-amber-500/20 rounded-xl p-2.5 space-y-2">
+            <div class="flex items-center justify-between">
+              <div class="text-[11px] font-black text-amber-300 uppercase tracking-wider">🔄 Перерождение 4.1</div>
+              <span id="rebirthLevelBadge" class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">0 / 10</span>
+            </div>
+            <div id="rebirthCardDisplay" class="rounded-lg p-2.5 border bg-slate-950/70 text-center">
+              <div class="text-[10px] text-slate-500">Нет карты — переродись, чтобы получить бронзовую кредитку</div>
+            </div>
+            <div id="creditInfo" class="text-[10px] text-slate-400 leading-relaxed"></div>
+            <div class="grid grid-cols-2 gap-1.5">
+              <button onclick="openRebirthModal()" class="py-2 rounded-lg bg-gradient-to-r from-amber-500 to-orange-600 text-black font-bold text-[11px] transition active:scale-95">🔄 Переродиться</button>
+              <button onclick="repayAllCredit()" class="py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-[11px] transition">💳 Вернуть долг</button>
+            </div>
+            <div id="bankruptWarning" class="hidden text-[10px] font-bold p-1.5 rounded-lg border"></div>
+          </div>
+
           <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-2.5 space-y-1">
             <div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Прогресс до следующего уровня</div>
             <div id="profileLevelHint" class="text-[11px] text-slate-300">Открой кейс или задепай предмет, чтобы получить опыт</div>
@@ -1025,6 +1043,25 @@
           </button>
         </div>
         <div class="text-[9px] text-slate-500 text-center leading-relaxed">Один человек — один аккаунт на одну почту. Хочешь другое имя — просто смени ник, новый аккаунт создавать не нужно.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL: REBIRTH 4.1 ================= -->
+  <div id="rebirthModal" class="app-modal hidden">
+    <div class="modal-card max-w-sm w-full max-h-[85vh] overflow-y-auto">
+      <div class="flex items-center justify-between pb-2 mb-3 border-b border-slate-800">
+        <h3 class="font-cs text-sm font-bold uppercase text-amber-300">🔄 Перерождение 4.1</h3>
+        <button onclick="closeRebirthModal()" class="text-slate-400 hover:text-white text-lg leading-none">✕</button>
+      </div>
+      <div class="space-y-3">
+        <div class="text-[11px] text-slate-300 leading-relaxed">
+          Перерождение — сбрось прогресс, но получи <b class="text-amber-300">кредитную карту</b> с лимитом. Если баланс пуст — можешь взять предмет в кредит! Лимит растёт с каждым уровнем, на 10-м — <b class="text-fuchsia-300">радужная карта 100B ₽</b>. Долг надо вернуть за <b>1 час</b>, иначе получишь титул <b class="text-rose-400">банкрот</b> (или <b class="text-sky-300">воздухан</b> с шансом 15%) в чате!
+        </div>
+        <div id="rebirthCardsList" class="grid grid-cols-1 gap-2"></div>
+        <div id="rebirthNextReq" class="bg-slate-950/70 border border-slate-800 rounded-xl p-2.5 text-[11px] text-slate-300"></div>
+        <button id="rebirthDoBtn" onclick="doRebirth()" class="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 text-black font-cs font-bold text-xs uppercase tracking-wider shadow-lg active:scale-95 transition">🔄 ПЕРЕРОДИТЬСЯ</button>
+        <div class="text-[9px] text-slate-500 text-center">Максимум 10 перерождений. Титулы по цвету карты отображаются в онлайн-чате!</div>
       </div>
     </div>
   </div>
@@ -1298,6 +1335,14 @@
               <div class="text-[10px] text-slate-500">Когда кто-то пишет в общий чат, всплывает подсказка — даже если окно сообщества закрыто (сервер должен быть онлайн).</div>
             </div>
             <button id="setChatNotifyToggle" onclick="toggleChatNotifySetting()" class="toggle-pill flex-shrink-0">ВЫКЛ</button>
+          </div>
+
+          <div class="setting-row border-t border-violet-900/40 pt-2.5 mt-1">
+            <div class="min-w-0 pr-2">
+              <div class="text-[11px] font-bold text-indigo-200">🚀 Бета 4.1 — предметы вне школы</div>
+              <div class="text-[10px] text-slate-500">Включает кейсы и предметы не из школьной тематики (неон, кибер, космос). Для теста обновления 4.1 — перерождение.</div>
+            </div>
+            <button id="setBeta41Toggle" onclick="toggleBeta41Setting()" class="toggle-pill flex-shrink-0">ВЫКЛ</button>
           </div>
         </div>
 

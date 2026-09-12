@@ -292,6 +292,9 @@ function upsertPlayer(uidValue, nick, ip, extra) {
   if (typeof p.banned !== 'boolean') p.banned = false;
   if (!('role' in p)) p.role = null;
   if (!('status' in p)) p.status = null;
+  if (!('rebirth' in p)) p.rebirth = 0;
+  if (!('creditDebt' in p)) p.creditDebt = 0;
+  if (!('bankruptType' in p)) p.bankruptType = null;
   if (nick && !nickTakenBy(nick, uidValue)) p.nick = nick;
   // tag: если игрока нет — генерируем, но если extra.tag передан и свободен — используем его (восстановление из vault)
   if (!p.tag) {
@@ -306,11 +309,14 @@ function upsertPlayer(uidValue, nick, ip, extra) {
     // (только если текущий tag был сгенерирован заново после вайпа)
     // для безопасности — не перетираем если tag уже есть, кроме случая восстановления
   }
-  // extra может содержать verified/role/status для восстановления из vault (только если у игрока их нет)
+  // extra может содержать verified/role/status/rebirth для восстановления из vault
   if (extra) {
     if (extra.verified && !p.verified) p.verified = true;
     if (extra.role && !p.role) p.role = extra.role;
     if (extra.status && !p.status) p.status = extra.status;
+    if (Number.isFinite(extra.rebirth)) p.rebirth = Math.max(p.rebirth||0, Math.floor(extra.rebirth));
+    if (Number.isFinite(extra.creditDebt)) p.creditDebt = extra.creditDebt;
+    if (extra.bankruptType) p.bankruptType = extra.bankruptType;
     if (extra.email && !accountEmailOf(uidValue)) {
       // email привязывается через accounts, не здесь
     }
@@ -568,6 +574,12 @@ const routes = {
       id: uid('msg'), uid: pUid, kind: 'player',
       nick: cleanStr(body.nick, 24) || (p && p.nick) || 'Игрок',
       tag: p ? p.tag : null,
+      verified: !!(p && p.verified),
+      role: p ? p.role : null,
+      status: p ? p.status : null,
+      rebirth: p ? (p.rebirth||0) : 0,
+      creditDebt: p ? (p.creditDebt||0) : 0,
+      bankruptType: p ? (p.bankruptType||null) : null,
       text, at: Date.now()
     });
     if (db.chat.length > CHAT_MAX) db.chat = db.chat.slice(-CHAT_MAX);
@@ -777,18 +789,27 @@ const routes = {
       return send(res, 400, { ok: false, error: 'save не похож на сохранение игры' });
     }
     db.saves[pUid] = { save, updatedAt: Date.now() };
+    const rebirthFromStats = save.stats && Number.isFinite(save.stats.rebirth) ? save.stats.rebirth : 0;
+    const debtFromStats = save.stats && Number.isFinite(save.stats.creditDebt) ? save.stats.creditDebt : 0;
+    const bankruptFromStats = save.stats && save.stats.bankruptType ? save.stats.bankruptType : null;
     const extra = save.user ? {
       tag: save.user.tag || null,
       verified: !!save.user.verified,
       role: save.user.role || null,
-      status: save.user.status || null
-    } : null;
+      status: save.user.status || null,
+      rebirth: rebirthFromStats,
+      creditDebt: debtFromStats,
+      bankruptType: bankruptFromStats
+    } : { rebirth: rebirthFromStats, creditDebt: debtFromStats, bankruptType: bankruptFromStats };
     const pl = upsertPlayer(pUid, cleanStr(body.nick, 24), clientIp(req), extra);
-    // если в save есть verified/role/status и у игрока их нет — восстанавливаем
+    // если в save есть verified/role/status/rebirth и у игрока их нет — восстанавливаем
     if (pl && extra) {
       if (extra.verified && !pl.verified) pl.verified = true;
       if (extra.role && !pl.role) pl.role = extra.role;
       if (extra.status && !pl.status) pl.status = extra.status;
+      if (Number.isFinite(extra.rebirth)) pl.rebirth = Math.max(pl.rebirth||0, extra.rebirth);
+      if (Number.isFinite(extra.creditDebt)) pl.creditDebt = extra.creditDebt;
+      if (extra.bankruptType) pl.bankruptType = extra.bankruptType;
     }
     dbSave();
     // Заодно отдаём уникальный ID и галочку: второй канал выдачи для клиента

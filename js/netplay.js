@@ -132,6 +132,22 @@ function statusChipHtml(st) {
   const m = (typeof PLAYER_STATUS_META !== 'undefined' && PLAYER_STATUS_META[st]) || { label: st.toUpperCase(), cls: 'bg-slate-500/20 border-slate-500/60 text-slate-300' };
   return `<span class="status-chip ${m.cls}" title="Статус выдан владельцем проекта">${m.label}</span>`;
 }
+function rebirthChipHtml(rebirthLvl) {
+  if (!rebirthLvl || rebirthLvl <= 0) return '';
+  try {
+    const card = (typeof REBIRTH_CARDS !== 'undefined' ? REBIRTH_CARDS.find(c => c.level === rebirthLvl) : null);
+    if (!card) return `<span class="status-chip bg-amber-500/20 border-amber-500/60 text-amber-300">🔄 ${rebirthLvl}</span>`;
+    const meta = (typeof PLAYER_STATUS_META !== 'undefined' && PLAYER_STATUS_META[card.id.replace('card_','')]) || null;
+    const cls = meta ? meta.cls : 'bg-amber-500/20 border-amber-500/60 text-amber-300';
+    return `<span class="status-chip ${cls}" title="${card.name} · лимит ${card.limit} ₽">${card.icon} ${card.title.toUpperCase()}</span>`;
+  } catch(e) { return ''; }
+}
+function bankruptChipHtml(bType) {
+  if (!bType) return '';
+  if (bType === 'bankrupt') return `<span class="status-chip bg-rose-950/50 border-rose-800/60 text-rose-300">💸 БАНКРОТ</span>`;
+  if (bType === 'vozduhan') return `<span class="status-chip bg-sky-950/40 border-sky-800/50 text-sky-300">🌬 ВОЗДУХАН</span>`;
+  return '';
+}
 
 /* Показать игроку экран «ты забанен» с причиной */
 function showBannedScreen(reason, by) {
@@ -667,9 +683,11 @@ const Community = {
         : isMe
           ? 'bg-cyan-950/40 border-cyan-800/50'
           : 'bg-slate-900/70 border-slate-800/70';
+      const rebirthHtml = m.rebirth ? ' ' + rebirthChipHtml(m.rebirth) : '';
+      const bankruptHtml = m.bankruptType ? ' ' + bankruptChipHtml(m.bankruptType) : (m.creditDebt && m.creditDebt>0 ? ' <span class="status-chip bg-amber-950/40 border-amber-800/50 text-amber-300">💳 ' + (m.creditDebt>1000000 ? (Math.round(m.creditDebt/1000)+'k') : m.creditDebt) + ' долг</span>' : '');
       const head = isAdmin
         ? `<span class="font-bold text-amber-300">${escapeHtml(m.nick)}</span> ${adminChipHtml()}`
-        : `<span class="font-bold ${isMe ? 'text-cyan-300' : 'text-slate-200'}">${escapeHtml(m.nick)}</span>${m.verified ? ' ' + verifiedBadgeHtml() : ''}${m.role === 'admin' ? ' ' + staffChipHtml() : ''}${m.status ? ' ' + statusChipHtml(m.status) : ''}${m.tag ? ` <span class="font-mono text-[8.5px] text-slate-500">${escapeHtml(m.tag)}</span>` : ''}`;
+        : `<span class="font-bold ${isMe ? 'text-cyan-300' : 'text-slate-200'}">${escapeHtml(m.nick)}</span>${m.verified ? ' ' + verifiedBadgeHtml() : ''}${m.role === 'admin' ? ' ' + staffChipHtml() : ''}${m.status ? ' ' + statusChipHtml(m.status) : ''}${rebirthHtml}${bankruptHtml}${m.tag ? ` <span class="font-mono text-[8.5px] text-slate-500">${escapeHtml(m.tag)}</span>` : ''}`;
       const del = canModerate && m.id
         ? `<button onclick="Community.adminDeleteMessage('${m.id}')" title="Удалить сообщение (админ)" class="text-slate-500 hover:text-rose-400 transition text-[10px] leading-none flex-shrink-0">✕</button>`
         : '';

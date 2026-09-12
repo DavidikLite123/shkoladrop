@@ -60,7 +60,15 @@ const DEFAULT_STATS = {
   hardModeNotified: false,
   richTaxNotified: false,
   tapLimitClosed: false,
-  apologyGiftClaimed: false // сезон 3.5 — подарок-извинение за вайп 3.9
+  apologyGiftClaimed: false, // сезон 3.5 — подарок-извинение за вайп 3.9
+  // 4.1 — перерождение и кредит
+  rebirth: 0,                 // 0..10 уровень перерождения
+  creditDebt: 0,              // сколько должен банку
+  creditBorrowAt: 0,          // когда взял последний кредит (ms)
+  creditHistory: 0,           // всего взято в кредит за всё время
+  bankruptUntil: 0,           // до какого времени титул банкрота/воздухана
+  bankruptType: '',           // 'bankrupt' | 'vozduhan' | ''
+  rebirthNotified: false
 };
 
 function freshStats() {
@@ -221,6 +229,7 @@ const SettingsStore = {
       if (typeof raw.quality === 'string' && ['auto', 'high', 'low'].includes(raw.quality)) out.quality = raw.quality;
       if (typeof raw.autoWake === 'boolean') out.autoWake = raw.autoWake;
       if (typeof raw.chatNotify === 'boolean') out.chatNotify = raw.chatNotify;
+      if (typeof raw.beta41 === 'boolean') out.beta41 = raw.beta41;
     }
     return out;
   },
@@ -330,7 +339,9 @@ const IdentityVault = {
         level: s.level, xp: s.xp, vipActive: !!s.vipActive, vipCode: s.vipCode || '',
         authorCode: s.authorCode || null, promosUsed: s.promosUsed || [],
         betaTester: !!s.betaTester, achievements: s.achievements || [],
-        biggestDrop: s.biggestDrop, biggestDropName: s.biggestDropName
+        biggestDrop: s.biggestDrop, biggestDropName: s.biggestDropName,
+        rebirth: s.rebirth||0, creditDebt: s.creditDebt||0, creditBorrowAt: s.creditBorrowAt||0,
+        creditHistory: s.creditHistory||0, bankruptUntil: s.bankruptUntil||0, bankruptType: s.bankruptType||''
       },
       settings: snap.settings || null,
       at: Date.now()
@@ -342,6 +353,9 @@ const IdentityVault = {
       payload.role = u.role || null;
       payload.status = u.status || null;
       payload.email = u.email || null;
+      payload.rebirth = s.rebirth||0;
+      payload.creditDebt = s.creditDebt||0;
+      payload.bankruptType = s.bankruptType||null;
     }
     this.saveVault(payload);
     if (u && u.id) this.setUidLock(u.id);
@@ -492,6 +506,15 @@ const SaveManager = {
     ['authorRoyaltyLocal', 'authorRoyaltyPending', 'netGiftsSent', 'netGiftsReceived', 'netTradesDone'].forEach(k => {
       if (!Number.isFinite(stats[k])) stats[k] = 0;
     });
+    // 4.1 rebirth
+    if (!Number.isFinite(stats.rebirth)) stats.rebirth = 0;
+    stats.rebirth = Math.max(0, Math.min(10, Math.floor(stats.rebirth)));
+    if (!Number.isFinite(stats.creditDebt)) stats.creditDebt = 0;
+    if (!Number.isFinite(stats.creditBorrowAt)) stats.creditBorrowAt = 0;
+    if (!Number.isFinite(stats.creditHistory)) stats.creditHistory = 0;
+    if (!Number.isFinite(stats.bankruptUntil)) stats.bankruptUntil = 0;
+    if (typeof stats.bankruptType !== 'string') stats.bankruptType = '';
+    if (typeof stats.rebirthNotified !== 'boolean') stats.rebirthNotified = false;
     data.stats = stats;
 
     data.createdAt = raw.createdAt || base.createdAt;
@@ -562,6 +585,13 @@ const SaveManager = {
           if (vault.stats) {
             if (vault.stats.vipActive && !data.stats.vipActive) data.stats.vipActive = true;
             if (vault.stats.authorCode && !data.stats.authorCode) data.stats.authorCode = vault.stats.authorCode;
+            if (Number.isFinite(vault.stats.rebirth) && (data.stats.rebirth||0) < vault.stats.rebirth) data.stats.rebirth = vault.stats.rebirth;
+            if (Number.isFinite(vault.stats.creditDebt) && vault.stats.creditDebt > 0 && (data.stats.creditDebt||0) === 0) {
+              data.stats.creditDebt = vault.stats.creditDebt;
+              data.stats.creditBorrowAt = vault.stats.creditBorrowAt||0;
+              data.stats.bankruptType = vault.stats.bankruptType||'';
+              data.stats.bankruptUntil = vault.stats.bankruptUntil||0;
+            }
           }
         }
       } catch (e) {}
