@@ -46,14 +46,17 @@ const state = {
   pendingAuthEmail: null,
   pendingAuthTag: null,
   pendingAuthVerified: false,
-  seasonWipeToast: false
+  seasonWipeToast: false,
+  accountResetToast: false,
+  accountResetOldUser: null,
+  apologyGiftPending: false // сезон 3.5 — подарок-извинение нужно выдать
 };
 
 /* --------------------------------------------------------------------------
    ЗАГРУЗКА / СОХРАНЕНИЕ
    -------------------------------------------------------------------------- */
 function loadGame() {
-  const { data, migrated, fresh, wiped, carriedUser } = SaveManager.load();
+  const { data, migrated, fresh, wiped, carriedUser, hadOldSave, oldUser } = SaveManager.load();
 
   state.balance = data.balance;
   state.inventory = data.inventory;
@@ -91,9 +94,34 @@ function loadGame() {
   if (migrated) {
     Toast.success('Старый прогресс из версии 1.0 перенесён — привет в Сезоне 2! 🎒', 5000);
   }
-  if (wiped && carriedUser) {
-    state.seasonWipeToast = true; // NetBoot покажет после приветствия — чтобы тосты не слиплись
+  // v13 — ПОЛНЫЙ вайп аккаунтов 3.9: показываем одноразовое уведомление «прости, твой аккаунт был сброшен»
+  // v14 — сезон 3.5: извинительный подарок за вайп
+  const metaForWipe = MetaStore.read();
+  if (wiped && (carriedUser || hadOldSave)) {
+    // показываем только если ещё не показывали для этой версии сохранения
+    if (metaForWipe.resetNoticeSeen !== SAVE_VERSION) {
+      state.accountResetToast = true;
+      state.accountResetOldUser = oldUser || null;
+      state.seasonWipeToast = false;
+    }
+  } else if (wiped && carriedUser) {
+    state.seasonWipeToast = true;
   }
+
+  // Сезон 3.5 — подарок-извинение: каждый, кто был сброшен, получает дорогой предмет бесплатно
+  // Выдаётся один раз на сезон (флаг apologyGiftSeen), даже если fresh
+  try {
+    const metaApology = MetaStore.read();
+    const alreadyGotGift = metaApology.apologyGiftSeen === SAVE_VERSION || state.stats.apologyGiftClaimed;
+    const shouldGetGift = !alreadyGotGift && (hadOldSave || carriedUser || wiped || metaForWipe.resetNoticeSeen === 13 || fresh);
+    // В сезоне 3.5 даём подарок ВСЕМ при первом входе в 3.5, но особенно тем, кто был сброшен
+    if (shouldGetGift || (!alreadyGotGift && !state.stats.apologyGiftClaimed)) {
+      state.apologyGiftPending = true;
+    }
+  } catch (e) {
+    state.apologyGiftPending = true;
+  }
+
   return data;
 }
 
@@ -119,10 +147,53 @@ function snapshot() {
   };
 }
 
+/* Сезон 3.5 — подарок-извинение за вайп 3.9: дорогой предмет бесплатно */
+function giveApologyGiftIfNeeded() {
+  if (!state.apologyGiftPending) return false;
+  const meta = MetaStore.read();
+  if (meta.apologyGiftSeen === SAVE_VERSION || state.stats.apologyGiftClaimed) {
+    state.apologyGiftPending = false;
+    return false;
+  }
+  const proto = ITEMS_BY_ID['gift_apology_35'] || ITEMS_BY_ID['sch_golden_diary'] || ITEMS_BY_ID['cs_karambit_fade'];
+  if (!proto) return false;
+  // Не даём дубликат если уже есть в рюкзаке
+  if (state.inventory.some(it => it.id === proto.id)) {
+    MetaStore.write(Object.assign(MetaStore.read(), { apologyGiftSeen: SAVE_VERSION }));
+    state.stats.apologyGiftClaimed = true;
+    state.apologyGiftPending = false;
+    persist(true);
+    return false;
+  }
+  const gift = Object.assign({}, proto, { uid: RNG.uid('apology'), wonAt: nowTimeLabel() });
+  state.inventory.unshift(gift);
+  trackBiggestDrop(gift);
+  state.stats.apologyGiftClaimed = true;
+  state.apologyGiftPending = false;
+  MetaStore.write(Object.assign(MetaStore.read(), { apologyGiftSeen: SAVE_VERSION }));
+  persist(true);
+  // Пуш на сервер сразу — каждое действие сохраняется на сервере (сезон 3.5)
+  if (typeof CloudSave !== 'undefined') {
+    try { CloudSave.push(false); } catch (e) {}
+  }
+  setTimeout(() => {
+    audio.init();
+    audio.playSecret();
+    Fx.gold(250);
+    Fx.secretRain();
+    Toast.gold(`🎁 <b>Подарок-извинение сезона 3.5!</b> За полный сброс аккаунтов в 3.9 из-за технических неполадок — вы бесплатно получаете <b>${escapeHtml(proto.name)}</b> стоимостью <b class="text-amber-300">${fmt(proto.price)} ₽</b>! Теперь всё в норме ❤️ Спасибо, что остаётесь с нами!`, 12000);
+  }, 800);
+  return true;
+}
+
 function persist(immediate = false) {
   if (immediate) {
     SaveManager.save(snapshot());
     SettingsStore.toCookie(state.settings);
+    // Сезон 3.5: каждое сохранение сразу улетает на сервер — аккаунт всегда отобразится
+    if (typeof CloudSave !== 'undefined' && state.user) {
+      try { CloudSave.push(false); } catch (e) {}
+    }
     return;
   }
   schedulePersist();
@@ -135,6 +206,10 @@ function schedulePersist() {
     persistTimer = null;
     SaveManager.save(snapshot());
     SettingsStore.toCookie(state.settings);
+    // Сезон 3.5: каждое действие сохраняется на сервере, не только локально
+    if (typeof CloudSave !== 'undefined' && state.user) {
+      try { CloudSave.push(false); } catch (e) {}
+    }
   }, 400);
 }
 
@@ -577,6 +652,12 @@ function autoPickDeposit() {
    -------------------------------------------------------------------------- */
 function startUpgradeRoll() {
   if (state.isRolling) return;
+  if (typeof ServerAPI !== 'undefined' && !ServerAPI.isOnline() && !window.__shkoladropServerOnline) {
+    if (showServerRequiredModalIfNeeded()) {
+      Toast.error('Сначала подключись к серверу — апгрейдер требует онлайн (сезон 3.5) 🌐');
+      return;
+    }
+  }
   if (!state.selectedDeposit || !state.selectedTarget) return;
 
   const wagered = state.selectedDeposit;
@@ -1106,6 +1187,13 @@ function currentCaseWinner() {
 
 function openSelectedCase() {
   if (state.isOpeningCase) return;
+  // Сезон 3.5 — обязательный онлайн: без сервера не открываем кейсы, чтобы аккаунт отобразился
+  if (typeof ServerAPI !== 'undefined' && !ServerAPI.isOnline() && !window.__shkoladropServerOnline) {
+    if (showServerRequiredModalIfNeeded()) {
+      Toast.error('Сначала подключись к серверу — игра не пускает играть пока не подключится (сезон 3.5) 🌐');
+      return;
+    }
+  }
   const caseObj = state.selectedCase;
   const price = casePrice(caseObj);
   if (state.balance < price) {
@@ -1160,6 +1248,12 @@ function openSelectedCase() {
 
 function openSelectedCaseMulti(count = 5) {
   if (state.isOpeningCase) return;
+  if (typeof ServerAPI !== 'undefined' && !ServerAPI.isOnline() && !window.__shkoladropServerOnline) {
+    if (showServerRequiredModalIfNeeded()) {
+      Toast.error('Подключись к серверу — без него нельзя открывать кейсы (сезон 3.5) 🌐');
+      return;
+    }
+  }
   const caseObj = state.selectedCase;
   const cost = casePrice(caseObj) * count;
 
@@ -2792,7 +2886,167 @@ function closeWelcomeDisclaimer() {
   }
   MetaStore.write(Object.assign(MetaStore.read(), { welcomeSeen: true }));
   showCookieBannerIfNeeded();
+  // Сначала показываем уведомление о сбросе аккаунта (если был вайп), потом «что нового»
+  if (!showAccountResetNoticeIfNeeded()) {
+    showWhatsNewIfNeeded();
+  }
+}
+
+/* --------------------------------------------------------------------------
+   УВЕДОМЛЕНИЕ О СБРОСЕ АККАУНТА (вайп 3.9 → подарок 3.5)
+   Показывается ОДИН раз на первый вход после полного сброса: «прости, твой
+   аккаунт был сброшен». Потом флаг resetNoticeSeen не даёт показывать снова.
+   Сезон 3.5: сразу после этого даём дорогой подарок-извинение.
+   -------------------------------------------------------------------------- */
+function showAccountResetNoticeIfNeeded() {
+  if (!state.accountResetToast) return false;
+  const modal = $('accountResetModal');
+  if (!modal) {
+    // fallback — тост, если модалки нет в DOM
+    Toast.error('Прости, твой аккаунт был сброшен в связи с вайпом сезона 3.9. Но в 3.5 ты бесплатно получишь дорогой предмет! 🎁', 10000);
+    MetaStore.write(Object.assign(MetaStore.read(), { resetNoticeSeen: SAVE_VERSION }));
+    state.accountResetToast = false;
+    // сразу выдаём подарок
+    setTimeout(() => giveApologyGiftIfNeeded(), 500);
+    return true;
+  }
+  // Персонализируем текст, если помним старый ник
+  const old = state.accountResetOldUser;
+  const nameEl = $('accountResetOldName');
+  const wrapEl = $('accountResetOldNameWrap');
+  if (nameEl) nameEl.textContent = old && old.nick ? old.nick : '';
+  if (wrapEl) {
+    if (old && old.nick) wrapEl.classList.remove('hidden');
+    else wrapEl.classList.add('hidden');
+  }
+  Modal.open('accountResetModal');
+  return true;
+}
+
+function closeAccountResetModal() {
+  audio.init();
+  audio.playTick();
+  Modal.close('accountResetModal');
+  MetaStore.write(Object.assign(MetaStore.read(), { resetNoticeSeen: SAVE_VERSION }));
+  state.accountResetToast = false;
+  // Сезон 3.5 — сразу после закрытия показываем подарок-извинение
+  if (state.apologyGiftPending) {
+    setTimeout(() => {
+      giveApologyGiftIfNeeded();
+      showApologyGiftModalIfNeeded();
+    }, 400);
+  }
+  // После закрытия — показываем «что нового» и остальное
   showWhatsNewIfNeeded();
+  showCookieBannerIfNeeded();
+}
+
+/* --------------------------------------------------------------------------
+   ПОДАРОК-ИЗВИНЕНИЕ СЕЗОНА 3.5
+   -------------------------------------------------------------------------- */
+function showApologyGiftModalIfNeeded() {
+  const meta = MetaStore.read();
+  if (meta.apologyGiftSeen !== SAVE_VERSION) return false;
+  // если уже показывали модал подарка — не спамим
+  if (meta.apologyModalSeen === SAVE_VERSION) return false;
+  const modal = $('apologyGiftModal');
+  if (!modal) return false;
+  const proto = ITEMS_BY_ID['gift_apology_35'];
+  const box = $('apologyGiftItemBox');
+  if (box && proto) {
+    box.innerHTML = `
+      <div class="flex-shrink-0">${renderItemMedia(proto, 'w-12 h-12 text-2xl')}</div>
+      <div class="text-left">
+        <div class="text-[11px] font-bold text-white">${escapeHtml(proto.name)}</div>
+        <div class="text-[10px] text-amber-300 font-mono">${fmt(proto.price)} ₽ · ${rarityOf(proto).name} · уже в рюкзаке 🎒</div>
+      </div>
+    `;
+  }
+  Modal.open('apologyGiftModal');
+  return true;
+}
+
+function closeApologyGiftModal() {
+  audio.init();
+  audio.playTick();
+  Modal.close('apologyGiftModal');
+  MetaStore.write(Object.assign(MetaStore.read(), { apologyModalSeen: SAVE_VERSION }));
+  showWhatsNewIfNeeded();
+}
+
+/* --------------------------------------------------------------------------
+   ОБЯЗАТЕЛЬНОЕ ПОДКЛЮЧЕНИЕ К СЕРВЕРУ (сезон 3.5)
+   Игра не пускает играть, пока не подключится к серверам — чтобы аккаунт
+   точно отобразился в базе. При загрузке прелоадер уже ждёт сервер, но
+   если связь пропала во время игры — показываем модал.
+   -------------------------------------------------------------------------- */
+let _serverRequiredTimer = null;
+function showServerRequiredModalIfNeeded() {
+  const modal = $('serverRequiredModal');
+  if (!modal) return false;
+  // если сервер уже онлайн — не показываем
+  if (typeof ServerAPI !== 'undefined' && ServerAPI.isOnline()) return false;
+  if (typeof window !== 'undefined' && window.__shkoladropServerOnline) return false;
+  Modal.open('serverRequiredModal');
+  updateServerRequiredStatus();
+  // авто-ретрай каждые 4 сек
+  if (_serverRequiredTimer) clearInterval(_serverRequiredTimer);
+  _serverRequiredTimer = setInterval(() => {
+    updateServerRequiredStatus();
+    checkServerConnectionForGate();
+  }, 4000);
+  return true;
+}
+
+function updateServerRequiredStatus() {
+  const el = $('serverRequiredStatus');
+  if (!el) return;
+  const tries = (typeof window !== 'undefined' && window.__preloaderRetry) ? window.__preloaderRetry : 0;
+  if (typeof ServerAPI !== 'undefined' && ServerAPI.isOnline()) {
+    el.textContent = 'Подключение успешно! Добро пожаловать 🎒';
+    el.className = 'text-[11px] leading-relaxed text-emerald-300 font-mono';
+  } else {
+    el.textContent = tries > 2 ? 'Сервер спит, будим... ⏳ подождите, подключение скоро будет — просто подождите' : 'Подключение к серверу, подождите... сервер спит, будим';
+    el.className = 'text-[11px] leading-relaxed text-amber-300 font-mono';
+  }
+}
+
+async function checkServerConnectionForGate() {
+  if (typeof ServerAPI === 'undefined') return false;
+  const online = await ServerAPI.ping(true);
+  if (online) {
+    closeServerRequiredModal();
+    Toast.gold('🌐 Подключение успешно! Добро пожаловать — теперь каждое действие сохраняется на сервере ☁️', 6000);
+    // сразу пушим текущий прогресс
+    if (typeof CloudSave !== 'undefined') CloudSave.push(false);
+    return true;
+  }
+  return false;
+}
+
+function closeServerRequiredModal() {
+  Modal.close('serverRequiredModal');
+  if (_serverRequiredTimer) { clearInterval(_serverRequiredTimer); _serverRequiredTimer = null; }
+}
+
+async function retryServerConnection() {
+  const btn = document.querySelector('#serverRequiredModal button');
+  const orig = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Подключаюсь... ⏳'; }
+  updateServerRequiredStatus();
+  // пробуем разбудить сервер как в Community
+  if (typeof wakeCommunityServer === 'function') {
+    await wakeCommunityServer(btn);
+  } else {
+    await checkServerConnectionForGate();
+  }
+  if (btn) { btn.disabled = false; btn.textContent = orig || '⚡ Подключиться к серверу'; }
+  if (typeof ServerAPI !== 'undefined' && ServerAPI.isOnline()) {
+    closeServerRequiredModal();
+  } else {
+    updateServerRequiredStatus();
+    Toast.info('Сервер пока спит — подождите ещё немного, он просыпается ~минуту ⏳', 5000);
+  }
 }
 
 /* --------------------------------------------------------------------------
@@ -3180,9 +3434,45 @@ function initGame() {
   // Шлагбаум «введите аккаунт» — если профиля ещё нет (js/netplay.js)
   if (typeof AuthGate !== 'undefined') AuthGate.onBoot();
 
-  // Первое сохранение нового формата
+  // Первое сохранение нового формата — сразу пушим на сервер (сезон 3.5: каждое действие на сервер)
   persist(true);
+  // Явно пушим в облако, чтобы аккаунт точно отобразился в базе даже если игрок офлайн
+  if (typeof CloudSave !== 'undefined' && state.user) {
+    setTimeout(() => { try { CloudSave.push(false); } catch (e) {} }, 800);
+  }
 
   // Ревизия VIP (аннулированные утёкшие коды) — асинхронно, после старта
   auditVip();
+
+  // Сезон 3.5 — обязательный онлайн: если сервер не подключен через 1.5 сек после загрузки — показываем модал
+  setTimeout(() => {
+    if (typeof ServerAPI !== 'undefined' && !ServerAPI.isOnline() && !window.__shkoladropServerOnline) {
+      showServerRequiredModalIfNeeded();
+    }
+  }, 1500);
+
+  // Сезон 3.5 — подарок-извинение: если флаг pending — выдаём и показываем модал (если не вайп)
+  setTimeout(() => {
+    if (state.apologyGiftPending) {
+      giveApologyGiftIfNeeded();
+      // если не было вайп-модала — сразу показываем подарок
+      if (!state.accountResetToast) {
+        showApologyGiftModalIfNeeded();
+      }
+    } else {
+      // если подарок уже получен, но модал ещё не видели — покажем
+      const meta = MetaStore.read();
+      if (meta.apologyGiftSeen === SAVE_VERSION && meta.apologyModalSeen !== SAVE_VERSION) {
+        showApologyGiftModalIfNeeded();
+      }
+    }
+  }, 900);
+
+  // Если был полный вайп 3.9 и приветствие уже закрыто — сразу показываем уведомление о сбросе
+  const welcomeEl = $('welcomeDisclaimerModal');
+  const welcomeVisible = welcomeEl && !welcomeEl.classList.contains('hidden') && welcomeEl.style.display !== 'none';
+  if (state.accountResetToast && !welcomeVisible) {
+    // Небольшая задержка, чтобы UI успел отрисоваться
+    setTimeout(() => showAccountResetNoticeIfNeeded(), 600);
+  }
 }

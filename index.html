@@ -8,7 +8,7 @@
   <meta name="color-scheme" content="dark" />
 
   <!-- Основные поисковые теги (SEO) -->
-  <title>ШКОЛА ДРОП 3.7 — Вайп сезона, жёсткие кейсы, апгрейд-эксклюзивы | David Lite</title>
+  <title>ШКОЛА ДРОП 3.5 — Подарок-извинение за вайп, обязательный онлайн, дорогой предмет бесплатно | David Lite</title>
   <meta name="description" content="ШКОЛА ДРОП 3.0 (shkoladrop.vercel.app) — официальный интерактивный симулятор школьных кейсов и честный CS2 апгрейдер от David Lite Studio. Новые кейсы, коты-предметы, достижения, ежедневные награды, секретный кейс с Котом-Хранителем за 10 000 000 ₽!" />
   <meta name="keywords" content="школа дроп, школа дроп 3.0, david lite, давид лайт, davidlite, школа дроп кейсы, школа дроп апгрейдер, честный апгрейд кс2, школьный симулятор, секретный кот, кот хранитель, david lite studio, shkola drop" />
   <meta name="author" content="David Lite (Давид Лайт) / David Lite Studio" />
@@ -73,7 +73,7 @@
 
   <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="assets/icon.svg">
-  <link rel="manifest" href="manifest.webmanifest?v=3.8.3">
+  <link rel="manifest" href="manifest.webmanifest?v=3.5.0">
   <!-- КРИТИЧЕСКИЙ CSS: прокрутка и нижнее меню работают всегда, даже если внешний файл не загрузился -->
   <style>
     /* Прокрутка страницы.
@@ -149,11 +149,15 @@
     #appPreloader #preloaderBar { height: 100%; width: 0%; border-radius: 999px; background: linear-gradient(90deg, #ff5500, #fbbf24); transition: width .12s linear; }
     #appPreloader .pre-percent { font-family: ui-monospace, monospace; font-size: 10px; color: #fbbf24; }
     #appPreloader .pre-status { font-size: 11px; color: #94a3b8; min-height: 1rem; }
+    #appPreloader .pre-server { font-size: 10px; color: #fbbf24; min-height: 1.1rem; margin-top: 0.2rem; font-weight: 600; }
+    #appPreloader .pre-server.pre-server-ok { color: #10b981; }
+    #appPreloader .pre-server.pre-server-wake { color: #f59e0b; animation: preloaderPulse 1s infinite; }
+    #appPreloader .pre-server.pre-server-err { color: #ef4444; }
     #appPreloader .pre-ver { font-size: 9px; color: #475569; letter-spacing: .08em; }
     @media (prefers-reduced-motion: reduce) { #appPreloader .pre-logo { animation: none; } }
   </style>
 
-  <link rel="stylesheet" href="css/style.css?v=3.8.3">
+  <link rel="stylesheet" href="css/style.css?v=3.5.0">
 
   <script>
     window.tailwind = window.tailwind || {};
@@ -191,7 +195,8 @@
       <div class="pre-track"><div id="preloaderBar"></div></div>
       <div id="preloaderPercent" class="pre-percent">0%</div>
       <div id="preloaderStatus" class="pre-status">Проверяем сменку на входе...</div>
-      <div class="pre-ver">v3.7 Season Stable · David Lite Studio</div>
+      <div id="preloaderServer" class="pre-server">Подключение к серверу, подождите...</div>
+      <div class="pre-ver">v3.5 Season Stable · David Lite Studio · обязательный онлайн</div>
     </div>
   </div>
 
@@ -208,13 +213,14 @@
   <header class="w-full px-3.5 pt-3 pb-2.5 flex items-center justify-between gap-2 border-b border-slate-800/80 bg-slate-900/80 backdrop-blur-md sticky top-0 z-30">
     <div class="flex items-center space-x-2.5 min-w-0 flex-1">
       <!-- Logo Button: 5 кликов = скрытая панель разработчика -->
-      <button id="btnLogo" onclick="handleAdminTrigger()" title="🎒 ШКОЛА ДРОП 3.7 by David Lite" class="w-10 h-10 rounded-xl bg-gradient-to-tr from-orange-600 to-amber-500 flex items-center justify-center text-xl shadow-lg shadow-orange-500/25 active:scale-90 transition flex-shrink-0">
+      <button id="btnLogo" onclick="handleAdminTrigger()" title="🎒 ШКОЛА ДРОП 3.5 by David Lite" class="w-10 h-10 rounded-xl bg-gradient-to-tr from-orange-600 to-amber-500 flex items-center justify-center text-xl shadow-lg shadow-orange-500/25 active:scale-90 transition flex-shrink-0">
         🎒
       </button>
       <div class="min-w-0">
         <div class="flex items-center space-x-1.5 min-w-0">
           <h1 class="text-xs font-black uppercase tracking-wider text-orange-400 font-cs truncate">ШКОЛА ДРОП</h1>
-          <span id="versionBadge" class="text-[8px] bg-orange-500/20 text-orange-300 font-bold px-1.5 py-0.5 rounded border border-orange-500/40 font-cs flex-shrink-0">v3.7 Season</span>
+          <span id="versionBadge" class="text-[8px] bg-orange-500/20 text-orange-300 font-bold px-1.5 py-0.5 rounded border border-orange-500/40 font-cs flex-shrink-0">v3.5 Season</span>
+          <span id="serverHeaderDot" title="Подключение к серверу..." class="w-2 h-2 rounded-full bg-amber-400 animate-pulse border border-amber-500/50 flex-shrink-0"></span>
         </div>
         <!-- Клик по автору открывает карточку создателя -->
         <button onclick="openAuthorModal()" class="hidden text-[10px] text-slate-400 hover:text-amber-300 font-medium transition items-center space-x-1 max-w-full truncate">
@@ -691,7 +697,7 @@
         <span id="shopCountLabel" class="text-[10px] text-slate-500 font-mono">0</span>
       </div>
       <div class="text-[10px] text-slate-500 leading-relaxed bg-slate-900/60 border border-slate-800/70 rounded-xl px-2.5 py-2">
-        🎒 Сезон 3.7: дорогого в лавке больше нет — годнота падает из кейсов <b class="text-amber-300">с удачей</b>, а ⚡ эксклюзивы заносятся <b class="text-orange-300">только в апгрейдере</b>.
+        🎒 Сезон 3.5: дорогого в лавке больше нет — годнота падает из кейсов <b class="text-amber-300">с удачей</b>, а ⚡ эксклюзивы заносятся <b class="text-orange-300">только в апгрейдере</b>.
       </div>
       <div id="shopList" class="space-y-2"></div>
     </div>
@@ -826,7 +832,7 @@
           </div>
         </div>
         <p class="text-[11px] text-slate-300 leading-relaxed">
-          «ШКОЛА ДРОП» — фановый симулятор школьных кейсов и честного апгрейдера. Сезон 3.7 «Большой вайп»:
+          «ШКОЛА ДРОП» — фановый симулятор школьных кейсов и честного апгрейдера. Сезон 3.5 «Подарок-извинение + обязательный онлайн»:
           e-mail аккаунты с входом по коду, вайп экономики (ник и уникальный ID — на месте!), жёсткие кейсы,
           лавка из 4 базовых вещиц и 10 предметов, которые добываются только в апгрейдере.
         </p>
@@ -1496,6 +1502,8 @@
           <div class="flex flex-wrap gap-1 items-center">
             <button id="adminFilterAll" onclick="adminSetPlayersFilter('all')" class="px-2 py-1 rounded-lg bg-slate-800 bg-slate-600 hover:bg-slate-700 text-slate-200 text-[9px] font-bold transition">Все</button>
             <button id="adminFilterOnline" onclick="adminSetPlayersFilter('online')" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-300 text-[9px] font-bold transition">● Онлайн</button>
+            <button id="adminFilterOffline" onclick="adminSetPlayersFilter('offline')" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 text-[9px] font-bold transition">○ Оффлайн</button>
+            <button id="adminFilterRegistered" onclick="adminSetPlayersFilter('registered')" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 text-[9px] font-bold transition">👤 Зарег.</button>
             <button id="adminFilterAdmins" data-admin-perm="role" onclick="adminSetPlayersFilter('admins')" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-sky-300 text-[9px] font-bold transition">🛡 Админы</button>
             <button id="adminFilterBanned" data-admin-perm="ban" onclick="adminSetPlayersFilter('banned')" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-rose-300 text-[9px] font-bold transition">⛔ Баны</button>
             <button onclick="adminLoadPlayers(true)" class="ml-auto px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[9px] font-bold transition">↻</button>
@@ -1758,6 +1766,93 @@
     </div>
   </div>
 
+  <!-- ================= MODAL: СБРОС АККАУНТА (вайп 3.9 → извинение 3.5) ================= -->
+  <div id="accountResetModal" class="app-modal hidden" style="z-index: 98">
+    <div class="modal-card border border-rose-500/50 max-w-sm w-full text-center">
+      <div class="w-14 h-14 mx-auto rounded-2xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-3xl mb-3 shadow-lg">
+        💔
+      </div>
+      <h3 class="font-cs text-lg font-bold uppercase text-white mb-1">Аккаунт сброшен</h3>
+      <div class="text-[10px] text-rose-400 font-mono mb-2">Сезон 3.9 → 3.5 · полный вайп · извинение</div>
+      <div class="bg-slate-950/80 border border-slate-800 rounded-xl p-3 text-xs text-slate-300 text-left space-y-2 mb-4">
+        <p class="text-[13px] leading-relaxed text-white font-medium">
+          Прости, твой аккаунт был сброшен в связи с полным вайпом экономики и базы игроков из-за технических неполадок. 😔
+        </p>
+        <p class="text-[11px] leading-relaxed text-slate-400">
+          Мы обнулили все аккаунты, чтобы начать сезон честно: баланс, рюкзак, уровни и старые ID больше не актуальны.
+          <span id="accountResetOldNameWrap" class="hidden">Твой старый ник был <b id="accountResetOldName" class="text-amber-300"></b> — спасибо, что был с нами!</span>
+        </p>
+        <p class="text-[11px] leading-relaxed text-amber-300 font-medium">
+          🎁 Но не бойся — в сезоне 3.5 ты <b>бесплатно получишь сейчас</b> дорогой предмет стоимостью 1 500 000 ₽ в качестве извинений! Он уже будет в твоём рюкзаке после регистрации. Теперь всё вернулось в норму ❤️
+        </p>
+        <p class="text-[11px] leading-relaxed text-emerald-300 font-medium">
+          Пожалуйста, зарегистрируйся заново — теперь игра не пустит тебя играть, пока не подключится к серверам, чтобы твой аккаунт точно отобразился в базе. Создай новый профиль и забери подарок! 🎒✨
+        </p>
+      </div>
+      <button onclick="closeAccountResetModal()" class="btn-shine w-full py-3 rounded-xl font-cs font-bold text-xs uppercase tracking-wider bg-gradient-to-r from-rose-500 to-orange-500 text-white shadow-lg shadow-rose-500/30 hover:brightness-110 active:scale-95 transition">
+        Понял, забираю подарок 🚀
+      </button>
+    </div>
+  </div>
+
+  <!-- ================= MODAL: ОБЯЗАТЕЛЬНОЕ ПОДКЛЮЧЕНИЕ К СЕРВЕРУ (сезон 3.5) ================= -->
+  <div id="serverRequiredModal" class="app-modal hidden" style="z-index: 99">
+    <div class="modal-card border border-amber-500/50 max-w-sm w-full text-center">
+      <div class="w-14 h-14 mx-auto rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-3xl mb-3 shadow-lg">
+        🌐
+      </div>
+      <h3 class="font-cs text-lg font-bold uppercase text-white mb-1">Подключение к серверу</h3>
+      <div class="text-[10px] text-amber-400 font-mono mb-2">Сезон 3.5 · обязательный онлайн</div>
+      <div class="bg-slate-950/80 border border-slate-800 rounded-xl p-3 text-xs text-slate-300 text-left space-y-2 mb-4">
+        <p class="text-[12px] leading-relaxed text-white font-medium">
+          ШКОЛА ДРОП теперь не пускает играть, пока не подключится к серверам. Подождите — идёт подключение...
+        </p>
+        <p id="serverRequiredStatus" class="text-[11px] leading-relaxed text-amber-300 font-mono">
+          Подключение к серверу, подождите...
+        </p>
+        <p class="text-[10px] leading-relaxed text-slate-400">
+          Если вдруг ты играл раньше без подключения — твой аккаунт мог не отобразиться в базе. Теперь каждое действие сохраняется на сервере, а не только локально. Если сервер спит — мы его будим, просто подождите.
+        </p>
+      </div>
+      <button onclick="retryServerConnection()" class="btn-shine w-full py-3 rounded-xl font-cs font-bold text-xs uppercase tracking-wider bg-gradient-to-r from-amber-500 to-orange-500 text-black shadow-lg shadow-amber-500/30 hover:brightness-110 active:scale-95 transition">
+        ⚡ Подключиться к серверу
+      </button>
+      <div class="text-[9px] text-slate-500 mt-2">Сервер: https://shkoladrop.onrender.com · почта: shkoladrop.contact@gmail.com</div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL: ПОДАРОК-ИЗВИНЕНИЕ СЕЗОНА 3.5 ================= -->
+  <div id="apologyGiftModal" class="app-modal hidden" style="z-index: 97">
+    <div class="modal-card border border-amber-400/60 max-w-sm w-full text-center">
+      <div class="w-14 h-14 mx-auto rounded-2xl bg-amber-500/20 border border-amber-400/50 flex items-center justify-center text-3xl mb-3 shadow-lg">
+        🎁
+      </div>
+      <h3 class="font-cs text-lg font-bold uppercase text-white mb-1">Подарок-извинение!</h3>
+      <div class="text-[10px] text-amber-400 font-mono mb-2">Сезон 3.5 · компенсация за вайп 3.9</div>
+      <div class="bg-slate-950/80 border border-slate-800 rounded-xl p-3 text-xs text-slate-300 text-left space-y-2 mb-4">
+        <p class="text-[12px] leading-relaxed text-white font-medium">
+          У нас были технические неполадки и все аккаунты были сброшены. Простите нас! 😔
+        </p>
+        <p class="text-[11px] leading-relaxed text-amber-300 font-medium">
+          Но не бойся — сейчас всё вернулось в норму! В качестве извинений ты <b>бесплатно получаешь сейчас</b> дорогой предмет:
+        </p>
+        <div id="apologyGiftItemBox" class="bg-slate-900/80 border border-amber-500/30 rounded-xl p-2.5 flex items-center gap-2.5">
+          <span class="text-2xl">🎁</span>
+          <div class="text-left">
+            <div class="text-[11px] font-bold text-white">Подарок-извинение от администрации</div>
+            <div class="text-[10px] text-amber-300 font-mono">1 500 000 ₽ · золото · уже в рюкзаке</div>
+          </div>
+        </div>
+        <p class="text-[10px] leading-relaxed text-emerald-300">
+          Зарегистрируйся заново, подключись к серверу и забери подарок — он уже в рюкзаке! Спасибо, что остаёшься с нами ❤️
+        </p>
+      </div>
+      <button onclick="closeApologyGiftModal()" class="btn-shine w-full py-3 rounded-xl font-cs font-bold text-xs uppercase tracking-wider bg-gradient-to-r from-amber-500 to-yellow-500 text-black shadow-lg shadow-amber-500/30 hover:brightness-110 active:scale-95 transition">
+        Спасибо, забрать 🎒
+      </button>
+    </div>
+  </div>
+
   <!-- ================= MODAL: ЧТО НОВОГО (после обновления) ================= -->
   <div id="whatsNewModal" class="app-modal hidden">
     <div class="modal-card border border-cyan-500/40 max-w-sm w-full text-center">
@@ -1768,10 +1863,16 @@
       <div id="whatsNewVersion" class="text-[10px] text-cyan-400 font-mono mb-2">Обновление игры</div>
       <div class="bg-slate-950/80 border border-slate-800 rounded-xl p-3 text-xs text-slate-300 text-left space-y-2 mb-4">
         <p class="text-[11px] leading-relaxed text-slate-300 flex items-start gap-1.5">
-          <span>💬</span><span>Вкладка «Фарм» стала вкладкой <b class="text-cyan-300">«Сообщество»</b> — чат школы, уникальные ID и галочки верификации теперь на видном месте.</span>
+          <span>🎁</span><span>Сезон 3.5 — <b class="text-amber-300">подарок-извинение</b> за полный вайп 3.9! Каждый игрок бесплатно получает дорогой предмет на 1 500 000 ₽ — уже в рюкзаке. У нас были технические неполадки, теперь всё в норме ❤️</span>
         </p>
         <p class="text-[11px] leading-relaxed text-slate-300 flex items-start gap-1.5">
-          <span>😴</span><span>Кнопка «Включить сервер» теперь честно предупреждает: нажми и подожди, пока сервер оживёт (~минуту).</span>
+          <span>🌐</span><span>Теперь <b class="text-cyan-300">обязательное подключение к серверу</b> при загрузке: надпись «Подключение к серверу, подождите...» → «Сервер спит» → «Подключение успешно!». Игра не пустит играть, пока не подключится — так твой аккаунт точно отобразится в базе.</span>
+        </p>
+        <p class="text-[11px] leading-relaxed text-slate-300 flex items-start gap-1.5">
+          <span>☁️</span><span>Каждое действие теперь <b class="text-emerald-300">сохраняется на сервере</b>, а не только локально — баланс, рюкзак, уровни улетают в облако сразу.</span>
+        </p>
+        <p class="text-[11px] leading-relaxed text-slate-300 flex items-start gap-1.5">
+          <span>💬</span><span>Сообщения из общего чата теперь <b class="text-cyan-300">всегда включены</b> по умолчанию (уведомления можно выключить в ⚙️ Настройки → Эксперименты).</span>
         </p>
       </div>
       <button onclick="closeWhatsNewModal()" class="btn-shine w-full py-3 rounded-xl font-cs font-bold text-xs uppercase tracking-wider bg-gradient-to-r from-cyan-500 to-blue-500 text-black shadow-lg shadow-cyan-500/30 hover:brightness-110 active:scale-95 transition">
@@ -1821,7 +1922,7 @@
       <div class="text-center space-y-1">
         <div class="text-4xl">🔐</div>
         <div class="font-cs text-lg font-bold uppercase tracking-wider text-white">Введи аккаунт</div>
-        <div class="text-[10px] text-slate-400">Сезон 3.7 · надёжный вход по e-mail и коду</div>
+        <div class="text-[10px] text-slate-400">Сезон 3.5 · подарок-извинение · обязательный онлайн · надёжный вход по e-mail и коду</div>
       </div>
 
       <!-- сервер спит -->
@@ -1870,12 +1971,12 @@
   </div>
 
   <!-- ЛОГИКА ИГРЫ (модульная структура v2.0) -->
-  <script defer src="js/preloader.js?v=3.8.3"></script>
-  <script defer src="js/config.js?v=3.8.3"></script>
-  <script defer src="js/storage.js?v=3.8.3"></script>
-  <script defer src="js/ui.js?v=3.8.3"></script>
-  <script defer src="js/game.js?v=3.8.3"></script>
-  <script defer src="js/netplay.js?v=3.8.3"></script>
-  <script defer src="js/main.js?v=3.8.3"></script>
+  <script defer src="js/preloader.js?v=3.5.0"></script>
+  <script defer src="js/config.js?v=3.5.0"></script>
+  <script defer src="js/storage.js?v=3.5.0"></script>
+  <script defer src="js/ui.js?v=3.5.0"></script>
+  <script defer src="js/game.js?v=3.5.0"></script>
+  <script defer src="js/netplay.js?v=3.5.0"></script>
+  <script defer src="js/main.js?v=3.5.0"></script>
 </body>
 </html>

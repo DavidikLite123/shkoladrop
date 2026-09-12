@@ -4,9 +4,9 @@
    уровни, награды, промокоды, апгрейды дежурства.
    ========================================================================== */
 
-const APP_VERSION = '3.8';
-const WHATS_NEW_VERSION = 'community-tab-2026-09'; // ключ последнего окна «Что нового» (сменить при новом апдейте)
-const SAVE_VERSION = 12;      // v12 = вайп экономики сезона 3.7 (аккаунты/ID сохраняются)
+const APP_VERSION = '3.5';
+const WHATS_NEW_VERSION = 'season-3.5-apology-2026-09'; // сезон 3.5 — извинительный подарок + обязательный онлайн
+const SAVE_VERSION = 14;      // v14 = сезон 3.5 — подарок-извинение за вайп 3.9 + обязательный онлайн-коннект
 const SEASON_NUMBER = 3;
 const HARD_MODE_THRESHOLD = 100000000;
 const HARD_MODE_CASE_DISCOUNT = 0.9;
@@ -131,7 +131,9 @@ const SCHOOL_CATALOG = [
   { id: 'sch_school_bus',     name: 'Школьный автобус №13',          price: 480000, icon: '🚌', badgeBg: 'from-yellow-500/40 to-orange-800/40',        rarity: 'covert',     category: 'school', desc: 'Возит всю параллель, водитель — легенда' },
   { id: 'sch_entire_school',  name: 'ШКОЛА №1337 ЦЕЛИКОМ',           price: 650000, icon: '🏫', badgeBg: 'from-yellow-400/40 to-orange-600/40',        rarity: 'gold',       category: 'school', desc: 'Со всеми 11 классами и столовой' },
   { id: 'sch_golden_diary',   name: 'Дневник отличника (Только 5+)', price: 999999, icon: '⭐', badgeBg: 'from-amber-300/50 to-yellow-500/50',         rarity: 'gold',       category: 'school', desc: 'Супер-редкий лут из Тайника Завуча!' },
-  { id: 'sch_timetable_relic', name: 'Расписание без «окон»',        price: 1250000, icon: '🗓️', badgeBg: 'from-cyan-300/40 to-indigo-700/50',         rarity: 'gold',       category: 'school', desc: 'Артефакт, который никто не видел в реальности' }
+  { id: 'sch_timetable_relic', name: 'Расписание без «окон»',        price: 1250000, icon: '🗓️', badgeBg: 'from-cyan-300/40 to-indigo-700/50',         rarity: 'gold',       category: 'school', desc: 'Артефакт, который никто не видел в реальности' },
+  /* 🎁 Подарок-извинение сезона 3.5 — за полный вайп 3.9 и технические неполадки */
+  { id: 'gift_apology_35',    name: '🎁 Подарок-извинение от администрации', price: 1500000, icon: '🎁', badgeBg: 'from-amber-300/60 to-rose-500/50', rarity: 'gold', category: 'school', desc: 'Дорогой предмет в качестве извинений за то, что все аккаунты были сброшены из-за технических неполадок. Спасибо, что остаётесь с нами! Теперь всё в норме ❤️ Зарегистрируйтесь заново — подарок уже в рюкзаке!' }
 ];
 
 /* ---------- CS2 каталог ---------- */
@@ -641,7 +643,7 @@ const DEFAULT_SETTINGS = {
   quality: 'auto',  // 'auto' — под возможности устройства, 'high' / 'low' — вручную
   /* Эксперименты (⚙️ Настройки → Эксперименты) */
   autoWake: false,   // автоматически будить спящий сервер при запуске (без плашки)
-  chatNotify: false  // уведомления о новых сообщениях в общем чате
+  chatNotify: true   // сезон 3.5: уведомления из общего чата включены по умолчанию, можно выключить в настройках
 };
 
 /* Статусы игроков, которые выдаёт владелец (плашка у ника в чате и профиле) */

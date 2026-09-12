@@ -1078,12 +1078,19 @@ const NetPlay = {
 function renderServerStatus() {
   const online = ServerAPI.isOnline();
   const statusText = online
-    ? `<span class="text-emerald-400">●</span> Сервер онлайн — чат, подарки и обмен работают`
-    : `<span class="text-rose-400">●</span> Сервер не работает — нажми «Включить сервер» и подожди, пока сервер оживёт (~минуту), или напиши нам на <b class="text-rose-200">${SERVER_CONTACT_EMAIL}</b> — решим проблему!`;
+    ? `<span class="text-emerald-400">●</span> Сервер онлайн — чат, подарки и обмен работают · каждое действие сохраняется на сервере ☁️ (сезон 3.5)`
+    : `<span class="text-rose-400">●</span> Сервер не работает — игра не пустит играть пока не подключится! Нажми «Включить сервер» и подожди (~минуту), или напиши на <b class="text-rose-200">${SERVER_CONTACT_EMAIL}</b>`;
   const chipCls = online
     ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/40'
     : 'bg-rose-500/15 text-rose-300 border border-rose-500/40';
   const chipText = online ? 'ОНЛАЙН' : 'ОФФЛАЙН';
+
+  // Сезон 3.5 — индикатор в шапке
+  const headerDot = $('serverHeaderDot');
+  if (headerDot) {
+    headerDot.className = 'w-2 h-2 rounded-full border flex-shrink-0 ' + (online ? 'bg-emerald-400 border-emerald-500/50' : 'bg-amber-400 animate-pulse border-amber-500/50');
+    headerDot.title = online ? 'Сервер подключен — каждое действие сохраняется ☁️' : 'Подключение к серверу... игра ждёт сервер (сезон 3.5)';
+  }
 
   // Модалка трейдинга
   const el = $('netServerStatus');
@@ -1422,12 +1429,16 @@ const AuthGate = {
 };
 
 /* --------------------------------------------------------------------------
-   ПРИВЕТСТВИЕ ПРИ ВХОДЕ (сезон 3.7)
+   ПРИВЕТСТВИЕ ПРИ ВХОДЕ (сезон 3.9)
    «Привет! Загляни в аккаунт — вдруг тебе выдали галочку либо код автора…»
    Показывается раз в 12 часов (+ сразу после глобального вайпа).
+   Вайп 3.9 обрабатывается отдельным модалом accountResetModal, так что тут
+   проверяем и старый флаг seasonWipeToast для совместимости.
    -------------------------------------------------------------------------- */
 function maybeShowEntryGreeting() {
   if (!state.user) return;
+  // Если был полный вайп 3.9 — приветствие не показываем, уже был модал сброса
+  if (state.accountResetToast) return;
   let last = 0;
   try { last = Number(localStorage.getItem('shkola_greet_at')) || 0; } catch (e) {}
   const hadWipe = !!state.seasonWipeToast;
@@ -1436,12 +1447,18 @@ function maybeShowEntryGreeting() {
   state.seasonWipeToast = false;
   setTimeout(() => {
     if (hadWipe) {
-      Toast.gold('🧹 <b>СЕЗОН 3.7 — БОЛЬШОЙ ВАЙП!</b> Баланс и рюкзак у всех обнулены до стартовых — честный новый сезон. Ник и уникальный ID остались нетронуты. Жёсткие кейсы, лавка из 4 вещиц и ⚡ 10 предметов, что добываются ТОЛЬКО апгрейдом. Вперёд!', 13000);
+      Toast.gold('🧹 <b>СЕЗОН 3.9 — ПОЛНЫЙ ВАЙП АККАУНТОВ!</b> Но в сезоне 3.5 ты получаешь подарок-извинение 🎁 — дорогой предмет бесплатно! Все аккаунты обнулены, но теперь всё в норме и каждое действие сохраняется на сервере ☁️', 13000);
     }
+    // Сезон 3.5 — приветствие про обязательный онлайн и подарок
+    const meta = typeof MetaStore !== 'undefined' ? MetaStore.read() : {};
+    const isFirst35 = meta.apologyGiftSeen === 14 || (typeof state !== 'undefined' && state.stats && state.stats.apologyGiftClaimed);
     setTimeout(() => {
       if (!state.user) return;
       const tag = state.user.tag;
-      Toast.info(`👋 Привет, <b>${escapeHtml(state.user.nick)}</b>! Загляни в свой аккаунт (кнопка 👤 снизу): вдруг тебе уже выдали ✔ галочку верификации или 🎁 код автора? ${tag ? `Твой уникальный ID: <b class="font-mono text-amber-300">${escapeHtml(tag)}</b> — он же висит в «💬 Сообществе» и копируется нажатием.` : 'Кнопка «💬 Сообщество» откроет общий чат и твой уникальный ID (копируется нажатием).'}`, 12000);
+      if (isFirst35) {
+        Toast.gold(`🎁 <b>Сезон 3.5 — подарок-извинение!</b> За вайп 3.9 ты получил дорогой предмет на 1.5M ₽ бесплатно! Он уже в рюкзаке. Теперь игра не пускает играть пока не подключится к серверу — так твой аккаунт точно отобразится в базе ☁️`, 10000);
+      }
+      Toast.info(`👋 Привет, <b>${escapeHtml(state.user.nick)}</b>! Загляни в свой аккаунт (кнопка 👤 снизу): вдруг тебе уже выдали ✔ галочку верификации или 🎁 код автора? ${tag ? `Твой уникальный ID: <b class="font-mono text-amber-300">${escapeHtml(tag)}</b> — он же висит в «💬 Сообществе» и копируется нажатием.` : 'Кнопка «💬 Сообщество» откроет общий чат и твой уникальный ID (копируется нажатием).'}<br><span class="text-[10px] text-amber-300">Сезон 3.5: обязательный онлайн — каждое действие сохраняется на сервере, а чат-уведомления всегда включены (можно выключить в ⚙️)</span>`, 12000);
     }, hadWipe ? 900 : 400);
   }, 1000);
 }
@@ -1465,7 +1482,7 @@ let _adminPlayersFilter = 'all'; // all | online | admins | banned
 
 function adminSetPlayersFilter(f) {
   _adminPlayersFilter = f;
-  ['all', 'online', 'admins', 'banned'].forEach(k => {
+  ['all', 'online', 'offline', 'registered', 'admins', 'banned'].forEach(k => {
     const btn = $('adminFilter' + k.charAt(0).toUpperCase() + k.slice(1));
     if (btn) btn.classList.toggle('bg-slate-600', k === f);
   });
@@ -1490,8 +1507,7 @@ async function adminLoadPlayers(manual = false) {
     ServerAPI._playersCount = _adminPlayersCache.length;
     Community.renderMyId();
   }
-  const onlineEl = $('adminOnlineCount');
-  if (onlineEl) onlineEl.textContent = `${data.online || 0} онлайн · ${_adminPlayersCache.length} всего`;
+  // Счётчики обновятся внутри adminRenderPlayers (онлайн/оффлайн/зарег.)
   adminRenderPlayers();
 }
 
@@ -1500,11 +1516,37 @@ function adminRenderPlayers() {
   if (!box) return;
   const q = (($('adminPlayersSearch') || {}).value || '').trim().toLowerCase();
   const has = (perm) => typeof adminHas === 'function' && adminHas(perm);
-  let players = _adminPlayersCache;
+  let players = _adminPlayersCache.slice();
+
+  // Статистика для бейджей сверху
+  const total = players.length;
+  const onlineCount = players.filter(p => p.online).length;
+  const offlineCount = total - onlineCount;
+  const registeredCount = players.filter(p => p.email || p.tag).length;
+
+  // Фильтрация
   if (_adminPlayersFilter === 'online') players = players.filter(p => p.online);
+  if (_adminPlayersFilter === 'offline') players = players.filter(p => !p.online);
+  if (_adminPlayersFilter === 'registered') players = players.filter(p => p.email || p.tag);
   if (_adminPlayersFilter === 'admins') players = players.filter(p => p.role === 'admin');
   if (_adminPlayersFilter === 'banned') players = players.filter(p => p.banned);
   if (q) players = players.filter(p => [p.nick, p.tag, p.uid, p.email].some(v => v && String(v).toLowerCase().includes(q)));
+
+  // Сортировка: онлайн первыми, затем по lastSeen свежие, затем по нику
+  players.sort((a, b) => {
+    if (a.online !== b.online) return a.online ? -1 : 1;
+    const la = a.lastSeen || a.firstSeen || 0;
+    const lb = b.lastSeen || b.firstSeen || 0;
+    if (la !== lb) return lb - la;
+    return String(a.nick || '').localeCompare(String(b.nick || ''));
+  });
+
+  // Обновим счётчики в заголовке (если есть)
+  const onlineEl = $('adminOnlineCount');
+  if (onlineEl) {
+    onlineEl.textContent = `${onlineCount} онлайн · ${offlineCount} оффлайн · ${total} всего · ${registeredCount} зарег.`;
+    onlineEl.title = `Всего: ${total}, онлайн: ${onlineCount}, оффлайн: ${offlineCount}, зарегистрированных (с e-mail или ID): ${registeredCount}`;
+  }
 
   box.innerHTML = players.map(p => {
     const btns = [];
@@ -1525,23 +1567,29 @@ function adminRenderPlayers() {
       </select>`);
     if (has('delete')) btns.push(`<button onclick="adminDeleteAccount('${p.uid}', '${escapeHtml(p.nick).replace(/'/g, '')}')" class="adm-act" style="background:linear-gradient(135deg,#7f1d1d,#450a0a)" title="Удалить аккаунт навсегда">🗑 удалить</button>`);
 
+    const onlineBadge = p.online
+      ? '<span class="inline-flex items-center gap-0.5 text-[8px] font-black px-1.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/50 text-emerald-300">● ОНЛАЙН</span>'
+      : '<span class="inline-flex items-center gap-0.5 text-[8px] font-black px-1.5 py-0.5 rounded-full bg-slate-700/60 border border-slate-600/60 text-slate-400">○ ОФФЛАЙН</span>';
+    const registeredBadge = (p.email || p.tag)
+      ? '<span class="inline-flex text-[7px] font-black px-1 py-0.5 rounded bg-cyan-500/15 border border-cyan-500/40 text-cyan-300">👤 ЗАРЕГ.</span>'
+      : '<span class="inline-flex text-[7px] font-black px-1 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-500">ГОСТЬ</span>';
     const status = p.online
-      ? '<span class="text-emerald-400 font-bold">● онлайн</span>'
+      ? `<span class="text-emerald-400 font-bold">● онлайн сейчас</span>`
       : `<span class="text-slate-500">○ ${escapeHtml(lastSeenText(p.lastSeen, false))}</span>`;
     const chips = `${p.verified ? verifiedBadgeHtml() : ''}${p.role === 'admin' ? staffChipHtml() : ''}${p.status ? statusChipHtml(p.status) : ''}${p.banned ? `<span class="text-[8px] font-black px-1 rounded bg-rose-500/20 border border-rose-500/50 text-rose-300" title="${escapeHtml(p.banReason || 'без причины')}">⛔ БАН</span>` : ''}`;
     const banInfo = p.banned ? `<div class="text-[8.5px] text-rose-300/80 truncate">Причина: ${escapeHtml(p.banReason || 'без причины')}${p.banBy ? ` · забанил ${escapeHtml(p.banBy)}` : ''}</div>` : '';
     const email = has('emails') && p.email ? `<div class="text-[8.5px] text-slate-500 truncate">✉ ${escapeHtml(p.email)}</div>` : '';
     const first = p.firstSeen ? `рег. ${new Date(p.firstSeen).toLocaleDateString('ru-RU')}` : '';
-    return `<div class="bg-slate-900/70 border border-slate-800 rounded-lg px-2 py-1.5 space-y-1">
+    return `<div class="bg-slate-900/70 border ${p.online ? 'border-emerald-900/50' : 'border-slate-800'} rounded-lg px-2 py-1.5 space-y-1">
       <div class="min-w-0 cursor-pointer hover:bg-slate-800/50 rounded -mx-1 px-1 transition" onclick="adminOpenPlayer('${p.uid}')" title="Открыть подробную карточку">
-        <div class="text-[10.5px] font-bold text-slate-200 truncate flex items-center gap-1 flex-wrap">${escapeHtml(p.nick)} ${chips}<span class="ml-auto text-slate-600 text-[9px]">›</span></div>
+        <div class="text-[10.5px] font-bold text-slate-200 truncate flex items-center gap-1 flex-wrap">${escapeHtml(p.nick)} ${chips} ${onlineBadge} ${registeredBadge}<span class="ml-auto text-slate-600 text-[9px]">›</span></div>
         <div class="text-[9px] text-slate-500 truncate">ID <span class="font-mono text-amber-300">${escapeHtml(p.tag || '—')}</span> · <span class="font-mono">${escapeHtml(p.uid)}</span></div>
         ${email}${banInfo}
         <div class="text-[9px] truncate">${status}${first ? ` <span class="text-slate-600">· ${first}</span>` : ''}</div>
       </div>
       ${btns.length ? `<div class="flex flex-wrap gap-1">${btns.join('')}</div>` : ''}
     </div>`;
-  }).join('') || '<div class="net-empty">Никого не найдено.</div>';
+  }).join('') || '<div class="net-empty">Никого не найдено. Попробуй другой фильтр.</div>';
 }
 
 async function adminToggleVerify(uid, grant) {

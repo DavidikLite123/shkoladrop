@@ -8,10 +8,10 @@
 /* --------------------------------------------------------------------------
    1. СХЕМА СОХРАНЕНИЯ
    -------------------------------------------------------------------------- */
-const SAVE_KEY = 'shkola_drop_save_v12';
+const SAVE_KEY = 'shkola_drop_save_v14';
 const LEGACY_KEYS = ['shkola_drop_save_v10', 'shkola_drop_save_v9', 'shkola_drop_save_v8', 'shkola_drop_save_v7', 'shkola_drop_save_v6'];
-/* Все ключи предыдущих версий — из них вайп 3.7 вытаскивает только ник/ID */
-const OLD_SAVE_KEYS = ['shkola_drop_save_v11'].concat(LEGACY_KEYS);
+/* Все ключи предыдущих версий — из них вайп 3.9/3.5 пытается вытащить ник/ID, но теперь вайп ПОЛНЫЙ: прогресс всё равно сбрасывается */
+const OLD_SAVE_KEYS = ['shkola_drop_save_v13', 'shkola_drop_save_v12', 'shkola_drop_save_v11'].concat(LEGACY_KEYS);
 
 const DEFAULT_STATS = {
   casesOpened: 0,
@@ -57,7 +57,8 @@ const DEFAULT_STATS = {
   sessions: 0,
   hardModeNotified: false,
   richTaxNotified: false,
-  tapLimitClosed: false
+  tapLimitClosed: false,
+  apologyGiftClaimed: false // сезон 3.5 — подарок-извинение за вайп 3.9
 };
 
 function freshStats() {
@@ -335,9 +336,10 @@ const SaveManager = {
     return data;
   },
 
-  /** Чтение: localStorage (v12) → cookie-бэкап v12 → ВАЙП СЕЗОНА 3.7.
-      Старые версии (v11 и ниже) НЕ переносим: инвентарь и баланс сбрасываются
-      до стартовых, а ник и уникальный ID аккаунта сохраняются. */
+  /** Чтение: localStorage (v14) → cookie-бэкап v14 → ПОЛНЫЙ ВАЙП СЕЗОНА 3.9/3.5.
+      Все старые версии (v13 и ниже) сбрасываются ПОЛНОСТЬЮ: и прогресс, и аккаунт.
+      При обнаружении старого сохранения выставляется флаг hadOldSave — чтобы показать
+      одноразовое уведомление «прости, твой аккаунт был сброшен» + подарок-извинение. */
   load() {
     let raw = null;
 
@@ -348,19 +350,38 @@ const SaveManager = {
 
     if (!raw) {
       // cookie-бэкап принимается ТОЛЬКО текущей версии (см. readCookieBackup),
-      // чтобы бэкап v11 не воскресил вайпнутый прогресс
+      // чтобы старый бэкап не воскресил вайпнутый прогресс
       const cookieBackup = this.readCookieBackup();
       if (cookieBackup) raw = cookieBackup;
     }
 
-    if (raw) return { data: this.normalize(raw), migrated: false, fresh: false, wiped: false };
+    if (raw) return { data: this.normalize(raw), migrated: false, fresh: false, wiped: false, carriedUser: false, hadOldSave: false };
 
-    // ---------- ВАЙП СЕЗОНА 3.7 ----------
-    // Переносим только личность (ник + ID + галочка). Всё остальное — с нуля.
-    const carriedUser = this.readCarriedUser();
+    // ---------- ПОЛНЫЙ ВАЙП СЕЗОНА 3.9 ----------
+    // Проверяем, был ли вообще какой-то старый прогресс (чтобы показать уведомление о сбросе)
+    let hadOldSave = false;
+    let carriedUser = null;
+    try {
+      carriedUser = this.readCarriedUser();
+      if (carriedUser) hadOldSave = true;
+      if (!hadOldSave) {
+        for (const key of OLD_SAVE_KEYS) {
+          try {
+            const v = localStorage.getItem(key);
+            if (v) { hadOldSave = true; break; }
+          } catch (e) {}
+        }
+      }
+      if (!hadOldSave) {
+        const cj = this.readCookieJson();
+        if (cj) hadOldSave = true;
+      }
+    } catch (e) {}
+
     const data = this.defaultData();
-    if (carriedUser) data.user = carriedUser;
-    return { data: data, migrated: false, fresh: true, wiped: true, carriedUser: !!carriedUser };
+    // v13 — ПОЛНЫЙ сброс аккаунтов: личность НЕ переносим, игрок начинает заново
+    // (старый ник/ID остаются только для флага уведомления)
+    return { data: data, migrated: false, fresh: true, wiped: true, carriedUser: !!carriedUser, hadOldSave: !!hadOldSave, oldUser: carriedUser || null };
   },
 
   /** Вытащить личность (ник/id/галочку) из сохранений старых версий — для вайпа 3.7.

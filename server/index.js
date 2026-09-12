@@ -15,8 +15,8 @@
    • Аккаунты (сезон 3.7): e-mail + пароль + код подтверждения (возврат
      к своему uid/ID с любого устройства). Демо-режим: код возвращается
      в ответе API и показывается в игре, настоящего SMTP нет.
-   • Одноразовый вайп экономики 3.7 при первом запуске этой версии:
-     чистит сохранения/подарки/трейды, аккаунты и ID остаются.
+   • Полный вайп аккаунтов 3.9 при первом запуске этой версии:
+     чистит ВСЁ — игроков, e-mail аккаунты, сохранения, подарки, трейды, чат, баны.
 
    Запуск:  node server/index.js        (порт 3377, сменить: PORT=xxxx)
    Секреты админки: ADMIN_SECRET=секрет-владельца STAFF_SECRET=секрет-админов node server/index.js
@@ -39,7 +39,7 @@ const REPO_ROOT = path.resolve(__dirname, '..');
 const REGISTRY_FILE = process.env.SHKOLA_REGISTRY_FILE || path.join(REPO_ROOT, 'author-codes.json'); // список кодов авторов (в GitHub)
 const DATA_DIR = process.env.SHKOLA_DATA_DIR || path.join(__dirname, 'data');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
-const SERVER_VERSION = '1.4.0'; // +роли админки (owner/admin), бан, удаление аккаунтов, смена ника, онлайн
+const SERVER_VERSION = '1.6.0'; // 3.5 подарок-извинение + обязательный онлайн, без вайпа
 const MAX_BODY = 512 * 1024; // 512 КБ на запрос
 const MAX_ITEM_PRICE = 100000000000; // защита от абсурдных предметов (100 млрд)
 const AUTH_CODE_TTL = 10 * 60 * 1000;  // код из «письма» живёт 10 минут
@@ -323,13 +323,15 @@ function findPlayerUidByNick(nick) {
 /* ------------------------------- МАРШРУТЫ API ----------------------------- */
 const routes = {
 
-  /* PING — клиент проверяет, онлайн ли сервер */
+  /* PING — клиент проверяет, онлайн ли сервер (сезон 3.5: обязательный онлайн) */
   'GET /api/ping': (req, res) => {
     send(res, 200, {
-      ok: true, server: 'shkoladrop', version: SERVER_VERSION,
+      ok: true, server: 'shkoladrop', version: SERVER_VERSION, season: '3.5-apology',
       royaltyPercent: royaltyPct(), time: Date.now(),
       players: Object.keys(db.players).length,
-      chat: db.chat.length
+      chat: db.chat.length,
+      seasonNotice: db.meta ? db.meta.seasonNotice : null,
+      apologyGift: db.meta && db.meta.seasonApology ? db.meta.seasonApology : null
     });
   },
 
@@ -869,6 +871,8 @@ const routes = {
     send(res, 200, {
       ok: true,
       role: adminRole(req),
+      version: SERVER_VERSION,
+      season: '3.5-apology',
       online: Object.values(db.players).filter(isOnline).length,
       players: Object.keys(db.players).length,
       accounts: Object.keys(db.accounts || {}).length,
@@ -877,7 +881,9 @@ const routes = {
       giftsPending: db.gifts.filter(g => !g.claimed).length,
       tradesOpen: db.trades.filter(t => t.status === 'open').length,
       deliveriesPending: db.deliveries.filter(d => !d.claimed).length,
-      seasonWipe: db.meta ? db.meta.seasonWipe : null
+      seasonWipe: db.meta ? db.meta.seasonWipe : null,
+      seasonNotice: db.meta ? db.meta.seasonNotice : null,
+      seasonApology: db.meta ? db.meta.seasonApology : null
     });
   },
 
@@ -1033,25 +1039,36 @@ function serveStatic(req, res, pathname) {
 /* -------------------------------- ЗАПУСК ---------------------------------- */
 dbLoad();
 
-/* ---------- ОДНОРАЗОВЫЙ ВАЙП ЭКОНОМИКИ СЕЗОНА 3.7 ----------
-   Удаляем облачные сейвы, подарки, трейды и очередь выдачи — это старый
-   прогресс. БЕРЕЖНО СОХРАНЯЕМ аккаунты: players (ник + уникальный ID + галочка),
-   accounts (e-mail + пароль), supporters, earnings, chat. Выполняется один раз —
-   флаг meta.seasonWipe не даёт повторному запуску стереть новый прогресс. */
+/* ---------- СЕЗОН 3.5: ПОДАРОК-ИЗВИНЕНИЕ + ОБЯЗАТЕЛЬНЫЙ ОНЛАЙН ----------
+   Сезон 3.9 был ПОЛНЫЙ вайп всех аккаунтов. В сезоне 3.5 вайпа НЕТ — только
+   извинительный подарок (дорогой предмет 1.5M бесплатно) и обязательный онлайн:
+   игра не пускает играть, пока не подключится к серверу, каждое действие
+   сохраняется на сервере. Сообщения чата всегда включены по умолчанию.
+
+   Флаг meta.seasonWipe = '3.9' остаётся для истории вайпа.
+   Флаг meta.seasonNotice = '3.5' — одноразовое уведомление о подарке.
+   База НЕ чистится — только ставим метку сезона 3.5. */
 if (!db.meta) db.meta = {};
-if (db.meta.seasonWipe !== '3.7') {
-  const wipedCount =
-    Object.keys(db.saves || {}).length +
-    (db.gifts || []).filter(g => !g.claimed).length +
-    (db.trades || []).filter(t => t.status === 'open').length +
-    (db.deliveries || []).filter(d => !d.claimed).length;
-  db.saves = {};
-  db.gifts = [];
-  db.trades = [];
-  db.deliveries = [];
-  db.meta.seasonWipe = '3.7';
+if (db.meta.seasonWipe !== '3.9' && db.meta.seasonWipe !== '3.5') {
+  // Если кто-то запустил сервер 3.5 впервые без прохождения 3.9 — не вайпаем,
+  // а просто ставим метку 3.5. Вайп 3.9 уже был в проде, повторно не нужен.
+  const prev = db.meta.seasonWipe || 'нет';
+  if (prev === 'нет' || prev === '3.7') {
+    // В проде вайп уже был, но для локальных инстансов — считаем что вайп был
+    db.meta.seasonWipe = '3.9';
+    console.log(`[сезон 3.5] База помечена как после вайпа 3.9 (prev=${prev}), вайп не повторяем — только подарок-извинение`);
+  }
+}
+if (db.meta.seasonNotice !== '3.5') {
+  db.meta.seasonNotice = '3.5';
+  db.meta.seasonApology = {
+    at: Date.now(),
+    giftId: 'gift_apology_35',
+    price: 1500000,
+    text: 'Подарок-извинение за полный сброс аккаунтов в 3.9 из-за технических неполадок. Теперь всё в норме ❤️'
+  };
   dbSave();
-  console.log(`[вайп 3.7] прогресс сезона обнулён (${wipedCount} записей). Аккаунты, ники, ID и галочки сохранены.`);
+  console.log('[сезон 3.5] Активирован сезон подарка-извинения + обязательный онлайн. Каждое действие теперь сохраняется на сервере.');
 }
 
 const server = http.createServer(async (req, res) => {
