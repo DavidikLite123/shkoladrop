@@ -52,8 +52,15 @@ if (document.readyState === 'loading') {
    -------------------------------------------------------------------------- */
 function checkStylesLoaded() {
   try {
-    const maxW = window.getComputedStyle(document.body).maxWidth;
-    if (maxW === '448px' || maxW === '28rem') return; // max-w-md применился — всё ок
+    /* Проверяем по пробному элементу: ширина body теперь зависит от экрана
+       (переменная --app-max), поэтому по ней Tailwind определять нельзя. */
+    const probe = document.createElement('div');
+    probe.className = 'hidden';
+    probe.style.position = 'absolute';
+    document.body.appendChild(probe);
+    const ok = window.getComputedStyle(probe).display === 'none';   // .hidden → display:none
+    probe.remove();
+    if (ok) return;                                                  // Tailwind на месте — всё ок
     const warn = document.createElement('div');
     warn.className = 'fixed left-3 right-3 bottom-3 z-[95] bg-amber-950/95 border border-amber-500/60 text-amber-100 text-[11px] rounded-xl p-3 leading-relaxed';
     warn.innerHTML = '⚠️ <b>Стили оформления не загрузились</b> (Tailwind CDN). Проверь интернет или отключи блокировщик: игра работает, но оформление упрощённое.';

@@ -10,6 +10,13 @@
     "start": "node server/index.js",
     "serve": "node server/index.js",
     "selftest": "node server/selftest.js",
-    "test": "node server/selftest.js"
+    "test": "node server/selftest.js",
+    "test:unit": "node tests/crash-math.test.js",
+    "test:ui": "node tests/crash-ui.test.js",
+    "test:lint": "node tests/static-check.test.js",
+    "test:all": "npm run test:lint && npm run test && npm run test:unit && npm run test:ui"
+  },
+  "devDependencies": {
+    "jsdom": "^30.0.1"
   }
 }

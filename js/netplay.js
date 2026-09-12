@@ -465,8 +465,10 @@ const NetAuthor = {
       $('authorActiveName').textContent = link.ownerName;
       $('authorActiveCode').textContent = link.code;
       $('authorRoyaltyStat').textContent = fmt(state.stats.authorRoyaltyLocal || 0);
-      const pctEl = $('authorRoyaltyPercentLabel');
-      if (pctEl) pctEl.textContent = AuthorRegistry.royaltyPercent();
+      // id бейджа — authorRoyaltyPercentBadge (раньше искали несуществующий
+      // authorRoyaltyPercentLabel, из-за чего процент автора не обновлялся)
+      const pctEl = $('authorRoyaltyPercentBadge');
+      if (pctEl) pctEl.textContent = `+${AuthorRegistry.royaltyPercent()}% автору`;
     }
   },
 

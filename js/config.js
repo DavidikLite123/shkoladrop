@@ -506,6 +506,8 @@ const XP_REWARDS = {
   sell: 3,
   miniGamePoint: 1,
   miniGameEnd: 20,
+  crashRound: 4,      // 🚀 сыгранный раунд
+  crashWin: 12,       // 🚀 успешный вывод
   idleCollect: 5
 };
 
@@ -533,7 +535,177 @@ const ACHIEVEMENTS = [
   { id: 'idle_1m',      icon: '🧹', name: 'Дежурный по школе',      desc: 'Собери 1 000 000 ₽ с дежурства',  metric: 'idleCollected', target: 1000000,   money: 150000,  xp: 300 },
   { id: 'promo_1',      icon: '🎫', name: 'Халявщик',               desc: 'Активируй промокод',              metric: 'promosUsed',   target: 1,          money: 5000,    xp: 50 },
   { id: 'drop_gold',    icon: '🌟', name: 'Золотой дроп',           desc: 'Получи предмет дороже 500 000 ₽', metric: 'biggestDrop',  target: 500000,     money: 100000,  xp: 250 },
-  { id: 'cat_found',    icon: '🐈', name: 'КОТ-ХРАНИТЕЛЬ',          desc: 'Найди легендарного Кота школы',   metric: 'catFound',     target: 1,          money: 2500000, xp: 2000, secret: true }
+  { id: 'cat_found',    icon: '🐈', name: 'КОТ-ХРАНИТЕЛЬ',          desc: 'Найди легендарного Кота школы',   metric: 'catFound',     target: 1,          money: 2500000, xp: 2000, secret: true },
+  /* 🚀 Ракета (Crash) */
+  { id: 'crash_1',       icon: '🚀', name: 'Первый полёт',           desc: 'Сыграй первый раунд в «Ракете»',  metric: 'crashRounds',  target: 1,          money: 5000,    xp: 30 },
+  { id: 'crash_10x',     icon: '🛰', name: 'Выше крыши школы',       desc: 'Забери выигрыш на 10.00× и выше', metric: 'crashBestMult', target: 10,        money: 50000,   xp: 150 },
+  { id: 'crash_50x',     icon: '🌌', name: 'Космический отличник',   desc: 'Долети до 50.00×',                metric: 'crashBestMult', target: 50,        money: 500000,  xp: 600 },
+  { id: 'crash_25wins',  icon: '🪂', name: 'Парашютист',             desc: 'Успешно забери 25 раундов',       metric: 'crashWins',    target: 25,         money: 100000,  xp: 250 }
+];
+
+/* ---------- Мини-игра «Ракета» (Crash) ----------
+   Честная математика: точка краша считается на устройстве игрока через
+   crypto.getRandomValues (RNG.float) ДО старта полёта — подкрутить по ходу нельзя.
+
+   Распределение — «коридор + хвост» (щедрый профиль, просил сам автор игры):
+     • ранний взрыв (earlyChance = 10% раундов) — равномерно в коридоре
+       [minCrash … earlyEdge], то есть МЕЖДУ 1.20× и 1.60×. Ниже minCrash
+       ракета не взрывается НИКОГДА — у игрока всегда есть время среагировать;
+     • основной хвост (90% раундов) — степенной:
+           P(долететь до X) = (1 − earlyChance) · (earlyEdge / X)^tailAlpha
+       Показатель tailAlpha чуть больше 1, поэтому хвост убывает быстро и
+       бесконечных полётов не бывает, но средние и высокие иксы частые.
+
+   Во сколько это выливается (при текущих настройках):
+       P(≥1.5×) ≈ 93%   P(≥2×) ≈ 70%   P(≥3×) ≈ 45%   P(≥4×) ≈ 32%
+       P(≥10×)  ≈ 12%   P(≥50×) ≈ 1.9%   медиана краша ≈ 2.7×
+   Средний возврат при выводе на фиксированном X: crashRtpAt(X) = X · P(≥X),
+   максимум ≈ 145% около 1.6–1.8× (игру сделали щедрее осознанно: хочешь
+   «честные» 95% — верни tailAlpha = 1.0 и earlyChance = 0.05, earlyEdge = 0.95,
+   minCrash = 1.0, получится классическая формула (1 − edge)/(1 − roll)).
+
+   Тайминг раунда:
+     0 … takeoffSec  — гарантированный РАЗГОН: множитель держится 1.00×,
+                       краш в этой фазе невозможен (ракета ещё на старте);
+     дальше          — рост по кривой exp(k1·τ + k2·τ²), τ = t − takeoffSec.
+   Минимум времени до возможного взрыва = takeoffSec + время роста до minCrash
+   (1,2 c + ~1,2 c ≈ 2,4 секунды на самый ранний взрыв). */
+const CRASH_CONFIG = {
+  minCrash: 1.20,           // ПОЛ: ниже 1.20× ракета не взрывается никогда
+  earlyChance: 0.10,        // доля «ранних» раундов (взрыв в коридоре до earlyEdge)
+  earlyEdge: 1.60,          // верхняя граница раннего коридора
+  tailAlpha: 1.12,          // показатель хвоста: >1 — хвост тоньше, <1 — жирнее
+  minBet: 100,              // минимальная ставка
+  maxBet: 50000000,         // максимальная ставка (50 млн ₽)
+  takeoffSec: 1.2,          // гарантированный разгон: раньше краша быть не может
+  growthLinear: 0.14,       // множитель = exp(k1·τ + k2·τ²) — плавный старт…
+  growthQuad: 0.012,        // …и ускорение на высоких иксах
+  windowSec: 9,             // сколько секунд полёта помещается в поле по горизонтали
+  maxMultiplier: 1000000,   // жёсткий потолок, чтобы полёт не длился вечно
+  minAutoCashout: 1.01,     // автовывод ниже 1.01× бессмысленен
+  maxAutoCashout: 1000000,
+  historySize: 12,          // сколько последних краш-точек храним
+  quickBets: [1000, 10000, 100000, 1000000],
+  quickAuto: [1.5, 2, 3, 5, 10]
+};
+
+/* Чистая математика ракеты (без DOM и без внешних зависимостей — чтобы её мог
+   поднять и автотест в Node). Её же гоняют тесты: tests/crash-math.test.js */
+
+/** roll → [0,1) с защитой от мусора на входе */
+function crashNormRoll(roll) {
+  const raw = Number(roll);
+  if (!isFinite(raw)) return 0;
+  return Math.min(Math.max(raw, 0), 0.999999999999);
+}
+
+/**
+ * Точка краша по честному roll ∈ [0,1).
+ *   roll < earlyChance  → равномерно в коридоре [minCrash … earlyEdge] (ранний взрыв);
+ *   иначе               → степенной хвост от earlyEdge:
+ *                         x = earlyEdge · (1 − u)^(−1/tailAlpha), u ∈ [0,1).
+ * Ниже CRASH_CONFIG.minCrash результат не опускается никогда.
+ */
+function crashPointFromRoll(roll) {
+  const c = CRASH_CONFIG;
+  const r = crashNormRoll(roll);
+  const alpha = Math.max(0.05, Number(c.tailAlpha) || 1);
+
+  if (c.earlyChance > 0 && r < c.earlyChance) {
+    const u = r / c.earlyChance;                       // 0…1
+    const x = c.minCrash + (c.earlyEdge - c.minCrash) * u;
+    return Math.min(Math.max(x, c.minCrash), c.maxMultiplier);
+  }
+
+  const u = (r - c.earlyChance) / Math.max(1e-12, 1 - c.earlyChance);
+  const x = c.earlyEdge * Math.pow(Math.max(1e-12, 1 - u), -1 / alpha);
+  if (!isFinite(x)) return c.maxMultiplier;
+  return Math.min(Math.max(x, c.minCrash), c.maxMultiplier);
+}
+
+/**
+ * Теоретическая вероятность долететь до X (точная, не Монте-Карло).
+ * Совпадает с crashPointFromRoll — её же проверяют тесты.
+ */
+function crashReachChance(x) {
+  const c = CRASH_CONFIG;
+  const v = Number(x);
+  if (!isFinite(v) || v <= c.minCrash) return 1;
+  const alpha = Math.max(0.05, Number(c.tailAlpha) || 1);
+  if (v <= c.earlyEdge) {
+    const span = Math.max(1e-9, c.earlyEdge - c.minCrash);
+    return Math.min(1, Math.max(0, 1 - c.earlyChance * (v - c.minCrash) / span));
+  }
+  const s = (1 - c.earlyChance) * Math.pow(c.earlyEdge / Math.min(v, c.maxMultiplier), alpha);
+  return Math.min(1, Math.max(0, s));
+}
+
+/** Средний возврат при стратегии «всегда забирать на X»: RTP(X) = X · P(долететь до X) */
+function crashRtpAt(x) {
+  const v = Math.min(CRASH_CONFIG.maxMultiplier, Math.max(1, Number(x) || 1));
+  return v * crashReachChance(v);
+}
+
+/** Сколько секунд ракета уже «набирает высоту» (без фазы разгона) */
+function crashGrowthTime(elapsedSec) {
+  return Math.max(0, (Number(elapsedSec) || 0) - CRASH_CONFIG.takeoffSec);
+}
+
+/**
+ * Множитель в момент времени t (секунды от нажатия «Запустить»).
+ * Пока длится разгон (t < takeoffSec) — ровно 1.00×, дальше растёт по кривой
+ * exp(k1·τ + k2·τ²): в начале почти линейно и предсказуемо, потом всё быстрее.
+ */
+function crashMultiplierAt(elapsedSec) {
+  const tau = crashGrowthTime(elapsedSec);
+  return Math.exp(CRASH_CONFIG.growthLinear * tau + CRASH_CONFIG.growthQuad * tau * tau);
+}
+
+/**
+ * Через сколько секунд от старта ракета дойдёт до множителя x.
+ * Минимум — takeoffSec: быстрее разгона взрыв случиться не может.
+ */
+function crashTimeToMultiplier(x) {
+  const ln = Math.log(Math.max(1, Number(x) || 1));
+  const a = CRASH_CONFIG.growthQuad;
+  const b = CRASH_CONFIG.growthLinear;
+  const tau = a > 0 ? (-b + Math.sqrt(b * b + 4 * a * ln)) / (2 * a) : ln / b;
+  return CRASH_CONFIG.takeoffSec + (isFinite(tau) ? Math.max(0, tau) : 0);
+}
+
+/** Выплата при выводе: ставка × текущий множитель (вниз до целого ₽) */
+function crashPayout(bet, mult) {
+  return Math.floor(Math.max(0, Number(bet) || 0) * Math.max(1, Number(mult) || 1));
+}
+
+/* ---------- Реестр мини-игр (единое меню «Игры») ----------
+   Модульность: чтобы добавить новую мини-игру, достаточно дописать сюда одну
+   запись и добавить её панель <main id="view..."> в index.html (+ обработку в
+   switchTab). Поля:
+     id       — уникальный код игры;
+     icon/name/desc/badge — как игра выглядит в меню;
+     iconSvg   — ключ встроенной SVG-иконки (js/icons.js); рисуется вместо эмодзи,
+                 чтобы на ОС без эмодзи-шрифтов не было пустых квадратов;
+     tab      — какую панель открывать (view + Tab);
+     enabled  — можно ли сейчас играть (false = карточка затемнена);
+     onOpen   — необязательный свой обработчик вместо switchTab (например, модалка).
+   Порядок в массиве = порядок карточек в меню. Первая игра — стартовая вкладка. */
+const MINI_GAMES = [
+  {
+    id: 'upgrade', tab: 'upgrade', icon: '⚡', iconSvg: 'zap', name: 'Апгрейд',
+    desc: 'Занеси свой предмет на цель дороже — шанс считается честно по ценам',
+    enabled: () => true
+  },
+  {
+    id: 'cases', tab: 'cases', icon: '📦', iconSvg: 'package', name: 'Кейсы',
+    desc: 'Крути школьные, CS2, кошачьи и ютубер-кейсы — дроп честный, шансы открыты',
+    enabled: () => true
+  },
+  {
+    id: 'crash', tab: 'crash', icon: '🚀', iconSvg: 'rocket', name: 'Ракета', badge: 'NEW',
+    desc: 'Ставь, следи за множителем и успевай забрать выигрыш до взрыва',
+    enabled: () => true
+  }
 ];
 
 /* ---------- Апгрейды «Дежурство по школе» (пассивный доход) ---------- */
@@ -570,26 +742,31 @@ const DAILY_REWARDS = [
 const DAILY_STREAK_RESET_HOURS = 48;
 
 /* ---------- Промокоды (сезон 3.5 / версия 4.0: +10 кодов для ютубера) ---------- */
+/* ---------- Промокоды ----------
+   Вид у кодов намеренно «машинный»: случайные буквы и цифры блоками по 4
+   (XXXX-XXXX-XXXX), без читаемых слов — чтобы их нельзя было угадать перебором
+   по смыслу. Алфавит без похожих символов: нет 0/O и 1/I.
+   Актуальный список кодов и их наград — в файле codes/promo-codes.md (в GitHub).
+   Регистр и пробелы не важны: игра сама приводит ввод к верхнему регистру. */
 const PROMO_CODES = {
-  SHKOLA2:        { money: 25000,    xp: 50,  label: 'Сезон 2 — стартовый капитал' },
-  PEREMENA:       { money: 50000,    xp: 75,  label: 'Награда за перемену' },
-  DAVIDLITE:      { money: 100000,   xp: 150, label: 'Код от автора проекта' },
-  MURKA1337:      { money: 250000,   xp: 200, label: 'Мурка советует копить на кота' },
-  KOT10M:         { money: 1000000,  xp: 400, label: 'Кот поделился заначкой 🐱' },
-  'NEWUPDATE2026':{ money: 2026,     xp: 25,  label: 'Обновление 3.0.2 — приветственные монеты!' },
-  GORABOGDAN5G:   { item: 'cat_gora_bogdan', xp: 500, label: 'ЛЕГЕНДАРНЫЙ КОТИК ГОРА БОГДАНА! 🏔️🐱' },
-  LEGENDAPH2026:  { money: 500000,   xp: 300, label: 'Промокод от ютубера Легенда_пх (1 канал Школа Дроп) ▶' },
-  /* 10 новых промокодов для ютубера — сезон 3.5 / версия 4.0 */
-  YTDAVID4:       { money: 400000,   xp: 400, label: 'Версия 4.0 сезон 3.5 — код от Давида 🎒 Версия 4.0!' },
-  APOLOGY35:      { money: 350000,   xp: 350, label: 'Подарок-извинение за вайп 3.9 — спасибо что остался ❤️ Сезон 3.5' },
-  SORRY39:        { money: 39000,    xp: 100, label: 'Сорри за сброс аккаунтов в 3.9 — теперь всё в норме 😔' },
-  SERVERONLINE35:{ money: 150000,   xp: 200, label: 'Обязательный онлайн 3.5 — игра ждёт сервер 🌐 Подключение успешно!' },
-  GIFT4YOU:       { money: 100000, item: 'upg_gold_whistle', xp: 250, label: 'Подарок от ютубера — золотой свисток судьи 🥇 + 100k' },
-  SHKOLA4LIFE:    { money: 100000,   xp: 150, label: 'ШКОЛА ДРОП 4.0 — живём! Версия 4.0 сезон 3.5' },
-  COMEBACK35:     { money: 250000,   xp: 300, label: 'Возвращение после вайпа — welcome back в сезон 3.5 🎒✨' },
-  CLOUDSAVE4:     { money: 200000,   xp: 250, label: 'Облачное сохранение 4.0 — каждое действие на сервер ☁️' },
-  ONLINE35:       { money: 35000,    xp: 100, label: 'Чат всегда включен по умолчанию 🔔 Сезон 3.5' },
-  THANKS35:       { money: 150000,   xp: 200, label: 'Спасибо за поддержку сезона 3.5 ❤️ От администрации' }
+  'ZBWK-T7GX-5MS4': { money: 25000   , xp: 50  , label: 'Стартовый капитал сезона' },
+  'VDWJ-H5EF-2MJ9': { money: 50000   , xp: 75  , label: 'Награда за перемену' },
+  '2N6Y-4ZVL-QD99': { money: 100000  , xp: 150 , label: 'Код от автора проекта' },
+  'N9EP-CLZZ-VVFE': { money: 250000  , xp: 200 , label: 'Мурка советует копить на кота' },
+  'KTLF-BUBR-V72G': { money: 1000000 , xp: 400 , label: 'Кот поделился заначкой 🐱' },
+  'M7RR-KTBH-TC4C': { money: 2026    , xp: 25  , label: 'Приветственные монеты обновления' },
+  'DACA-6BMR-BNNV': { item: 'cat_gora_bogdan', xp: 500 , label: 'ЛЕГЕНДАРНЫЙ КОТИК ГОРА БОГДАНА! 🏔️🐱' },
+  'SF9H-Q8FT-94X7': { money: 500000  , xp: 300 , label: 'Промокод от ютубера Легенда_пх (1 канал Школа Дроп) ▶' },
+  'TWJJ-E2H6-BYZ2': { money: 400000  , xp: 400 , label: 'Версия 4.0 сезон 3.5 — код от Давида 🎒' },
+  '2FE3-TWU9-CNS3': { money: 350000  , xp: 350 , label: 'Подарок-извинение за вайп 3.9 ❤️ Сезон 3.5' },
+  'WVFQ-5AZ6-WEUR': { money: 39000   , xp: 100 , label: 'Сорри за сброс аккаунтов — теперь всё в норме 😔' },
+  'UCMU-TEFZ-RX7A': { money: 150000  , xp: 200 , label: 'Обязательный онлайн 3.5 — сервер на связи 🌐' },
+  'Q9EC-EUMM-J79K': { money: 100000  , item: 'upg_gold_whistle', xp: 250 , label: 'Золотой свисток судьи 🥇 + 100k' },
+  '6LGG-RPHR-8SVS': { money: 100000  , xp: 150 , label: 'ШКОЛА ДРОП 4.0 — живём!' },
+  'FWXU-NHHF-WA8T': { money: 250000  , xp: 300 , label: 'Возвращение после вайпа — welcome back 🎒✨' },
+  'UNDV-8GZ6-R2MZ': { money: 200000  , xp: 250 , label: 'Облачное сохранение 4.0 ☁️' },
+  'PHDV-J68F-LHAQ': { money: 35000   , xp: 100 , label: 'Чат всегда включён 🔔 Сезон 3.5' },
+  'XD72-TP98-TH8B': { money: 150000  , xp: 200 , label: 'Спасибо за поддержку сезона 3.5 ❤️' }
 };
 
 /* ---------- Админка: два уровня доступа (5 кликов по логотипу + код) ----------
@@ -730,7 +907,58 @@ const VIP_CODE_HASHES = [
   '74982ee81cf2fd2e0dd7195b',
   'c2a5633c81aed751cd7a0006',
   '7f93ecd00cd89d1349c6245a',
-  '5b94d01020fe47c532f686ed'
+  '5b94d01020fe47c532f686ed',
+  /* Новая сотня кодов (генерация 2026-09-12) — открытые коды: codes/vip-codes.md */
+  '9fe76d744c9e1a4beef09e78', '831bd6138df2a26a586f85a5',
+  '7bd6ba3667c7c582cff08b09', 'a5c12a29324a617ff8456269',
+  '5c52deb83f56656bc8bb1c58', '1f1d1e3f4177c345b3023909',
+  'fc6793e13f649ff6b2bc2942', '721a90a35a786ca0b2d92d05',
+  '13e36a200281c31956c4ba98', 'd995d5efc8ba6b7a3d6ff47c',
+  '55ca3c2ff17a43288c034ba5', 'd0daef0738e5abe1d3f7817a',
+  '98ebd688f30140b4a14e3dbe', '25c13cf49057e4d93713a7c6',
+  '3562601cfb62762b7b3dad2c', '1e43e9361caeee2034f0b26f',
+  '4a28f5f2e16ae4e5a3293c04', '2f36e3d9179634e60b1aa125',
+  'd75f522a4d9ad6ef9166fbad', '38af1c65b820152e1ca48f6f',
+  'f7c9b9442fbd57f82f440d4c', 'fdb9bdfda4f5fedbeb928063',
+  'e7b7616e4c063efc7cc41887', 'c895b8eef9b196deb73f477a',
+  '62dcb4c5e9314b5f8e98194a', '7d59cfd863be64748be78a0c',
+  '04a6e1a64a59ea80d9055859', 'b45fb179f3771df33d6bd25e',
+  'd893d535238acbafb9c74f28', '56fd7c2683701f30c45450c8',
+  '17b5108e6f11911fe4191cfa', '7368165b0ae63b6316f1084d',
+  '354dca3c4013ffb529ce0ac9', '96a8890c4e8df725a3d6a831',
+  '425fc92bc5b4e5b28798428f', 'ec1ec529b909fb4fd65ccbd0',
+  '8de1f1356463b67ad498d968', 'ee234c69ece72fb9d5c66949',
+  'c5e6c98009e4391a54c0ff23', 'dd7c7e4ea4b6c5b8549562cd',
+  '6ca04e7a2be95d2fadab618a', '174516cc293c2c858bcbef44',
+  '4840953597bda78cb4028829', 'f1f1b02ba22e6c2b3999d93c',
+  'd1eed9288ff05740ddcf0e1b', 'f53d001bc71fab90eb0604dc',
+  '13599f46a0a76ea6fb9beeef', 'd024f4a02bea7afa015241f0',
+  '49009b521ed2d844a8a65329', '63d55d078c50d3374e852abd',
+  'bc1bcaa8a5e095c28bb0da70', '59e5bfcf09e0278c6a0031f3',
+  '54499b7c00b8211d2855c0cd', 'b72f293f8a81b80aeb45b150',
+  'efae1af1fde6379fb6c242b3', '00af02bf1e3f8ac1296b8fc6',
+  'c324f813cd9a940bba1d8cf7', 'ca9a0c33044ec07fe725df8f',
+  '14ff4154a9fb21a72ac96ef4', '86f3c3d9412056ff83960b7b',
+  'f49e5806535e9657bbd19e24', 'cc4946de5e3a11db9e984edc',
+  'cfa2c3f9f86cc3a69357d8aa', '400f39aea0f6b9bc9118ea33',
+  '881959f291eb81a02ec1739f', '6a7098defb76fd7f7cce980b',
+  '03091cc16165af5cec29b35c', '29440894da848ecab144a38c',
+  '3c998a7ef0c5b3be5bd8d665', 'de77d0214740cbad156e1ce0',
+  'a627d74188cd7c1dd577593d', 'ec87ef3d69312e42eb6e19e9',
+  'eace5642109b3dfa22365a0d', 'ea5243725c36be8e0b763e37',
+  '63dbdb63f118945df71a944f', '438deda5301231665b5fae09',
+  '6b63f1add0bd206dd88a7beb', '80bfe43c551c9b179913a58a',
+  '43449ee1d52a1b1cb1d35cff', '2cb8db475c98cf5d62d2711e',
+  'f6420aea59d3175eadbce034', '3c063f1c59f0edbd1ea86dfb',
+  '8500cedfb3784efe045f9ceb', '2839437062d6eb3b7ffdae30',
+  '404db12b1ca3932ae52eb1dc', 'fea7d7ffbb1188aa61b2e59b',
+  '08cfc913b338980d0817d353', 'bd28a0a8836e1167a785c877',
+  '73fdc40cce309b865864a58d', 'da6964eea668a5c698fc4545',
+  '70525427a9e9138ea2fedf85', 'e58fdb948c5b8ad318593841',
+  '5b295c17e608c10be51fb7ba', 'd37e5cc162b11751a9185dfa',
+  'da0ad40885a7c882167d5844', '7570673ac79ebb6103875a0e',
+  '80e840e9659e0ab256b8f13a', '562b917b68ce77389db3e7ae',
+  '4a7ea6e0d30f2e6103c0cd4d', '1ba1171869bbda281239a7e9'
 ];
 const VIP_CODES = [];  // устарело: открытых кодов в клиенте больше нет
 

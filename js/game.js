@@ -597,6 +597,12 @@ function renderAll() {
   if (viewVisible('viewInventory')) renderInventory();
   if (viewVisible('viewShop')) renderShop();
   if (viewVisible('viewCommunity')) renderCommunityTab();
+  // 🚀 Ракета: подсказка баланса и статистика (только когда панель на экране)
+  if (viewVisible('viewCrash') && typeof CrashGame !== 'undefined') {
+    const hint = $('crashBalanceHint');
+    if (hint) hint.textContent = moneyText(state.balance, true);
+    CrashGame.renderStats();
+  }
 
   if (Modal.isOpen('profileModal')) renderProfile();
 
@@ -2338,6 +2344,10 @@ async function redeemPromo() {
     Toast.error('Введи промокод');
     return;
   }
+  /* Коды вида XXXX-XXXX-XXXX: игрок может не напечатать дефисы — приводим к каноническому виду */
+  const canonicalPromoKey = c => (typeof PROMO_CODES !== 'undefined' && PROMO_CODES[c])
+    ? c
+    : (Object.keys(PROMO_CODES).find(k => k.replace(/-/g, '') === c.replace(/-/g, '')) || null);
 
   // Вход в админку через промокод: ADMIN<код> (роль определяется по хешу кода)
   if (code.startsWith('ADMIN') && resolveAdminRole(code.slice(5))) {
@@ -2346,7 +2356,8 @@ async function redeemPromo() {
     return;
   }
 
-  if (state.stats.promosUsed.includes(code)) {
+  const promoKey = canonicalPromoKey(code);
+  if (state.stats.promosUsed.includes(code) || (promoKey && state.stats.promosUsed.includes(promoKey))) {
     Toast.info('Этот промокод уже активирован');
     return;
   }
@@ -2386,13 +2397,14 @@ async function redeemPromo() {
     return;
   }
 
-  const promo = PROMO_CODES[code];
+  // Ключ в реестре: точное совпадение или тот же код без дефисов
+  const promo = promoKey ? PROMO_CODES[promoKey] : null;
   if (!promo) {
     Toast.error('Такого промокода нет. Ищи коды в видео David Lite или купи VIP-код, написав нам на почту!');
     return;
   }
 
-  state.stats.promosUsed.push(code);
+  state.stats.promosUsed.push(promoKey);
   audio.init();
 
   let rewardText = '';
@@ -2446,7 +2458,7 @@ async function redeemPromo() {
     Fx.burst(120);
   }
 
-  Toast.success(`Промокод <b>${code}</b> активирован: ${rewardText}! ${promo.label ? '· ' + promo.label : ''}`, 6000);
+  Toast.success(`Промокод <b>${promoKey}</b> активирован: ${rewardText}! ${promo.label ? '· ' + promo.label : ''}`, 6000);
   input.value = '';
   checkAchievements();
   renderPromoList();
@@ -3667,43 +3679,50 @@ function adminMaxLevel() {
 
 /* --------------------------------------------------------------------------
    НАВИГАЦИЯ
+   Активные игры (кейсы, апгрейд, ракета…) свёрнуты в одну кнопку «Игры»:
+   их список живёт в реестре MINI_GAMES (js/config.js), меню собирает js/games.js.
    -------------------------------------------------------------------------- */
+
+/** Какая вкладка открыта сейчас. Используется меню игр (MiniGames.isCurrent). */
+let currentTab = 'upgrade';
+
+/** Панель вкладки: 'cases' -> #viewCases, 'crash' -> #viewCrash и т.д. */
+function viewIdForTab(tab) {
+  return 'view' + String(tab || '').charAt(0).toUpperCase() + String(tab || '').slice(1);
+}
+
+/** Кнопка нижней навигации для вкладки (у всех игр это общая кнопка «Игры») */
+function navButtonForTab(tab) {
+  const games = (typeof MINI_GAMES !== 'undefined' && Array.isArray(MINI_GAMES)) ? MINI_GAMES : [];
+  if (games.some(g => g && (g.tab || g.id) === tab)) return $('tabGames');
+  return $({ inventory: 'tabInventory', community: 'tabCommunity', shop: 'tabShop' }[tab] || '');
+}
+
 function switchTab(tab) {
   audio.init();
   audio.playTick();
   scrollViewportTop();
 
-  const views = {
-    upgrade: $('viewUpgrade'),
-    cases: $('viewCases'),
-    inventory: $('viewInventory'),
-    community: $('viewCommunity'),
-    shop: $('viewShop')
-  };
-  const tabs = {
-    upgrade: $('tabUpgrade'),
-    cases: $('tabCases'),
-    inventory: $('tabInv'),
-    community: $('tabCommunity'),
-    shop: $('tabShop')
-  };
+  currentTab = tab;
 
-  Object.keys(views).forEach(k => {
-    if (!views[k] || !tabs[k]) return;
-    if (k === tab) {
-      views[k].classList.remove('hidden');
-      tabs[k].className = 'nav-tab nav-tab-active';
-    } else {
-      views[k].classList.add('hidden');
-      tabs[k].className = 'nav-tab';
-    }
-  });
+  // Прячем все панели, гасим все кнопки навигации (classList, а не className:
+  // у кнопки «Сообщество» есть служебный класс .relative для бейджа NEW)
+  document.querySelectorAll('.view-panel').forEach(v => v.classList.add('hidden'));
+  document.querySelectorAll('#tabbar .nav-tab').forEach(t => t.classList.remove('nav-tab-active'));
 
+  const view = $(viewIdForTab(tab));
+  if (!view) return;                       // неизвестная вкладка — ничего не ломаем
+  view.classList.remove('hidden');
+  const navBtn = navButtonForTab(tab);
+  if (navBtn) navBtn.classList.add('nav-tab-active');
+
+  // Рендер панели
   if (tab === 'cases') { renderCasesUI(); setupCaseTape(); }
   if (tab === 'inventory') renderInventory();
   if (tab === 'shop') renderShop();
   if (tab === 'community') { renderCommunityTab(); dismissCommunityHint(false); }
   if (tab === 'upgrade') renderUpgradeHud();
+  if (tab === 'crash' && typeof CrashGame !== 'undefined') CrashGame.onShow();
 
   uiUpdate();
 }
@@ -3774,6 +3793,9 @@ function initGame() {
   renderCasesUI();
   setupCaseTape();
   renderCommunityTab();
+  // 🚀 Мини-игры: ракета + меню «Игры»
+  try { if (typeof CrashGame !== 'undefined') CrashGame.init(); } catch (e) { console.error('[crash] init:', e); }
+  try { if (typeof MiniGames !== 'undefined') MiniGames.render(); } catch (e) { console.error('[games] init:', e); }
   renderPromoList();
   renderProfile();
   applyCookieCategoriesToUI();
