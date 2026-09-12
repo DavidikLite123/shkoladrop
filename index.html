@@ -526,6 +526,116 @@
     <div id="inventoryGrid" class="grid grid-cols-2 gap-2.5 min-h-[240px]"></div>
   </main>
 
+  <!-- ================= TAB: CRASH / РАКЕТА (js/crash.js) ================= -->
+  <main id="viewCrash" class="view-panel w-full px-4 mt-2 hidden space-y-3">
+    <div class="flex items-center justify-between">
+      <div>
+        <h2 class="font-cs text-sm font-bold uppercase tracking-wider text-slate-200">🚀 Ракета</h2>
+        <p class="text-[11px] text-slate-400">Ставь, следи за множителем и успевай забрать до взрыва</p>
+      </div>
+      <span class="text-[10px] bg-sky-500/20 text-sky-300 font-bold px-2 py-0.5 rounded-lg border border-sky-500/30">RTP 95%</span>
+    </div>
+
+    <!-- Поле полёта: график набора высоты + текущий множитель -->
+    <div id="crashStage" class="crash-stage">
+      <canvas id="crashCanvas" class="crash-canvas"></canvas>
+      <div class="crash-hud">
+        <div id="crashMultiplier" class="crash-mult">1.00×</div>
+        <div id="crashStatusText" class="text-[10px] text-slate-400">Готов к запуску</div>
+      </div>
+      <div id="crashBoom" class="crash-boom hidden">💥 ВЗРЫВ!</div>
+    </div>
+
+    <!-- Панель управления ставкой -->
+    <div class="w-full bg-slate-900/90 border border-slate-800 rounded-2xl p-3 space-y-3">
+      <div>
+        <div class="flex items-center justify-between mb-1.5">
+          <label for="crashBetInput" class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Ставка</label>
+          <span class="text-[9px] text-slate-500">на балансе <span id="crashBalanceHint" class="text-amber-300 font-bold">0 ₽</span></span>
+        </div>
+        <div class="flex items-center gap-2">
+          <input id="crashBetInput" type="number" inputmode="numeric" min="100" step="100" placeholder="1000"
+                 class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-sm text-white placeholder-slate-600 font-cs font-bold focus:outline-none focus:border-sky-500 transition">
+          <span class="text-xs text-slate-400 font-bold">₽</span>
+        </div>
+        <div id="crashQuickBets" class="flex flex-wrap gap-1.5 mt-2"></div>
+      </div>
+
+      <div>
+        <div class="flex items-center justify-between mb-1.5">
+          <label for="crashAutoInput" class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Автовывод · необязательно</label>
+          <span class="text-[9px] text-slate-500">заберу сам</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <input id="crashAutoInput" type="number" inputmode="decimal" min="1.01" step="0.1" placeholder="например 2.00"
+                 class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-sm text-white placeholder-slate-600 font-cs font-bold focus:outline-none focus:border-emerald-500 transition">
+          <span class="text-xs text-slate-400 font-bold">×</span>
+        </div>
+        <div id="crashQuickAuto" class="flex flex-wrap gap-1.5 mt-2"></div>
+      </div>
+
+      <div id="crashLiveWin" class="text-[10px] text-slate-400">Выигрыш сейчас: 0 ₽ (чистыми +0 ₽)</div>
+
+      <div class="grid grid-cols-2 gap-2">
+        <button id="btnCrashStart" onclick="crashStart()"
+                class="py-3 rounded-xl bg-gradient-to-r from-sky-500 to-cyan-400 text-slate-950 font-cs font-bold text-[11px] uppercase tracking-wider shadow-lg shadow-sky-500/20 hover:brightness-110 active:scale-95 transition disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 flex items-center justify-center gap-1.5">
+          <span>🚀</span><span id="crashStartLabel">ЗАПУСТИТЬ РАКЕТУ</span>
+        </button>
+        <button id="btnCrashCashout" onclick="crashCashout()" disabled
+                class="py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-lime-400 text-slate-950 font-cs font-bold text-[11px] uppercase tracking-wider shadow-lg shadow-emerald-500/20 hover:brightness-110 active:scale-95 transition disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 flex items-center justify-center gap-1.5">
+          <span>💰</span><span id="crashCashoutLabel">ЗАБРАТЬ 0 ₽</span>
+        </button>
+      </div>
+      <div class="text-center text-[9px] text-slate-500">Во время полёта ставка уже списана и поля заблокированы</div>
+    </div>
+
+    <!-- Статистика ракеты -->
+    <div class="w-full grid grid-cols-3 gap-2">
+      <div class="stat-tile">
+        <div class="stat-tile-label">Раундов</div>
+        <div id="crashRoundsStat" class="stat-tile-value text-sky-300">0</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-tile-label">Забрал</div>
+        <div id="crashWinsStat" class="stat-tile-value text-emerald-400">0</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-tile-label">Взрывов</div>
+        <div id="crashLossesStat" class="stat-tile-value text-rose-400">0</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-tile-label">Лучший X</div>
+        <div id="crashBestMultStat" class="stat-tile-value text-amber-400">0.00×</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-tile-label">Лучший выигрыш</div>
+        <div id="crashBestWinStat" class="stat-tile-value text-amber-300">0 ₽</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-tile-label">Профит</div>
+        <div id="crashNetStat" class="stat-tile-value text-slate-300">0 ₽</div>
+      </div>
+    </div>
+
+    <!-- Лента последних раундов -->
+    <div class="w-full bg-slate-900/40 border border-slate-800/60 rounded-xl p-2.5">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Последние раунды</span>
+        <span class="text-[9px] text-slate-500">цвет = забрал / взрыв</span>
+      </div>
+      <div id="crashHistoryList" class="flex flex-wrap gap-1.5 text-xs"></div>
+    </div>
+
+    <!-- Честность -->
+    <div class="w-full bg-slate-900/40 border border-slate-800/60 rounded-xl p-2.5 text-[10px] text-slate-400 leading-relaxed">
+      🛡 <b>Честная математика.</b> Точка краша считается на твоём устройстве через
+      <span class="text-slate-300">crypto.getRandomValues</span> <b>до старта</b> полёта — подкрутить по ходу нельзя.
+      Распределение: P(долететь до X) = 0,95 / X, поэтому краш на низких иксах самый вероятный.
+      Возврат игры (RTP) — <b class="text-emerald-300">95%</b>, преимущество школы — 5%.
+      Множитель растёт по экспоненте от 1,00×.
+    </div>
+  </main>
+
   <!-- ================= TAB 3: COMMUNITY (СООБЩЕСТВО + IDLE + DAILY + PROMO) ================= -->
   <main id="viewCommunity" class="view-panel w-full px-4 mt-2 hidden flex flex-col items-center space-y-3">
     <div class="w-full text-left">
@@ -796,13 +906,11 @@
 
   <nav id="tabbar" class="tabbar">
   
-    <button onclick="switchTab('upgrade')" id="tabUpgrade" class="nav-tab nav-tab-active">
-      <span>⚡</span><span>Апгрейд</span>
+    <!-- Единая кнопка мини-игр: открывает меню со списком игр (js/games.js) -->
+    <button onclick="openGamesModal()" id="tabGames" class="nav-tab nav-tab-active">
+      <span>🎮</span><span>Игры</span>
     </button>
-    <button onclick="switchTab('cases')" id="tabCases" class="nav-tab">
-      <span>📦</span><span>Кейсы</span>
-    </button>
-    <button onclick="switchTab('inventory')" id="tabInv" class="nav-tab">
+    <button onclick="switchTab('inventory')" id="tabInventory" class="nav-tab">
       <span>🎒</span><span>Рюкзак (<span id="invCountBadge">0</span>)</span>
     </button>
     <button onclick="switchTab('community')" id="tabCommunity" class="nav-tab relative">
@@ -1062,6 +1170,23 @@
         <div id="rebirthNextReq" class="bg-slate-950/70 border border-slate-800 rounded-xl p-2.5 text-[11px] text-slate-300"></div>
         <button id="rebirthDoBtn" onclick="doRebirth()" class="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 text-black font-cs font-bold text-xs uppercase tracking-wider shadow-lg active:scale-95 transition">🔄 ПЕРЕРОДИТЬСЯ</button>
         <div class="text-[9px] text-slate-500 text-center">Максимум 10 перерождений. Титулы по цвету карты отображаются в онлайн-чате!</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL: MINI-GAMES MENU («Игры») ================= -->
+  <div id="gamesModal" class="app-modal hidden">
+    <div class="modal-card max-w-sm w-full">
+      <div class="flex items-center justify-between pb-2 mb-3 border-b border-slate-800">
+        <h3 class="font-cs text-sm font-bold uppercase text-white flex items-center space-x-1.5">
+          <span>🎮</span><span>Мини-игры</span>
+        </h3>
+        <button onclick="closeGamesModal()" class="text-slate-400 hover:text-white text-lg leading-none">✕</button>
+      </div>
+      <p class="text-[10px] text-slate-400 mb-2.5">Выбери, во что играем: кейсы, апгрейд или ракета. Список игр растёт вместе с обновлениями.</p>
+      <div id="gamesList" class="space-y-2"></div>
+      <div class="mt-3 pt-2.5 border-t border-slate-800 text-center text-[9px] text-slate-500">
+        Новые игры появляются прямо в этом меню 🎁
       </div>
     </div>
   </div>
@@ -2034,6 +2159,8 @@
   <script defer src="js/storage.js?v=4.0.0"></script>
   <script defer src="js/ui.js?v=4.0.0"></script>
   <script defer src="js/game.js?v=4.0.0"></script>
+  <script defer src="js/crash.js?v=4.1.0"></script>
+  <script defer src="js/games.js?v=4.1.0"></script>
   <script defer src="js/netplay.js?v=4.0.0"></script>
   <script defer src="js/main.js?v=4.0.0"></script>
 </body>

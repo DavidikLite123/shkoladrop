@@ -506,6 +506,8 @@ const XP_REWARDS = {
   sell: 3,
   miniGamePoint: 1,
   miniGameEnd: 20,
+  crashRound: 4,      // 🚀 сыгранный раунд
+  crashWin: 12,       // 🚀 успешный вывод
   idleCollect: 5
 };
 
@@ -533,7 +535,85 @@ const ACHIEVEMENTS = [
   { id: 'idle_1m',      icon: '🧹', name: 'Дежурный по школе',      desc: 'Собери 1 000 000 ₽ с дежурства',  metric: 'idleCollected', target: 1000000,   money: 150000,  xp: 300 },
   { id: 'promo_1',      icon: '🎫', name: 'Халявщик',               desc: 'Активируй промокод',              metric: 'promosUsed',   target: 1,          money: 5000,    xp: 50 },
   { id: 'drop_gold',    icon: '🌟', name: 'Золотой дроп',           desc: 'Получи предмет дороже 500 000 ₽', metric: 'biggestDrop',  target: 500000,     money: 100000,  xp: 250 },
-  { id: 'cat_found',    icon: '🐈', name: 'КОТ-ХРАНИТЕЛЬ',          desc: 'Найди легендарного Кота школы',   metric: 'catFound',     target: 1,          money: 2500000, xp: 2000, secret: true }
+  { id: 'cat_found',    icon: '🐈', name: 'КОТ-ХРАНИТЕЛЬ',          desc: 'Найди легендарного Кота школы',   metric: 'catFound',     target: 1,          money: 2500000, xp: 2000, secret: true },
+  /* 🚀 Ракета (Crash) */
+  { id: 'crash_1',       icon: '🚀', name: 'Первый полёт',           desc: 'Сыграй первый раунд в «Ракете»',  metric: 'crashRounds',  target: 1,          money: 5000,    xp: 30 },
+  { id: 'crash_10x',     icon: '🛰', name: 'Выше крыши школы',       desc: 'Забери выигрыш на 10.00× и выше', metric: 'crashBestMult', target: 10,        money: 50000,   xp: 150 },
+  { id: 'crash_50x',     icon: '🌌', name: 'Космический отличник',   desc: 'Долети до 50.00×',                metric: 'crashBestMult', target: 50,        money: 500000,  xp: 600 },
+  { id: 'crash_25wins',  icon: '🪂', name: 'Парашютист',             desc: 'Успешно забери 25 раундов',       metric: 'crashWins',    target: 25,         money: 100000,  xp: 250 }
+];
+
+/* ---------- Мини-игра «Ракета» (Crash) ----------
+   Честная математика: точка краша считается на устройстве игрока через
+   crypto.getRandomValues (RNG.float) ДО старта полёта — подкрутить по ходу нельзя.
+   Распределение: P(ракета долетит до X) = (1 - houseEdge) / X.
+   То есть при выводе на фиксированномX средний возврат = 1 - houseEdge (RTP 95%):
+   «максимальная вероятность краша на низких иксах» заложена самой формулой.
+   Формула: roll ∈ [0, 1) → crash = (1 - houseEdge) / (1 - roll), но не ниже 1.00×. */
+const CRASH_CONFIG = {
+  houseEdge: 0.05,          // 5% — преимущество школы. RTP = 95%
+  minBet: 100,              // минимальная ставка
+  maxBet: 1000000000,       // страховка от опечаток в вводе
+  growth: 0.18,             // множитель растёт как exp(growth * t): 2.00× ≈ за 3,9 сек
+  maxMultiplier: 1000000,   // жёсткий потолок, чтобы полёт не длился вечно
+  minAutoCashout: 1.01,     // автовывод ниже 1.01× бессмысленен
+  maxAutoCashout: 1000000,
+  historySize: 12,          // сколько последних краш-точек храним
+  quickBets: [1000, 10000, 100000, 1000000],
+  quickAuto: [1.5, 2, 3, 5, 10]
+};
+
+/* Чистая математика ракеты (без DOM и без внешних зависимостей — чтобы её мог
+   поднять и автотест в Node). Её же гоняют тесты: tests/crash-math.test.js */
+function crashPointFromRoll(roll) {
+  const raw = Number(roll);
+  const r = !isFinite(raw) ? 0 : Math.min(Math.max(raw, 0), 0.999999999999);
+  const x = (1 - CRASH_CONFIG.houseEdge) / (1 - r);
+  if (!isFinite(x)) return CRASH_CONFIG.maxMultiplier;
+  return Math.min(Math.max(x, 1), CRASH_CONFIG.maxMultiplier);
+}
+
+/** Множитель в момент времени t (секунды от старта): экспоненциальный рост от 1.00× */
+function crashMultiplierAt(elapsedSec) {
+  return Math.exp(CRASH_CONFIG.growth * Math.max(0, Number(elapsedSec) || 0));
+}
+
+/** Через сколько секунд ракета дойдёт до множителя x (для анимации и авто-вывода) */
+function crashTimeToMultiplier(x) {
+  return Math.log(Math.max(1, Number(x) || 1)) / CRASH_CONFIG.growth;
+}
+
+/** Выплата при выводе: ставка × текущий множитель (вниз до целого ₽) */
+function crashPayout(bet, mult) {
+  return Math.floor(Math.max(0, Number(bet) || 0) * Math.max(1, Number(mult) || 1));
+}
+
+/* ---------- Реестр мини-игр (единое меню «Игры») ----------
+   Модульность: чтобы добавить новую мини-игру, достаточно дописать сюда одну
+   запись и добавить её панель <main id="view..."> в index.html (+ обработку в
+   switchTab). Поля:
+     id       — уникальный код игры;
+     icon/name/desc/badge — как игра выглядит в меню;
+     tab      — какую панель открывать (view + Tab);
+     enabled  — можно ли сейчас играть (false = карточка затемнена);
+     onOpen   — необязательный свой обработчик вместо switchTab (например, модалка).
+   Порядок в массиве = порядок карточек в меню. Первая игра — стартовая вкладка. */
+const MINI_GAMES = [
+  {
+    id: 'upgrade', tab: 'upgrade', icon: '⚡', name: 'Апгрейд',
+    desc: 'Занеси свой предмет на цель дороже — шанс считается честно по ценам',
+    enabled: () => true
+  },
+  {
+    id: 'cases', tab: 'cases', icon: '📦', name: 'Кейсы',
+    desc: 'Крути школьные, CS2, кошачьи и ютубер-кейсы — дроп честный, шансы открыты',
+    enabled: () => true
+  },
+  {
+    id: 'crash', tab: 'crash', icon: '🚀', name: 'Ракета', badge: 'NEW',
+    desc: 'Ставь, следи за множителем и успевай забрать выигрыш до взрыва',
+    enabled: () => true
+  }
 ];
 
 /* ---------- Апгрейды «Дежурство по школе» (пассивный доход) ---------- */

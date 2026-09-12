@@ -26,6 +26,15 @@ const DEFAULT_STATS = {
   idleCollected: 0,
   miniBest: 0,
   miniCaught: 0,
+  /* 🚀 Ракета (Crash) */
+  crashRounds: 0,     // всего раундов сыграно
+  crashWins: 0,       // успешно забрал до взрыва
+  crashLosses: 0,     // ракета взорвалась раньше
+  crashWagered: 0,    // суммарно поставлено
+  crashWon: 0,        // суммарно выиграно
+  crashBestMult: 0,   // лучший множитель, на котором забрал
+  crashBestWin: 0,    // лучший выигрыш за раунд
+  crashHistory: [],   // последние точки краша (для ленты)
   biggestDrop: 0,
   biggestDropName: '',
   bestWinChance: 0,
@@ -515,6 +524,21 @@ const SaveManager = {
     if (!Number.isFinite(stats.bankruptUntil)) stats.bankruptUntil = 0;
     if (typeof stats.bankruptType !== 'string') stats.bankruptType = '';
     if (typeof stats.rebirthNotified !== 'boolean') stats.rebirthNotified = false;
+    /* 🚀 Ракета (Crash): числа защищаем от мусора, историю режем по длине */
+    ['crashRounds', 'crashWins', 'crashLosses', 'crashWagered', 'crashWon', 'crashBestMult', 'crashBestWin'].forEach(k => {
+      if (!Number.isFinite(stats[k]) || stats[k] < 0) stats[k] = 0;
+    });
+    const crashHistory = Array.isArray(stats.crashHistory) ? stats.crashHistory : [];
+    stats.crashHistory = crashHistory.map(h => {
+      // Новая форма — { x, win }; старые записи могли быть просто числом
+      if (typeof h === 'number') return Number.isFinite(h) && h >= 1 ? { x: h, win: false } : null;
+      if (h && typeof h === 'object') {
+        const x = Number(h.x);
+        if (!Number.isFinite(x) || x < 1) return null;
+        return { x, win: !!h.win };
+      }
+      return null;
+    }).filter(Boolean).slice(0, 12);
     data.stats = stats;
 
     data.createdAt = raw.createdAt || base.createdAt;
