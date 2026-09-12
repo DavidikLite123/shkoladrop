@@ -2338,6 +2338,10 @@ async function redeemPromo() {
     Toast.error('Введи промокод');
     return;
   }
+  /* Коды вида XXXX-XXXX-XXXX: игрок может не напечатать дефисы — приводим к каноническому виду */
+  const canonicalPromoKey = c => (typeof PROMO_CODES !== 'undefined' && PROMO_CODES[c])
+    ? c
+    : (Object.keys(PROMO_CODES).find(k => k.replace(/-/g, '') === c.replace(/-/g, '')) || null);
 
   // Вход в админку через промокод: ADMIN<код> (роль определяется по хешу кода)
   if (code.startsWith('ADMIN') && resolveAdminRole(code.slice(5))) {
@@ -2346,7 +2350,8 @@ async function redeemPromo() {
     return;
   }
 
-  if (state.stats.promosUsed.includes(code)) {
+  const promoKey = canonicalPromoKey(code);
+  if (state.stats.promosUsed.includes(code) || (promoKey && state.stats.promosUsed.includes(promoKey))) {
     Toast.info('Этот промокод уже активирован');
     return;
   }
@@ -2386,13 +2391,14 @@ async function redeemPromo() {
     return;
   }
 
-  const promo = PROMO_CODES[code];
+  // Ключ в реестре: точное совпадение или тот же код без дефисов
+  const promo = promoKey ? PROMO_CODES[promoKey] : null;
   if (!promo) {
     Toast.error('Такого промокода нет. Ищи коды в видео David Lite или купи VIP-код, написав нам на почту!');
     return;
   }
 
-  state.stats.promosUsed.push(code);
+  state.stats.promosUsed.push(promoKey);
   audio.init();
 
   let rewardText = '';
@@ -2446,7 +2452,7 @@ async function redeemPromo() {
     Fx.burst(120);
   }
 
-  Toast.success(`Промокод <b>${code}</b> активирован: ${rewardText}! ${promo.label ? '· ' + promo.label : ''}`, 6000);
+  Toast.success(`Промокод <b>${promoKey}</b> активирован: ${rewardText}! ${promo.label ? '· ' + promo.label : ''}`, 6000);
   input.value = '';
   checkAchievements();
   renderPromoList();
