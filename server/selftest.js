@@ -2,7 +2,8 @@
    Самотест сервера ШКОЛА ДРОП: node server/selftest.js
    Поднимает сервер на случайном порту с временными данными и гоняет все API:
    коды авторов, спонсорство 10%, подарки, трейдинг, админ-выдача кода,
-   аккаунты (e-mail+пароль+код) и одноразовый вайп экономики сезона 3.7.
+   аккаунты (e-mail+пароль+код), сезон 3.5: подарок-извинение + обязательный
+   онлайн (без вайпа, каждое действие на сервер).
    Никаких зависимостей — только Node 18+ (встроенный fetch).
    ========================================================================== */
 'use strict';
@@ -410,44 +411,59 @@ async function main() {
   const ver2 = await j(await fetch(`${BASE}/account/verify`, { method: 'POST', headers: JSONH, body: JSON.stringify({ email: 'player@gmail.com', code: relogin.demoCode }) }));
   t('второй вход по коду: снова внутри, ник сохранён', ver2.ok === true && ver2.nick === 'Вова228');
 
-  /* ---------------- ОДНОРАЗОВЫЙ ВАЙП ЭКОНОМИКИ СЕЗОНА 3.7 ---------------- */
-  console.log('\n— Одноразовый вайп экономики 3.7 —');
+  /* ---------------- СЕЗОН 3.5: подарок-извинение + обязательный онлайн (БЕЗ ВАЙПА) ---------------- */
+  console.log('\n— Сезон 3.5: подарок-извинение + обязательный онлайн (без вайпа) —');
+  // Проверяем что /api/ping теперь отдаёт сезон 3.5 и подарок
+  let ping = await j(await fetch(`${BASE}/ping`));
+  t('ping сезона 3.5 / версии 4.0: version 2.0.0', ping.ok && ping.version === '2.0.0');
+  t('ping сезона 3.5: season=3.5-apology', ping.season === '3.5-apology');
+  t('ping сезона 3.5: seasonNotice=3.5', ping.seasonNotice === '3.5');
+  t('ping сезона 3.5: apologyGift есть (gift_apology_35)', ping.apologyGift && ping.apologyGift.giftId === 'gift_apology_35');
+
+  // overview тоже должен отдавать сезон
+  const ov2 = await j(await fetch(`${BASE}/admin/overview`, { headers: ADMIN }));
+  t('overview сезона 3.5 / 4.0: version 2.0.0 + season 3.5', ov2.ok && ov2.version === '2.0.0' && ov2.season === '3.5-apology');
+  t('overview сезона 3.5: seasonNotice + apology', ov2.seasonNotice === '3.5' && ov2.seasonApology && ov2.seasonApology.giftId === 'gift_apology_35');
+
+  // Проверяем что база НЕ вайпается при рестарте (сезон 3.5 без вайпа)
   await stopServer(liveChild);
   fs.mkdirSync(tmpDataDir, { recursive: true });
   const dbFile = path.join(tmpDataDir, 'db.json');
   fs.writeFileSync(dbFile, JSON.stringify({
-    players: { 'player-old': { uid: 'player-old', nick: 'Старожил', tag: '#424242', verified: true, lastSeen: 1 } },
+    players: { 'player-old': { uid: 'player-old', nick: 'Старожил', tag: '#424242', verified: true, lastSeen: Date.now() } },
     accounts: { 'old@gmail.com': { email: 'old@gmail.com', salt: 's', passHash: 'h', uid: 'player-old' } },
-    saves: { 'player-old': { save: { balance: 999999, inventory: [{ id: 'sch_chalk', price: 2100 }] }, updatedAt: 1 } },
+    saves: { 'player-old': { save: { balance: 999999, inventory: [{ id: 'sch_chalk', price: 2100 }] }, updatedAt: Date.now() } },
     gifts: [{ id: 'g1', fromUid: 'a', fromNick: 'a', toUid: 'b', toNick: 'b', item: { id: 'x', price: 1 }, createdAt: 1, claimed: false }],
-    trades: [{ code: 'AAAAAA', fromUid: 'a', fromNick: 'a', offer: { id: 'x', price: 1 }, createdAt: 1, status: 'open' }],
-    deliveries: [{ id: 'd1', toUid: 'b', toNick: 'b', item: { id: 'x', price: 1 }, source: 'trade', createdAt: 1, claimed: false }],
-    supporters: { 'player-old': 'TESTYT' },
-    earnings: { TESTYT: { earned: 100, withdrawn: 0 } },
-    chat: [{ id: 'm1', uid: null, kind: 'admin', nick: 'Админ', text: 'привет', at: 1 }]
-    // meta.seasonWipe НАМЕРЕННО отсутствует — это база «из прошлого сезона»
+    trades: [],
+    deliveries: [],
+    supporters: {},
+    earnings: {},
+    chat: [{ id: 'm1', uid: null, kind: 'admin', nick: 'Админ', text: 'привет', at: 1 }],
+    bannedIps: {},
+    dms: [],
+    meta: { seasonWipe: '3.9', seasonNotice: '3.5', seasonApology: { giftId: 'gift_apology_35', price: 1500000 } }
   }));
 
   liveChild = startServer();
-  t('сервер перезапущен поверх «старой» базы', await waitUp());
-  await new Promise(r => setTimeout(r, 400)); // dbSave отрабатывает с дебаунсом
+  t('сервер перезапущен поверх базы 3.9+3.5', await waitUp());
+  await new Promise(r => setTimeout(r, 400));
   const after = JSON.parse(fs.readFileSync(dbFile, 'utf8'));
-  t('вайп: облачные сейвы стёрты', Object.keys(after.saves || {}).length === 0);
-  t('вайп: подарки/трейды/выдача стёрты', (after.gifts || []).length + (after.trades || []).length + (after.deliveries || []).length === 0);
-  t('вайп: игрок с ником, ID и галочкой СОХРАНЁН', !!(after.players && after.players['player-old'] && after.players['player-old'].tag === '#424242' && after.players['player-old'].verified === true));
-  t('вайп: e-mail аккаунт сохранён', !!(after.accounts && after.accounts['old@gmail.com']));
-  t('вайп: спонсорка/начисления/чат сохранены', !!(after.supporters && after.supporters['player-old'] && after.earnings.TESTYT && after.chat.length === 1));
-  t('вайп: флаг проставлен (второй раз не запустится)', after.meta && after.meta.seasonWipe === '3.7');
+  t('сезон 3.5: база НЕ вайпается — игроки остались', Object.keys(after.players || {}).length === 1);
+  t('сезон 3.5: сейвы остались (каждое действие на сервер)', Object.keys(after.saves || {}).length === 1);
+  t('сезон 3.5: подарок-метка осталась', after.meta && after.meta.seasonNotice === '3.5' && after.meta.seasonApology);
+  t('сезон 3.5: флаг вайпа остался 3.9 (не перезатёрт)', after.meta && after.meta.seasonWipe === '3.9');
 
-  // новый прогресс ПОСЛЕ вайпа — и ещё один рестарт: повторного вайпа быть не должно
-  r = await fetch(`${BASE}/save`, { method: 'POST', headers: JSONH, body: JSON.stringify({ uid: 'player-old', nick: 'Старожил', save: { balance: 12345, inventory: [] } }) });
-  t('после вайпа новый сейв заливается', r.ok);
+  // новый прогресс ПОСЛЕ 3.5 — и ещё один рестарт: база не должна вайпаться
+  r = await fetch(`${BASE}/save`, { method: 'POST', headers: JSONH, body: JSON.stringify({ uid: 'player-new', nick: 'Новичок', save: { balance: 12345, inventory: [] } }) });
+  t('после сезона 3.5 новый сейв заливается (обязательный онлайн)', r.ok);
   await new Promise(rs => setTimeout(rs, 350));
   await stopServer(liveChild);
   liveChild = startServer();
-  t('третий запуск сервера', await waitUp());
-  const sv = await j(await fetch(`${BASE}/save?uid=player-old`));
-  t('повторного вайпа нет: новый прогресс пережил рестарт', sv.ok && sv.save && sv.save.balance === 12345);
+  t('третий запуск сервера (3.5)', await waitUp());
+  const sv = await j(await fetch(`${BASE}/save?uid=player-new`));
+  t('сезон 3.5 без вайпа: новый прогресс пережил рестарт', sv.ok && sv.save && sv.save.balance === 12345);
+  ping = await j(await fetch(`${BASE}/ping`));
+  t('после рестартов ping всё ещё 3.5-apology', ping.season === '3.5-apology' && ping.apologyGift);
 
   console.log(`\n${passed} passed, ${failed} failed`);
   liveChild.kill();

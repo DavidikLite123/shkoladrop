@@ -4,10 +4,10 @@
    уровни, награды, промокоды, апгрейды дежурства.
    ========================================================================== */
 
-const APP_VERSION = '3.8';
-const WHATS_NEW_VERSION = 'community-tab-2026-09'; // ключ последнего окна «Что нового» (сменить при новом апдейте)
-const SAVE_VERSION = 12;      // v12 = вайп экономики сезона 3.7 (аккаунты/ID сохраняются)
-const SEASON_NUMBER = 3;
+const APP_VERSION = '4.0';
+const WHATS_NEW_VERSION = 'season-3.5-apology-4.0-2026-09'; // версия 4.0, сезон 3.5 — извинительный подарок + обязательный онлайн
+const SAVE_VERSION = 14;      // v14 = сезон 3.5 / версия 4.0 — подарок-извинение за вайп 3.9 + обязательный онлайн-коннект
+const SEASON_NUMBER = 3.5;
 const HARD_MODE_THRESHOLD = 100000000;
 const HARD_MODE_CASE_DISCOUNT = 0.9;
 
@@ -95,6 +95,7 @@ const CATEGORIES = {
   other:  { label: 'Игры',  short: 'Игра',  badge: 'bg-violet-950 text-violet-300 border-violet-800' },
   cat:    { label: '🐱 Коты', short: 'Кот', badge: 'bg-fuchsia-950 text-fuchsia-300 border-fuchsia-800' },
   beta:   { label: '🧪 Бета 3.6', short: 'Бета', badge: 'bg-cyan-950 text-cyan-200 border-cyan-700' },
+  beta41: { label: '🚀 Бета 4.1', short: 'Бета 4.1', badge: 'bg-indigo-950 text-indigo-300 border-indigo-700' },
   upgrade:{ label: '⚡ Только апгрейд', short: 'Апгр.', badge: 'bg-orange-950 text-orange-300 border-orange-800' }
 };
 
@@ -131,7 +132,28 @@ const SCHOOL_CATALOG = [
   { id: 'sch_school_bus',     name: 'Школьный автобус №13',          price: 480000, icon: '🚌', badgeBg: 'from-yellow-500/40 to-orange-800/40',        rarity: 'covert',     category: 'school', desc: 'Возит всю параллель, водитель — легенда' },
   { id: 'sch_entire_school',  name: 'ШКОЛА №1337 ЦЕЛИКОМ',           price: 650000, icon: '🏫', badgeBg: 'from-yellow-400/40 to-orange-600/40',        rarity: 'gold',       category: 'school', desc: 'Со всеми 11 классами и столовой' },
   { id: 'sch_golden_diary',   name: 'Дневник отличника (Только 5+)', price: 999999, icon: '⭐', badgeBg: 'from-amber-300/50 to-yellow-500/50',         rarity: 'gold',       category: 'school', desc: 'Супер-редкий лут из Тайника Завуча!' },
-  { id: 'sch_timetable_relic', name: 'Расписание без «окон»',        price: 1250000, icon: '🗓️', badgeBg: 'from-cyan-300/40 to-indigo-700/50',         rarity: 'gold',       category: 'school', desc: 'Артефакт, который никто не видел в реальности' }
+  { id: 'sch_timetable_relic', name: 'Расписание без «окон»',        price: 1250000, icon: '🗓️', badgeBg: 'from-cyan-300/40 to-indigo-700/50',         rarity: 'gold',       category: 'school', desc: 'Артефакт, который никто не видел в реальности' },
+  { id: 'gift_apology_35',    name: '🎁 Подарок-извинение от администрации', price: 1500000, icon: '🎁', badgeBg: 'from-amber-300/60 to-rose-500/50', rarity: 'gold', category: 'school', desc: 'Дорогой предмет в качестве извинений за то, что все аккаунты были сброшены из-за технических неполадок. Спасибо, что остаётесь с нами! Теперь всё в норме ❤️ Зарегистрируйтесь заново — подарок уже в рюкзаке!' },
+  // ===== 4.1 — НОВЫЕ ШКОЛЬНЫЕ ПРЕДМЕТЫ =====
+  { id: 'sch_library_card',   name: 'Просроченный читательский билет', price: 900,   icon: '📚', badgeBg: 'from-amber-700/30 to-yellow-900/40',   rarity: 'consumer', category: 'school', desc: 'Долг в библиотеке с 2019 года — 47 книг' },
+  { id: 'sch_broken_bell',    name: 'Сломанный школьный звонок',     price: 1300,  icon: '🔔', badgeBg: 'from-zinc-600/30 to-neutral-800/40',   rarity: 'milspec',  category: 'school', desc: 'Звенит только когда хочет, обычно на 10 минут позже' },
+  { id: 'sch_lost_socks',     name: 'Потерянные носки из раздевалки',price: 600,   icon: '🧦', badgeBg: 'from-slate-600/30 to-gray-800/40',      rarity: 'consumer', category: 'school', desc: 'Кто-то ищет их уже 2 года' },
+  { id: 'sch_chewed_ruler',   name: 'Погрызенная линейка-трансформер',price: 750,  icon: '📏', badgeBg: 'from-cyan-600/30 to-blue-900/40',        rarity: 'milspec',  category: 'school', desc: 'Гнётся в обе стороны, но уже не измеряет' },
+  { id: 'sch_glue_stick',     name: 'Клей-карандаш без колпачка',    price: 1100,  icon: '🧴', badgeBg: 'from-yellow-600/30 to-amber-900/40',    rarity: 'milspec',  category: 'school', desc: 'Застыл ещё в прошлом семестре' },
+  { id: 'sch_stolen_chalk',   name: 'Кусок мела с доски директора',  price: 2500,  icon: '✏️', badgeBg: 'from-stone-500/30 to-zinc-800/40',       rarity: 'restricted', category: 'school', desc: 'Стырен прямо во время педсовета' },
+  { id: 'sch_canteen_ticket', name: 'Талон в столовую на 2015 год',  price: 3200,  icon: '🎟️', badgeBg: 'from-orange-600/30 to-red-900/40',      rarity: 'restricted', category: 'school', desc: 'Срок годности вышел, но буфетчица всё ещё принимает' },
+  { id: 'sch_broken_mic',     name: 'Микрофон с линейки',            price: 5600,  icon: '🎤', badgeBg: 'from-purple-600/30 to-indigo-900/40',    rarity: 'restricted', category: 'school', desc: 'Фонит так, что слышно в соседней школе' },
+  { id: 'sch_old_globe',      name: 'Глобус с СССР',                 price: 8200,  icon: '🌍', badgeBg: 'from-emerald-700/30 to-teal-900/40',     rarity: 'restricted', category: 'school', desc: 'Ещё показывает Югославию и Чехословакию' },
+  { id: 'sch_magic_board',    name: 'Интерактивная доска с трещиной',price: 15000, icon: '🖥️', badgeBg: 'from-blue-600/30 to-cyan-900/40',        rarity: 'classified', category: 'school', desc: 'Сенсор работает только если стукнуть сбоку' },
+  { id: 'sch_teacher_diary',  name: 'Журнал учителя с двойками',     price: 18000, icon: '📓', badgeBg: 'from-rose-600/30 to-red-900/40',         rarity: 'classified', category: 'school', desc: 'Там все твои косяки за 11 лет' },
+  { id: 'sch_golden_backpack',name: 'Золотой рюкзак отличника',      price: 35000, icon: '🎒✨', badgeBg: 'from-amber-400/40 to-yellow-700/40',    rarity: 'classified', category: 'school', desc: 'В нём помещается вся библиотека' },
+  { id: 'sch_director_stamp', name: 'Штамп «ОТЧИСЛЕН»',              price: 42000, icon: '🔴', badgeBg: 'from-red-600/40 to-rose-900/50',          rarity: 'classified', category: 'school', desc: 'Им боятся даже учителя' },
+  { id: 'sch_lab_skeleton',   name: 'Скелет из кабинета биологии',   price: 55000, icon: '💀', badgeBg: 'from-stone-500/30 to-neutral-900/50',    rarity: 'covert', category: 'school', desc: 'Зовут Геннадий, знает все кости наизусть' },
+  { id: 'sch_chem_lab',       name: 'Кабинет химии после опыта',     price: 95000, icon: '🧪', badgeBg: 'from-lime-600/30 to-emerald-900/40',     rarity: 'covert', category: 'school', desc: 'Пахнет даже через 3 месяца' },
+  { id: 'sch_sport_cup_gold', name: 'Золотой кубок спартакиады',     price: 110000, icon: '🏆✨', badgeBg: 'from-yellow-400/40 to-amber-700/40',   rarity: 'covert', category: 'school', desc: 'Выиграл 9-Б, но присвоил завхоз' },
+  { id: 'sch_piano_music',    name: 'Пианино из актового зала',      price: 175000, icon: '🎹', badgeBg: 'from-violet-600/30 to-purple-900/40',   rarity: 'covert', category: 'school', desc: 'На нём играют только «Собачий вальс»' },
+  { id: 'sch_library_full',   name: 'Школьная библиотека целиком',   price: 300000, icon: '📚✨', badgeBg: 'from-amber-600/40 to-yellow-900/40',   rarity: 'gold', category: 'school', desc: '5000 книг, половина — потерянные сочинения' },
+  { id: 'sch_stadium',        name: 'Школьный стадион с трибунами',  price: 500000, icon: '🏟️', badgeBg: 'from-green-600/40 to-emerald-900/40',   rarity: 'gold', category: 'school', desc: 'Тут проходил легендарный матч 11-А против учителей' }
 ];
 
 /* ---------- CS2 каталог ---------- */
@@ -186,6 +208,15 @@ const CAT_CATALOG = [
   { id: 'cat_keeper',        name: 'КОТ-ХРАНИТЕЛЬ ШКОЛЫ ★ СЕКРЕТНЫЙ', price: 10000000, icon: '🐱', img: 'assets/secret-cat.png', badgeBg: 'from-cyan-400/60 to-fuchsia-900/70', rarity: 'secret', category: 'cat', desc: 'Легенда школы. Появляется лишь тем, кто дошёл до секретного кейса' }
 ];
 
+/* ---------- 4.1 — ЗОЛОТАЯ КОЛЛЕКЦИЯ (особняк, яхта, вертолёт) ---------- */
+const GOLDEN_CATALOG = [
+  { id: 'gold_mansion',   name: 'Золотой особняк директора', price: 5000000000, icon: '🏰', badgeBg: 'from-amber-300/60 to-yellow-600/50', rarity: 'gold', category: 'school', desc: 'Трёхэтажный особняк из чистого золота — в нём живёт только директор. Можно взять в кредит по радужной карте!' },
+  { id: 'gold_yacht',     name: 'Золотая яхта выпускников',  price: 12000000000, icon: '🛥️', badgeBg: 'from-yellow-300/60 to-amber-700/50', rarity: 'gold', category: 'school', desc: 'Яхта, на которой уплывает 11 класс после последнего звонка. Полностью золотая, даже якорь.' },
+  { id: 'gold_helicopter',name: 'Золотой вертолёт завуча',   price: 25000000000, icon: '🚁', badgeBg: 'from-amber-400/60 to-orange-700/50', rarity: 'secret', category: 'school', desc: 'Вертолёт завуча — летает над школой и следит, чтобы никто не сбежал с уроков. Золотой корпус, кожаные сиденья.' },
+  { id: 'gold_school_ring', name: 'Золотое кольцо школы',    price: 1000000000, icon: '💍', badgeBg: 'from-yellow-200/60 to-amber-600/50', rarity: 'gold', category: 'school', desc: 'Кольцо с гербом школы — носят только легенды' },
+  { id: 'gold_statue',    name: 'Золотая статуя отличника',  price: 3000000000, icon: '🗿', badgeBg: 'from-amber-300/50 to-yellow-700/50', rarity: 'gold', category: 'school', desc: 'Статуя в холле школы — отлита из золота медалистов' }
+];
+
 /* ---------- Ультра-экономика: предметы для поздней игры ---------- */
 const ULTRA_CATALOG = [
   { id: 'ultra_school_city', name: 'Школьный город-миллиардер', price: 25000000000, icon: '🏙️', badgeBg: 'from-indigo-500/60 to-cyan-500/40', rarity: 'secret', category: 'school', desc: 'Целый город с кампусом школы и стадионом' },
@@ -237,7 +268,20 @@ const BETA_CATALOG = [
   { id: 'beta_cyber_cat',     name: 'Кибер-Кот 3.6',               price: 3600000, icon: '🤖', badgeBg: 'from-cyan-500/40 to-fuchsia-800/40',      rarity: 'secret',     category: 'cat',  desc: 'Хранитель тестовой ветки. Мурлычет на частоте 3.6 ГГц' }
 ];
 
-const ALL_MASTER_ITEMS = [...SCHOOL_CATALOG, ...CS2_CATALOG, ...OTHER_GAMES_CATALOG, ...CAT_CATALOG, ...SEASON3_CATALOG, ...ULTRA_CATALOG, ...BETA_CATALOG, ...UPGRADE_CATALOG];
+/* ---------- 4.1 Beta — предметы вне школьной тематики (включается тумблером beta41) ---------- */
+const BETA41_CATALOG = [
+  { id: 'b41_neon_sneakers',  name: 'Неоновые кроссовки будущего', price: 15000,   icon: '👟', badgeBg: 'from-cyan-400/40 to-fuchsia-600/40',      rarity: 'restricted', category: 'beta41', desc: 'Светятся в темноте, но не школьная тема — только в бете 4.1' },
+  { id: 'b41_holo_watch',     name: 'Голографические часы',        price: 45000,   icon: '⌚', badgeBg: 'from-sky-400/40 to-indigo-700/40',       rarity: 'classified', category: 'beta41', desc: 'Показывают время в 12 измерениях' },
+  { id: 'b41_cyber_dragon',   name: 'Кибер-дракон',                price: 120000,  icon: '🐉', badgeBg: 'from-emerald-500/40 to-teal-900/40',      rarity: 'covert',     category: 'beta41', desc: 'Дракон из неонового города, не имеет отношения к школе' },
+  { id: 'b41_space_pizza',    name: 'Космическая пицца',           price: 8000,    icon: '🍕', badgeBg: 'from-orange-500/40 to-red-800/40',       rarity: 'restricted', category: 'beta41', desc: 'Пицца с марсианским сыром' },
+  { id: 'b41_alien_pet',      name: 'Питомец-инопланетянин',       price: 250000,  icon: '👽', badgeBg: 'from-lime-400/40 to-emerald-800/40',     rarity: 'covert',     category: 'beta41', desc: 'Говорит на языке, которого нет в школьной программе' },
+  { id: 'b41_time_machine',   name: 'Машина времени (сломана)',    price: 750000,  icon: '⏳', badgeBg: 'from-violet-500/40 to-purple-900/40',    rarity: 'gold',       category: 'beta41', desc: 'Может вернуть в 1 класс, но батарейка села' },
+  { id: 'b41_nft_rock',       name: 'NFT-камень за миллион',       price: 1000000, icon: '🪨', badgeBg: 'from-zinc-500/30 to-neutral-800/40',    rarity: 'gold',       category: 'beta41', desc: 'Просто камень, но в блокчейне' },
+  { id: 'b41_magic_wand',     name: 'Волшебная палочка',           price: 500000,  icon: '🪄', badgeBg: 'from-fuchsia-400/40 to-pink-800/40',     rarity: 'gold',       category: 'beta41', desc: 'Превращает двойки в пятёрки, но только в бете' },
+  { id: 'b41_flying_car',     name: 'Летающая машина',             price: 5000000, icon: '🚀', badgeBg: 'from-cyan-300/50 to-blue-800/50',        rarity: 'secret',     category: 'beta41', desc: 'Не школьный автобус, а летающий — из будущего' }
+];
+
+const ALL_MASTER_ITEMS = [...SCHOOL_CATALOG, ...GOLDEN_CATALOG, ...CS2_CATALOG, ...OTHER_GAMES_CATALOG, ...CAT_CATALOG, ...SEASON3_CATALOG, ...ULTRA_CATALOG, ...BETA_CATALOG, ...BETA41_CATALOG, ...UPGRADE_CATALOG];
 const ITEMS_BY_ID = ALL_MASTER_ITEMS.reduce((acc, it) => { acc[it.id] = it; return acc; }, {});
 
 /* ---------- Кейсы (веса = честные шансы, нормализуются автоматически) ---------- */
@@ -385,6 +429,46 @@ const CASES_LIST = [
       { id: 'beta_antimatter', w: 20 }, { id: 'sch_100_points', w: 24 }, { id: 'beta_robo_bell', w: 18 },
       { id: 'beta_nuclear_mel', w: 26 }, { id: 'beta_cyber_cat', w: 12 }
     ]
+  },
+
+  /* ---------- 4.1 — ЗОЛОТЫЕ КЕЙСЫ (особняк, яхта, вертолёт) ---------- */
+  {
+    id: 'case_golden_vault', name: 'Золотой сейф директора', price: 500000, icon: '🏦', color: '#ffd700',
+    desc: 'Внутри золотые предметы — особняк, яхта, вертолёт. Можно взять в кредит по карте!',
+    items: [
+      { id: 'sch_golden_backpack', w: 24 }, { id: 'sch_golden_chalk', w: 20 }, { id: 'sch_sport_cup_gold', w: 18 },
+      { id: 'gold_school_ring', w: 14 }, { id: 'gold_statue', w: 10 }, { id: 'gold_mansion', w: 8 },
+      { id: 'gold_yacht', w: 4 }, { id: 'gold_helicopter', w: 2 }
+    ]
+  },
+  {
+    id: 'case_golden_legend', name: 'ЛЕГЕНДАРНЫЙ ЗОЛОТОЙ КЕЙС', price: 5000000, icon: '👑', color: '#ffea00',
+    desc: 'Самый дорогой золотой кейс — только золото, только хардкор',
+    items: [
+      { id: 'gold_mansion', w: 30 }, { id: 'gold_yacht', w: 25 }, { id: 'gold_helicopter', w: 20 },
+      { id: 'gold_statue', w: 15 }, { id: 'sch_entire_school', w: 10 }
+    ]
+  },
+
+  /* ---------- 4.1 Beta — кейсы вне школьной тематики (тумблер beta41) ---------- */
+  {
+    id: 'beta41_case_future', name: 'Кейс из будущего 4.1', price: 50000, icon: '🚀', color: '#a855f7',
+    beta41: true,
+    desc: 'Предметы не из школы — неон, кибер, космос. Только при включённой бете 4.1',
+    items: [
+      { id: 'b41_neon_sneakers', w: 28 }, { id: 'b41_space_pizza', w: 22 }, { id: 'b41_holo_watch', w: 20 },
+      { id: 'b41_cyber_dragon', w: 14 }, { id: 'b41_alien_pet', w: 8 }, { id: 'b41_magic_wand', w: 5 },
+      { id: 'b41_flying_car', w: 3 }
+    ]
+  },
+  {
+    id: 'beta41_case_legend', name: 'ЛЕГЕНДАРНЫЙ КЕЙС 4.1', price: 1000000, icon: '🌈', color: '#f472b6',
+    beta41: true,
+    desc: 'Топовый кейс беты 4.1 — летающие машины, машины времени, NFT',
+    items: [
+      { id: 'b41_alien_pet', w: 24 }, { id: 'b41_magic_wand', w: 20 }, { id: 'b41_nft_rock', w: 18 },
+      { id: 'b41_time_machine', w: 16 }, { id: 'b41_flying_car', w: 12 }, { id: 'gold_helicopter', w: 10 }
+    ]
   }
 ];
 
@@ -404,7 +488,15 @@ const RANKS = [
   { level: 10, xp: 90000,   name: 'ЛЕГЕНДА ШКОЛЫ',    reward: 600000 },
   { level: 11, xp: 180000,  name: 'Профессор дропа',  reward: 1200000 },
   { level: 12, xp: 400000,  name: 'Хранитель Кота',   reward: 2500000 },
-  { level: 13, xp: 800000,  name: 'БЕССМЕРТНЫЙ ДРОПЕР', reward: 5000000 }
+  { level: 13, xp: 800000,  name: 'БЕССМЕРТНЫЙ ДРОПЕР', reward: 5000000 },
+  // 4.1 — уровни перерождения (сохраняют престиж, дают множитель)
+  { level: 14, xp: 1500000, name: 'ПЕРЕРОЖДЁННЫЙ I',  reward: 10000000 },
+  { level: 15, xp: 3000000, name: 'ПЕРЕРОЖДЁННЫЙ II', reward: 20000000 },
+  { level: 16, xp: 6000000, name: 'ПЕРЕРОЖДЁННЫЙ III',reward: 40000000 },
+  { level: 17, xp: 12000000,name: 'ХРАНИТЕЛЬ КАРТ',   reward: 80000000 },
+  { level: 18, xp: 25000000,name: 'ВЛАДЕЛЕЦ РАДУГИ',  reward: 150000000 },
+  { level: 19, xp: 50000000,name: 'БОГ ШКОЛОДРОПА',   reward: 300000000 },
+  { level: 20, xp: 100000000,name:'АБСОЛЮТ',         reward: 1000000000 }
 ];
 
 const XP_REWARDS = {
@@ -477,7 +569,7 @@ const DAILY_REWARDS = [
 ];
 const DAILY_STREAK_RESET_HOURS = 48;
 
-/* ---------- Промокоды ---------- */
+/* ---------- Промокоды (сезон 3.5 / версия 4.0: +10 кодов для ютубера) ---------- */
 const PROMO_CODES = {
   SHKOLA2:        { money: 25000,    xp: 50,  label: 'Сезон 2 — стартовый капитал' },
   PEREMENA:       { money: 50000,    xp: 75,  label: 'Награда за перемену' },
@@ -486,7 +578,18 @@ const PROMO_CODES = {
   KOT10M:         { money: 1000000,  xp: 400, label: 'Кот поделился заначкой 🐱' },
   'NEWUPDATE2026':{ money: 2026,     xp: 25,  label: 'Обновление 3.0.2 — приветственные монеты!' },
   GORABOGDAN5G:   { item: 'cat_gora_bogdan', xp: 500, label: 'ЛЕГЕНДАРНЫЙ КОТИК ГОРА БОГДАНА! 🏔️🐱' },
-  LEGENDAPH2026:  { money: 500000,   xp: 300, label: 'Промокод от ютубера Легенда_пх (1 канал Школа Дроп) ▶' }
+  LEGENDAPH2026:  { money: 500000,   xp: 300, label: 'Промокод от ютубера Легенда_пх (1 канал Школа Дроп) ▶' },
+  /* 10 новых промокодов для ютубера — сезон 3.5 / версия 4.0 */
+  YTDAVID4:       { money: 400000,   xp: 400, label: 'Версия 4.0 сезон 3.5 — код от Давида 🎒 Версия 4.0!' },
+  APOLOGY35:      { money: 350000,   xp: 350, label: 'Подарок-извинение за вайп 3.9 — спасибо что остался ❤️ Сезон 3.5' },
+  SORRY39:        { money: 39000,    xp: 100, label: 'Сорри за сброс аккаунтов в 3.9 — теперь всё в норме 😔' },
+  SERVERONLINE35:{ money: 150000,   xp: 200, label: 'Обязательный онлайн 3.5 — игра ждёт сервер 🌐 Подключение успешно!' },
+  GIFT4YOU:       { money: 100000, item: 'upg_gold_whistle', xp: 250, label: 'Подарок от ютубера — золотой свисток судьи 🥇 + 100k' },
+  SHKOLA4LIFE:    { money: 100000,   xp: 150, label: 'ШКОЛА ДРОП 4.0 — живём! Версия 4.0 сезон 3.5' },
+  COMEBACK35:     { money: 250000,   xp: 300, label: 'Возвращение после вайпа — welcome back в сезон 3.5 🎒✨' },
+  CLOUDSAVE4:     { money: 200000,   xp: 250, label: 'Облачное сохранение 4.0 — каждое действие на сервер ☁️' },
+  ONLINE35:       { money: 35000,    xp: 100, label: 'Чат всегда включен по умолчанию 🔔 Сезон 3.5' },
+  THANKS35:       { money: 150000,   xp: 200, label: 'Спасибо за поддержку сезона 3.5 ❤️ От администрации' }
 };
 
 /* ---------- Админка: два уровня доступа (5 кликов по логотипу + код) ----------
@@ -639,12 +742,13 @@ const DEFAULT_SETTINGS = {
   reduceMotion: false,
   accent: 'orange',
   quality: 'auto',  // 'auto' — под возможности устройства, 'high' / 'low' — вручную
-  /* Эксперименты (⚙️ Настройки → Эксперименты) */
-  autoWake: false,   // автоматически будить спящий сервер при запуске (без плашки)
-  chatNotify: false  // уведомления о новых сообщениях в общем чате
+  /* Эксперименты (⚙️ Настройки → Эксперименты) + Resilient 4.0 */
+  autoWake: true,    // 4.0: телефон сам будит сервер полностью — всегда включено
+  chatNotify: true,  // сезон 3.5: уведомления из общего чата включены по умолчанию, можно выключить в настройках
+  beta41: false      // 4.1: бета с предметами вне школьной тематики — включается тумблером в настройках
 };
 
-/* Статусы игроков, которые выдаёт владелец (плашка у ника в чате и профиле) */
+/* Статусы игроков, которые выдаёт владелец (плашка у ника в чате и профиле) + перерождение */
 const PLAYER_STATUS_META = {
   owner:    { label: '👑 ВЛАДЕЛЕЦ', cls: 'bg-amber-500/20 border-amber-500/60 text-amber-300' },
   admin:    { label: '🛡 АДМИН',    cls: 'bg-sky-500/20 border-sky-500/60 text-sky-300' },
@@ -653,8 +757,52 @@ const PLAYER_STATUS_META = {
   legend:   { label: '🏆 ЛЕГЕНДА',  cls: 'bg-yellow-500/20 border-yellow-500/60 text-yellow-200' },
   test:     { label: '🧪 ТЕСТ',     cls: 'bg-cyan-500/20 border-cyan-500/60 text-cyan-300' },
   scam:     { label: '⚠ СКАМ',      cls: 'bg-rose-500/20 border-rose-500/60 text-rose-300' },
-  spam:     { label: '🚫 СПАМ',     cls: 'bg-orange-500/20 border-orange-500/60 text-orange-300' }
+  spam:     { label: '🚫 СПАМ',     cls: 'bg-orange-500/20 border-orange-500/60 text-orange-300' },
+  // Перерождение — титулы по цвету карточки
+  bronze:   { label: '🥉 БРОНЗА',   cls: 'bg-orange-900/30 border-orange-700/60 text-orange-300' },
+  silver:   { label: '🥈 СЕРЕБРО',  cls: 'bg-slate-500/20 border-slate-400/60 text-slate-200' },
+  gold:     { label: '🥇 ЗОЛОТО',   cls: 'bg-amber-500/20 border-amber-400/60 text-amber-300' },
+  platinum: { label: '💿 ПЛАТИНА',  cls: 'bg-zinc-300/20 border-zinc-200/60 text-zinc-100' },
+  diamond:  { label: '💎 АЛМАЗ',    cls: 'bg-cyan-300/20 border-cyan-200/60 text-cyan-100' },
+  emerald:  { label: '💚 ИЗУМРУД',  cls: 'bg-emerald-500/20 border-emerald-400/60 text-emerald-300' },
+  sapphire: { label: '💙 САПФИР',   cls: 'bg-blue-600/20 border-blue-500/60 text-blue-300' },
+  ruby:     { label: '❤️ РУБИН',    cls: 'bg-rose-600/20 border-rose-500/60 text-rose-300' },
+  black:    { label: '🖤 ЧЁРНАЯ',   cls: 'bg-neutral-900/50 border-neutral-700/60 text-neutral-200' },
+  rainbow:  { label: '🌈 РАДУГА',   cls: 'bg-gradient-to-r from-pink-500/20 via-cyan-500/20 to-yellow-500/20 border-fuchsia-400/60 text-fuchsia-200' },
+  bankrupt: { label: '💸 БАНКРОТ',  cls: 'bg-rose-950/50 border-rose-800/60 text-rose-400 line-through' },
+  vozduhan: { label: '🌬 ВОЗДУХАН', cls: 'bg-sky-950/30 border-sky-800/50 text-sky-300 italic' }
 };
+
+/* ---------- ПЕРЕРОЖДЕНИЕ 4.1 — 10 уровней, кредитные карты ---------- */
+const REBIRTH_MAX = 10;
+const REBIRTH_CARDS = [
+  { level: 1, id: 'card_bronze',   name: 'Бронзовая карта',   color: '#cd7f32', bg: 'from-orange-800/40 to-amber-900/40', icon: '🥉', limit: 1000,          title: 'Бронза',   desc: 'Кредитка новичка — 1 000 ₽ в долг, если баланс пуст' },
+  { level: 2, id: 'card_silver',   name: 'Серебряная карта',  color: '#c0c0c0', bg: 'from-slate-500/40 to-zinc-600/40',   icon: '🥈', limit: 10000,         title: 'Серебро',  desc: '10 000 ₽ кредитного лимита' },
+  { level: 3, id: 'card_gold',     name: 'Золотая карта',     color: '#ffd700', bg: 'from-amber-400/40 to-yellow-600/40', icon: '🥇', limit: 100000,        title: 'Золото',   desc: '100 000 ₽ — уже можно взять мел завуча в кредит' },
+  { level: 4, id: 'card_platinum', name: 'Платиновая карта',  color: '#e5e4e2', bg: 'from-zinc-300/40 to-slate-400/40',  icon: '💿', limit: 1000000,       title: 'Платина',  desc: '1 000 000 ₽ лимита' },
+  { level: 5, id: 'card_diamond',  name: 'Алмазная карта',    color: '#b9f2ff', bg: 'from-cyan-200/40 to-blue-400/40',   icon: '💎', limit: 10000000,      title: 'Алмаз',    desc: '10M — школа начинает уважать' },
+  { level: 6, id: 'card_emerald',  name: 'Изумрудная карта',  color: '#50c878', bg: 'from-emerald-500/40 to-teal-700/40', icon: '💚', limit: 100000000,     title: 'Изумруд',  desc: '100M — почти как кот-хранитель' },
+  { level: 7, id: 'card_sapphire', name: 'Сапфировая карта',  color: '#0f52ba', bg: 'from-blue-600/40 to-indigo-800/40', icon: '💙', limit: 1000000000,    title: 'Сапфир',   desc: '1B — можно купить автобус в кредит' },
+  { level: 8, id: 'card_ruby',     name: 'Рубиновая карта',   color: '#e0115f', bg: 'from-rose-600/40 to-red-800/40',    icon: '❤️', limit: 10000000000,   title: 'Рубин',    desc: '10B — уровень директора' },
+  { level: 9, id: 'card_black',    name: 'Чёрная карта',      color: '#111111', bg: 'from-neutral-800/60 to-black/60',   icon: '🖤', limit: 50000000000,   title: 'Чёрная',   desc: '50B — для тех, кто видел всё' },
+  { level: 10,id: 'card_rainbow',  name: 'Радужная карта',    color: '#ff00ff', bg: 'from-pink-500/50 via-cyan-400/50 to-yellow-400/50', icon: '🌈', limit: 100000000000, title: 'Радуга', desc: '100B — максимум! Можно взять золотой особняк в кредит, но долг надо вернуть' }
+];
+
+const REBIRTH_REQUIREMENTS = [
+  { level: 1, needLevel: 10, needMoney: 0,          needCases: 25 },
+  { level: 2, needLevel: 11, needMoney: 500000,     needCases: 75 },
+  { level: 3, needLevel: 12, needMoney: 2000000,    needCases: 150 },
+  { level: 4, needLevel: 13, needMoney: 10000000,   needCases: 300 },
+  { level: 5, needLevel: 13, needMoney: 50000000,   needCases: 500 },
+  { level: 6, needLevel: 13, needMoney: 250000000,  needCases: 800 },
+  { level: 7, needLevel: 13, needMoney: 1000000000, needCases: 1200 },
+  { level: 8, needLevel: 13, needMoney: 10000000000, needCases: 2000 },
+  { level: 9, needLevel: 13, needMoney: 50000000000, needCases: 3500 },
+  { level: 10,needLevel: 13, needMoney: 100000000000, needCases: 5000 }
+];
+
+const CREDIT_BANKRUPT_AFTER_MS = 60 * 60 * 1000; // 1 час
+const CREDIT_BANKRUPT_CHANCE = 0.15; // 15% шанс получить титул воздухан, иначе банкрот
 
 /* ---------- Стартовый инвентарь ---------- */
 const START_ITEMS = ['sch_bad_grade', 'sch_cold_cutlet', 'sch_chewed_pen', 'sch_eraser'];

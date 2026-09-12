@@ -132,6 +132,22 @@ function statusChipHtml(st) {
   const m = (typeof PLAYER_STATUS_META !== 'undefined' && PLAYER_STATUS_META[st]) || { label: st.toUpperCase(), cls: 'bg-slate-500/20 border-slate-500/60 text-slate-300' };
   return `<span class="status-chip ${m.cls}" title="Статус выдан владельцем проекта">${m.label}</span>`;
 }
+function rebirthChipHtml(rebirthLvl) {
+  if (!rebirthLvl || rebirthLvl <= 0) return '';
+  try {
+    const card = (typeof REBIRTH_CARDS !== 'undefined' ? REBIRTH_CARDS.find(c => c.level === rebirthLvl) : null);
+    if (!card) return `<span class="status-chip bg-amber-500/20 border-amber-500/60 text-amber-300">🔄 ${rebirthLvl}</span>`;
+    const meta = (typeof PLAYER_STATUS_META !== 'undefined' && PLAYER_STATUS_META[card.id.replace('card_','')]) || null;
+    const cls = meta ? meta.cls : 'bg-amber-500/20 border-amber-500/60 text-amber-300';
+    return `<span class="status-chip ${cls}" title="${card.name} · лимит ${card.limit} ₽">${card.icon} ${card.title.toUpperCase()}</span>`;
+  } catch(e) { return ''; }
+}
+function bankruptChipHtml(bType) {
+  if (!bType) return '';
+  if (bType === 'bankrupt') return `<span class="status-chip bg-rose-950/50 border-rose-800/60 text-rose-300">💸 БАНКРОТ</span>`;
+  if (bType === 'vozduhan') return `<span class="status-chip bg-sky-950/40 border-sky-800/50 text-sky-300">🌬 ВОЗДУХАН</span>`;
+  return '';
+}
 
 /* Показать игроку экран «ты забанен» с причиной */
 function showBannedScreen(reason, by) {
@@ -198,11 +214,25 @@ const NetIdentity = {
   },
 
   /* Аккаунты из старых сейвов (до 3.7) иногда переносились без uid — с ним
-     сервер отвечает 400 «нет uid», и ID не выдался бы НИКОГДА. Чиним на лету. */
+     сервер отвечает 400 «нет uid», и ID не выдался бы НИКОГДА. Чиним на лету.
+     + UID-lock: id никогда не меняется случайно — берём из vault. */
   ensureUid() {
     if (!state.user) return false;
-    if (state.user.id) return true;
+    if (state.user.id) {
+      try { if (typeof IdentityVault !== 'undefined') IdentityVault.setUidLock(state.user.id); } catch (e) {}
+      return true;
+    }
+    try {
+      if (typeof IdentityVault !== 'undefined') {
+        const lock = IdentityVault.getUidLock();
+        if (lock) { state.user.id = lock; persist(true); return true; }
+        const vault = IdentityVault.loadVault();
+        if (vault && vault.uid) { state.user.id = vault.uid; IdentityVault.setUidLock(vault.uid); persist(true); return true; }
+        if (vault && vault.user && vault.user.id) { state.user.id = vault.user.id; IdentityVault.setUidLock(vault.user.id); persist(true); return true; }
+      }
+    } catch (e) {}
     state.user.id = RNG.uid('player');
+    try { if (typeof IdentityVault !== 'undefined') IdentityVault.setUidLock(state.user.id); } catch (e) {}
     persist(true);
     return true;
   },
@@ -224,9 +254,10 @@ const NetIdentity = {
         this.stopRetry();
         const hadTag = !!state.user.tag;
         const hadVerified = !!state.user.verified;
+        const hadStatus = state.user.status || null;
+        const hadRole = state.user.role || null;
         if (res.tag) state.user.tag = res.tag;
         state.user.verified = !!res.verified;
-        const hadRole = state.user.role || null;
         state.user.role = res.role || null;
         state.user.status = res.status || null;
         const wasBanned = !!state.user.banned;
@@ -234,13 +265,35 @@ const NetIdentity = {
         state.user.banReason = res.banReason || null;
         if (res.unreadDms != null && typeof DmInbox !== 'undefined') DmInbox.setUnread(res.unreadDms);
         if (res.email && !state.user.email) state.user.email = res.email;
-        if (res.nick && res.nick !== state.user.nick) state.user.nick = res.nick; // ник — как на сервере (уникальность)
+        if (res.nick && res.nick !== state.user.nick) state.user.nick = res.nick;
+        // ---- RESILIENT VAULT: дублируем в localStorage и ledger ----
+        try {
+          if (typeof IdentityVault !== 'undefined') {
+            IdentityVault.saveVault({
+              uid: state.user.id,
+              user: Object.assign({}, state.user),
+              tag: state.user.tag || null,
+              nick: state.user.nick || null,
+              verified: !!state.user.verified,
+              role: state.user.role || null,
+              status: state.user.status || null,
+              email: state.user.email || null
+            });
+            IdentityVault.savePlayer(Object.assign({}, state.user));
+            if ((res.status && res.status !== hadStatus) || (res.verified && !hadVerified) || (res.role && res.role !== hadRole)) {
+              IdentityVault.logStatus({
+                uid: state.user.id, tag: state.user.tag || null, nick: state.user.nick || null,
+                status: state.user.status || null, verified: !!state.user.verified, role: state.user.role || null,
+                by: 'server-sync', at: Date.now()
+              });
+            }
+          }
+        } catch (e) {}
         if (state.user.role === 'admin' && hadRole !== 'admin') {
           Toast.gold('🛡 Владелец назначил тебя АДМИНИСТРАТОРОМ проекта! Значок виден в чате и профиле.', 8000);
         }
         if (state.user.banned && !wasBanned) showBannedScreen(res.banReason, res.banBy);
         if (!hadTag && state.user.tag) {
-          // Первая выдача ID после входа в обновлённую версию
           Toast.gold(`🆔 Твоему аккаунту присвоен уникальный ID: <b class="font-mono">${escapeHtml(state.user.tag)}</b>. По нему тебя найдут друзья в «💬 Сообществе»!`, 9000);
         } else if (state.user.verified && !hadVerified) {
           Toast.info('✔ Твой аккаунт верифицирован администрацией — галочка видна всем в чате и профиле!', 7000);
@@ -248,6 +301,20 @@ const NetIdentity = {
         persist(true);
         this.renderEverywhere();
       } else {
+        // сервер не ответил, но есть vault — восстановим локально
+        try {
+          if (typeof IdentityVault !== 'undefined') {
+            const vault = IdentityVault.loadVault();
+            if (vault && vault.user && state.user && state.user.id === vault.uid) {
+              if (vault.user.tag && !state.user.tag) state.user.tag = vault.user.tag;
+              if (vault.user.verified && !state.user.verified) state.user.verified = true;
+              if (vault.user.role && !state.user.role) state.user.role = vault.user.role;
+              if (vault.user.status && !state.user.status) state.user.status = vault.user.status;
+              persist(true);
+              this.renderEverywhere();
+            }
+          }
+        } catch (e) {}
         this.armRetry();
       }
       return res;
@@ -616,9 +683,11 @@ const Community = {
         : isMe
           ? 'bg-cyan-950/40 border-cyan-800/50'
           : 'bg-slate-900/70 border-slate-800/70';
+      const rebirthHtml = m.rebirth ? ' ' + rebirthChipHtml(m.rebirth) : '';
+      const bankruptHtml = m.bankruptType ? ' ' + bankruptChipHtml(m.bankruptType) : (m.creditDebt && m.creditDebt>0 ? ' <span class="status-chip bg-amber-950/40 border-amber-800/50 text-amber-300">💳 ' + (m.creditDebt>1000000 ? (Math.round(m.creditDebt/1000)+'k') : m.creditDebt) + ' долг</span>' : '');
       const head = isAdmin
         ? `<span class="font-bold text-amber-300">${escapeHtml(m.nick)}</span> ${adminChipHtml()}`
-        : `<span class="font-bold ${isMe ? 'text-cyan-300' : 'text-slate-200'}">${escapeHtml(m.nick)}</span>${m.verified ? ' ' + verifiedBadgeHtml() : ''}${m.role === 'admin' ? ' ' + staffChipHtml() : ''}${m.status ? ' ' + statusChipHtml(m.status) : ''}${m.tag ? ` <span class="font-mono text-[8.5px] text-slate-500">${escapeHtml(m.tag)}</span>` : ''}`;
+        : `<span class="font-bold ${isMe ? 'text-cyan-300' : 'text-slate-200'}">${escapeHtml(m.nick)}</span>${m.verified ? ' ' + verifiedBadgeHtml() : ''}${m.role === 'admin' ? ' ' + staffChipHtml() : ''}${m.status ? ' ' + statusChipHtml(m.status) : ''}${rebirthHtml}${bankruptHtml}${m.tag ? ` <span class="font-mono text-[8.5px] text-slate-500">${escapeHtml(m.tag)}</span>` : ''}`;
       const del = canModerate && m.id
         ? `<button onclick="Community.adminDeleteMessage('${m.id}')" title="Удалить сообщение (админ)" class="text-slate-500 hover:text-rose-400 transition text-[10px] leading-none flex-shrink-0">✕</button>`
         : '';
@@ -682,16 +751,30 @@ const CloudSave = {
   _pushTimer: null,
   _restored: false,
   _lastPushOk: 0,
+  _vaultPushTimer: null,
 
   startAutoPush() {
     if (this._pushTimer) return;
     this._pushTimer = setInterval(() => {
       if (ServerAPI.isOnline() && state.user) this.push(false);
     }, 45000);
-    // На выходе со страницы — мгновенный снапшот через sendBeacon
+    // Vault дублирует каждое сохранение локально — даже если сервер спит
+    if (!this._vaultPushTimer) {
+      this._vaultPushTimer = setInterval(() => {
+        try {
+          if (state.user && typeof IdentityVault !== 'undefined' && typeof snapshot === 'function') {
+            IdentityVault.saveFromSnapshot(snapshot());
+          }
+        } catch (e) {}
+      }, 10000);
+    }
     window.addEventListener('pagehide', () => this._beacon());
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) this._beacon();
+      else {
+        // при возврате в вкладку — пробуем автопробудить сервер
+        try { if (typeof AutoWake !== 'undefined') AutoWake.start(); } catch (e) {}
+      }
     });
   },
 
@@ -703,36 +786,64 @@ const CloudSave = {
     } catch (e) {}
   },
 
-  /* Залить прогресс на сервер */
+  /* Залить прогресс на сервер — каждое действие сохраняется на сервере + в vault */
   async push(toast = false) {
     if (!state.user) return false;
+    // всегда дублируем в vault, даже если сервер оффлайн
+    try {
+      if (typeof IdentityVault !== 'undefined' && typeof snapshot === 'function') {
+        IdentityVault.saveFromSnapshot(snapshot());
+      }
+    } catch (e) {}
     if (!(await ServerAPI.ping())) {
-      if (toast) Toast.error('Сервер оффлайн — синхронизация подождёт');
+      if (toast) Toast.error('Сервер оффлайн — синхронизация подождёт, но локальный бэкап сохранён');
       this._renderStatus();
       return false;
     }
     try {
+      const snap = snapshot();
+      // отправляем user с tag/verified/role/status чтобы сервер мог восстановить после вайпа
+      const enrichedSave = Object.assign({}, snap, {
+        user: Object.assign({}, snap.user, {
+          tag: snap.user.tag || null,
+          verified: !!snap.user.verified,
+          role: snap.user.role || null,
+          status: snap.user.status || null
+        })
+      });
       const { data } = await ServerAPI.req('POST', '/api/save', {
-        uid: state.user.id, nick: state.user.nick, save: snapshot()
+        uid: state.user.id, nick: state.user.nick, save: enrichedSave
       }, {}, 15000);
       if (data.ok) {
         this._lastPushOk = Date.now();
-        // Запасной канал: сервер возвращает уникальный ID в ответе на залив
-        // сейва — игрок получит ID даже если sync() ни разу не прошёл
         if (data.tag && state.user && !state.user.tag) {
           state.user.tag = data.tag;
           if (typeof data.verified === 'boolean') state.user.verified = data.verified;
+          if (data.role) state.user.role = data.role;
+          if (data.status) state.user.status = data.status;
           persist(true);
           NetIdentity.stopRetry();
           NetIdentity.renderEverywhere();
           Toast.gold(`🆔 Твоему аккаунту присвоен уникальный ID: <b class="font-mono">${escapeHtml(data.tag)}</b>. По нему тебя найдут друзья в «💬 Сообществе»!`, 9000);
         }
+        // если сервер вернул статус/роль/галочку — сохраняем в vault
+        try {
+          if (typeof IdentityVault !== 'undefined') {
+            if (data.tag || data.verified || data.role || data.status) {
+              if (data.tag) state.user.tag = data.tag;
+              if (typeof data.verified === 'boolean') state.user.verified = data.verified;
+              if (data.role) state.user.role = data.role;
+              if (data.status) state.user.status = data.status;
+              IdentityVault.saveVault({ uid: state.user.id, user: Object.assign({}, state.user) });
+            }
+          }
+        } catch (e) {}
         if (toast) Toast.success('☁️ Прогресс залит на сервер сообщества!');
         this._renderStatus();
         return true;
       }
     } catch (e) {}
-    if (toast) Toast.error('Не удалось залить прогресс на сервер');
+    if (toast) Toast.error('Не удалось залить прогресс на сервер — но локальный бэкап в порядке');
     this._renderStatus();
     return false;
   },
@@ -1078,12 +1189,19 @@ const NetPlay = {
 function renderServerStatus() {
   const online = ServerAPI.isOnline();
   const statusText = online
-    ? `<span class="text-emerald-400">●</span> Сервер онлайн — чат, подарки и обмен работают`
-    : `<span class="text-rose-400">●</span> Сервер не работает — нажми «Включить сервер» и подожди, пока сервер оживёт (~минуту), или напиши нам на <b class="text-rose-200">${SERVER_CONTACT_EMAIL}</b> — решим проблему!`;
+    ? `<span class="text-emerald-400">●</span> Сервер онлайн — чат, подарки и обмен работают · каждое действие сохраняется на сервере ☁️ (сезон 3.5)`
+    : `<span class="text-rose-400">●</span> Сервер не работает — игра не пустит играть пока не подключится! Нажми «Включить сервер» и подожди (~минуту), или напиши на <b class="text-rose-200">${SERVER_CONTACT_EMAIL}</b>`;
   const chipCls = online
     ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/40'
     : 'bg-rose-500/15 text-rose-300 border border-rose-500/40';
   const chipText = online ? 'ОНЛАЙН' : 'ОФФЛАЙН';
+
+  // Сезон 3.5 — индикатор в шапке
+  const headerDot = $('serverHeaderDot');
+  if (headerDot) {
+    headerDot.className = 'w-2 h-2 rounded-full border flex-shrink-0 ' + (online ? 'bg-emerald-400 border-emerald-500/50' : 'bg-amber-400 animate-pulse border-amber-500/50');
+    headerDot.title = online ? 'Сервер подключен — каждое действие сохраняется ☁️' : 'Подключение к серверу... игра ждёт сервер (сезон 3.5)';
+  }
 
   // Модалка трейдинга
   const el = $('netServerStatus');
@@ -1422,12 +1540,16 @@ const AuthGate = {
 };
 
 /* --------------------------------------------------------------------------
-   ПРИВЕТСТВИЕ ПРИ ВХОДЕ (сезон 3.7)
+   ПРИВЕТСТВИЕ ПРИ ВХОДЕ (сезон 3.9)
    «Привет! Загляни в аккаунт — вдруг тебе выдали галочку либо код автора…»
    Показывается раз в 12 часов (+ сразу после глобального вайпа).
+   Вайп 3.9 обрабатывается отдельным модалом accountResetModal, так что тут
+   проверяем и старый флаг seasonWipeToast для совместимости.
    -------------------------------------------------------------------------- */
 function maybeShowEntryGreeting() {
   if (!state.user) return;
+  // Если был полный вайп 3.9 — приветствие не показываем, уже был модал сброса
+  if (state.accountResetToast) return;
   let last = 0;
   try { last = Number(localStorage.getItem('shkola_greet_at')) || 0; } catch (e) {}
   const hadWipe = !!state.seasonWipeToast;
@@ -1436,12 +1558,18 @@ function maybeShowEntryGreeting() {
   state.seasonWipeToast = false;
   setTimeout(() => {
     if (hadWipe) {
-      Toast.gold('🧹 <b>СЕЗОН 3.7 — БОЛЬШОЙ ВАЙП!</b> Баланс и рюкзак у всех обнулены до стартовых — честный новый сезон. Ник и уникальный ID остались нетронуты. Жёсткие кейсы, лавка из 4 вещиц и ⚡ 10 предметов, что добываются ТОЛЬКО апгрейдом. Вперёд!', 13000);
+      Toast.gold('🧹 <b>СЕЗОН 3.9 — ПОЛНЫЙ ВАЙП АККАУНТОВ!</b> Но в сезоне 3.5 ты получаешь подарок-извинение 🎁 — дорогой предмет бесплатно! Все аккаунты обнулены, но теперь всё в норме и каждое действие сохраняется на сервере ☁️', 13000);
     }
+    // Сезон 3.5 — приветствие про обязательный онлайн и подарок
+    const meta = typeof MetaStore !== 'undefined' ? MetaStore.read() : {};
+    const isFirst35 = meta.apologyGiftSeen === 14 || (typeof state !== 'undefined' && state.stats && state.stats.apologyGiftClaimed);
     setTimeout(() => {
       if (!state.user) return;
       const tag = state.user.tag;
-      Toast.info(`👋 Привет, <b>${escapeHtml(state.user.nick)}</b>! Загляни в свой аккаунт (кнопка 👤 снизу): вдруг тебе уже выдали ✔ галочку верификации или 🎁 код автора? ${tag ? `Твой уникальный ID: <b class="font-mono text-amber-300">${escapeHtml(tag)}</b> — он же висит в «💬 Сообществе» и копируется нажатием.` : 'Кнопка «💬 Сообщество» откроет общий чат и твой уникальный ID (копируется нажатием).'}`, 12000);
+      if (isFirst35) {
+        Toast.gold(`🎁 <b>Сезон 3.5 — подарок-извинение!</b> За вайп 3.9 ты получил дорогой предмет на 1.5M ₽ бесплатно! Он уже в рюкзаке. Теперь игра не пускает играть пока не подключится к серверу — так твой аккаунт точно отобразится в базе ☁️`, 10000);
+      }
+      Toast.info(`👋 Привет, <b>${escapeHtml(state.user.nick)}</b>! Загляни в свой аккаунт (кнопка 👤 снизу): вдруг тебе уже выдали ✔ галочку верификации или 🎁 код автора? ${tag ? `Твой уникальный ID: <b class="font-mono text-amber-300">${escapeHtml(tag)}</b> — он же висит в «💬 Сообществе» и копируется нажатием.` : 'Кнопка «💬 Сообщество» откроет общий чат и твой уникальный ID (копируется нажатием).'}<br><span class="text-[10px] text-amber-300">Сезон 3.5: обязательный онлайн — каждое действие сохраняется на сервере, а чат-уведомления всегда включены (можно выключить в ⚙️)</span>`, 12000);
     }, hadWipe ? 900 : 400);
   }, 1000);
 }
@@ -1465,7 +1593,7 @@ let _adminPlayersFilter = 'all'; // all | online | admins | banned
 
 function adminSetPlayersFilter(f) {
   _adminPlayersFilter = f;
-  ['all', 'online', 'admins', 'banned'].forEach(k => {
+  ['all', 'online', 'offline', 'registered', 'admins', 'banned'].forEach(k => {
     const btn = $('adminFilter' + k.charAt(0).toUpperCase() + k.slice(1));
     if (btn) btn.classList.toggle('bg-slate-600', k === f);
   });
@@ -1490,8 +1618,7 @@ async function adminLoadPlayers(manual = false) {
     ServerAPI._playersCount = _adminPlayersCache.length;
     Community.renderMyId();
   }
-  const onlineEl = $('adminOnlineCount');
-  if (onlineEl) onlineEl.textContent = `${data.online || 0} онлайн · ${_adminPlayersCache.length} всего`;
+  // Счётчики обновятся внутри adminRenderPlayers (онлайн/оффлайн/зарег.)
   adminRenderPlayers();
 }
 
@@ -1500,11 +1627,37 @@ function adminRenderPlayers() {
   if (!box) return;
   const q = (($('adminPlayersSearch') || {}).value || '').trim().toLowerCase();
   const has = (perm) => typeof adminHas === 'function' && adminHas(perm);
-  let players = _adminPlayersCache;
+  let players = _adminPlayersCache.slice();
+
+  // Статистика для бейджей сверху
+  const total = players.length;
+  const onlineCount = players.filter(p => p.online).length;
+  const offlineCount = total - onlineCount;
+  const registeredCount = players.filter(p => p.email || p.tag).length;
+
+  // Фильтрация
   if (_adminPlayersFilter === 'online') players = players.filter(p => p.online);
+  if (_adminPlayersFilter === 'offline') players = players.filter(p => !p.online);
+  if (_adminPlayersFilter === 'registered') players = players.filter(p => p.email || p.tag);
   if (_adminPlayersFilter === 'admins') players = players.filter(p => p.role === 'admin');
   if (_adminPlayersFilter === 'banned') players = players.filter(p => p.banned);
   if (q) players = players.filter(p => [p.nick, p.tag, p.uid, p.email].some(v => v && String(v).toLowerCase().includes(q)));
+
+  // Сортировка: онлайн первыми, затем по lastSeen свежие, затем по нику
+  players.sort((a, b) => {
+    if (a.online !== b.online) return a.online ? -1 : 1;
+    const la = a.lastSeen || a.firstSeen || 0;
+    const lb = b.lastSeen || b.firstSeen || 0;
+    if (la !== lb) return lb - la;
+    return String(a.nick || '').localeCompare(String(b.nick || ''));
+  });
+
+  // Обновим счётчики в заголовке (если есть)
+  const onlineEl = $('adminOnlineCount');
+  if (onlineEl) {
+    onlineEl.textContent = `${onlineCount} онлайн · ${offlineCount} оффлайн · ${total} всего · ${registeredCount} зарег.`;
+    onlineEl.title = `Всего: ${total}, онлайн: ${onlineCount}, оффлайн: ${offlineCount}, зарегистрированных (с e-mail или ID): ${registeredCount}`;
+  }
 
   box.innerHTML = players.map(p => {
     const btns = [];
@@ -1525,38 +1678,67 @@ function adminRenderPlayers() {
       </select>`);
     if (has('delete')) btns.push(`<button onclick="adminDeleteAccount('${p.uid}', '${escapeHtml(p.nick).replace(/'/g, '')}')" class="adm-act" style="background:linear-gradient(135deg,#7f1d1d,#450a0a)" title="Удалить аккаунт навсегда">🗑 удалить</button>`);
 
+    const onlineBadge = p.online
+      ? '<span class="inline-flex items-center gap-0.5 text-[8px] font-black px-1.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/50 text-emerald-300">● ОНЛАЙН</span>'
+      : '<span class="inline-flex items-center gap-0.5 text-[8px] font-black px-1.5 py-0.5 rounded-full bg-slate-700/60 border border-slate-600/60 text-slate-400">○ ОФФЛАЙН</span>';
+    const registeredBadge = (p.email || p.tag)
+      ? '<span class="inline-flex text-[7px] font-black px-1 py-0.5 rounded bg-cyan-500/15 border border-cyan-500/40 text-cyan-300">👤 ЗАРЕГ.</span>'
+      : '<span class="inline-flex text-[7px] font-black px-1 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-500">ГОСТЬ</span>';
     const status = p.online
-      ? '<span class="text-emerald-400 font-bold">● онлайн</span>'
+      ? `<span class="text-emerald-400 font-bold">● онлайн сейчас</span>`
       : `<span class="text-slate-500">○ ${escapeHtml(lastSeenText(p.lastSeen, false))}</span>`;
     const chips = `${p.verified ? verifiedBadgeHtml() : ''}${p.role === 'admin' ? staffChipHtml() : ''}${p.status ? statusChipHtml(p.status) : ''}${p.banned ? `<span class="text-[8px] font-black px-1 rounded bg-rose-500/20 border border-rose-500/50 text-rose-300" title="${escapeHtml(p.banReason || 'без причины')}">⛔ БАН</span>` : ''}`;
     const banInfo = p.banned ? `<div class="text-[8.5px] text-rose-300/80 truncate">Причина: ${escapeHtml(p.banReason || 'без причины')}${p.banBy ? ` · забанил ${escapeHtml(p.banBy)}` : ''}</div>` : '';
     const email = has('emails') && p.email ? `<div class="text-[8.5px] text-slate-500 truncate">✉ ${escapeHtml(p.email)}</div>` : '';
     const first = p.firstSeen ? `рег. ${new Date(p.firstSeen).toLocaleDateString('ru-RU')}` : '';
-    return `<div class="bg-slate-900/70 border border-slate-800 rounded-lg px-2 py-1.5 space-y-1">
+    return `<div class="bg-slate-900/70 border ${p.online ? 'border-emerald-900/50' : 'border-slate-800'} rounded-lg px-2 py-1.5 space-y-1">
       <div class="min-w-0 cursor-pointer hover:bg-slate-800/50 rounded -mx-1 px-1 transition" onclick="adminOpenPlayer('${p.uid}')" title="Открыть подробную карточку">
-        <div class="text-[10.5px] font-bold text-slate-200 truncate flex items-center gap-1 flex-wrap">${escapeHtml(p.nick)} ${chips}<span class="ml-auto text-slate-600 text-[9px]">›</span></div>
+        <div class="text-[10.5px] font-bold text-slate-200 truncate flex items-center gap-1 flex-wrap">${escapeHtml(p.nick)} ${chips} ${onlineBadge} ${registeredBadge}<span class="ml-auto text-slate-600 text-[9px]">›</span></div>
         <div class="text-[9px] text-slate-500 truncate">ID <span class="font-mono text-amber-300">${escapeHtml(p.tag || '—')}</span> · <span class="font-mono">${escapeHtml(p.uid)}</span></div>
         ${email}${banInfo}
         <div class="text-[9px] truncate">${status}${first ? ` <span class="text-slate-600">· ${first}</span>` : ''}</div>
       </div>
       ${btns.length ? `<div class="flex flex-wrap gap-1">${btns.join('')}</div>` : ''}
     </div>`;
-  }).join('') || '<div class="net-empty">Никого не найдено.</div>';
+  }).join('') || '<div class="net-empty">Никого не найдено. Попробуй другой фильтр.</div>';
 }
 
 async function adminToggleVerify(uid, grant) {
   const { data } = await ServerAPI.req('POST', '/api/admin/players/verify', { uid, verified: grant }, adminHeaders());
   if (!data.ok) { Toast.error(data.error || 'Сервер отклонил запрос'); return; }
+  // RESILIENT: сохраняем в vault и ledger на телефоне выдавшего и на телефоне получившего (когда он зайдёт — sync)
+  try {
+    if (typeof IdentityVault !== 'undefined') {
+      const p = _adminPlayersCache.find(x => x.uid === uid) || { uid, nick: uid };
+      IdentityVault.logStatus({
+        uid, tag: p.tag || null, nick: p.nick || null,
+        verified: !!grant, by: state.user ? state.user.nick : 'admin', byUid: state.user ? state.user.id : null,
+        at: Date.now()
+      });
+      IdentityVault.savePlayer({ uid, verified: !!grant, tag: p.tag || null, nick: p.nick || null });
+    }
+  } catch (e) {}
   audio.playSecret();
-  Toast.gold(grant ? '✔ Галочка верификации выдана! Игрок увидит её в профиле и чате.' : 'Галочка снята с аккаунта.');
+  Toast.gold(grant ? '✔ Галочка верификации выдана! Игрок увидит её в профиле и чате. Сохранено в localStorage.' : 'Галочка снята с аккаунта.');
   adminLoadPlayers();
 }
 
 async function adminSetRole(uid, role) {
   const { data } = await ServerAPI.req('POST', '/api/admin/players/role', { uid, role }, adminHeaders());
   if (!data.ok) { Toast.error(data.error || 'Сервер отклонил запрос'); return; }
+  try {
+    if (typeof IdentityVault !== 'undefined') {
+      const p = _adminPlayersCache.find(x => x.uid === uid) || { uid, nick: uid };
+      IdentityVault.logStatus({
+        uid, tag: p.tag || null, nick: p.nick || null,
+        role: role || null, by: state.user ? state.user.nick : 'admin', byUid: state.user ? state.user.id : null,
+        at: Date.now()
+      });
+      IdentityVault.savePlayer({ uid, role: role || null, tag: p.tag || null, nick: p.nick || null });
+    }
+  } catch (e) {}
   audio.playSecret();
-  Toast.gold(role === 'admin' ? '🛡 Игрок назначен администратором — у него появился значок АДМИН. Код панели администрации передай ему лично.' : 'Права администратора сняты.');
+  Toast.gold(role === 'admin' ? '🛡 Игрок назначен администратором — у него появился значок АДМИН. Сохранено в localStorage.' : 'Права администратора сняты.');
   adminLoadPlayers();
 }
 
@@ -1589,8 +1771,19 @@ async function adminToggleBan(uid, ban, reason) {
 async function adminSetStatus(uid, status) {
   const { data } = await ServerAPI.req('POST', '/api/admin/players/status', { uid, status }, adminHeaders());
   if (!data.ok) { Toast.error(data.error || 'Сервер отклонил запрос'); return; }
+  try {
+    if (typeof IdentityVault !== 'undefined') {
+      const p = _adminPlayersCache.find(x => x.uid === uid) || { uid, nick: uid };
+      IdentityVault.logStatus({
+        uid, tag: p.tag || null, nick: p.nick || null,
+        status: status || null, by: state.user ? state.user.nick : 'admin', byUid: state.user ? state.user.id : null,
+        at: Date.now()
+      });
+      IdentityVault.savePlayer({ uid, status: status || null, tag: p.tag || null, nick: p.nick || null });
+    }
+  } catch (e) {}
   audio.playSecret();
-  Toast.gold(status ? `Статус ${statusLabel(status)} выдан — плашка видна у ника в чате и профиле.` : 'Статус снят.');
+  Toast.gold(status ? `Статус ${statusLabel(status)} выдан — плашка видна у ника в чате и профиле. Сохранено в localStorage.` : 'Статус снят.');
   adminLoadPlayers();
 }
 
@@ -1734,42 +1927,232 @@ async function renderAdminAuthorList() {
   if (!box) return;
   const reg = await AuthorRegistry.load();
   const rows = (reg.codes || []).map(c =>
-    `<div class="net-row"><div class="min-w-0"><div class="text-[10.5px] font-bold font-mono text-purple-300 truncate">${escapeHtml(c.code)}</div><div class="text-[10px] text-slate-400 truncate">${escapeHtml(c.ownerName || '')} · ${escapeHtml(c.ownerUid || '')}</div></div></div>`
+    `<div class="net-row"><div class="min-w-0"><div class="text-[10.5px] font-bold font-mono text-purple-300 truncate">${escapeHtml(c.code)}</div><div class="text-[10px] text-slate-400 truncate">${escapeHtml(c.ownerName || '')} · <span class="font-mono text-cyan-300">${escapeHtml(c.ownerUid || '')}</span>${c.ownerTag ? ` · tag ${escapeHtml(c.ownerTag)}` : ''}</div></div><div class="flex gap-1 flex-shrink-0"><button onclick="adminEditAuthorCode('${escapeHtml(c.code)}','${escapeHtml(c.ownerUid || '')}','${escapeHtml((c.ownerName || '').replace(/'/g,''))}')" class="adm-act" style="background:#1e293b;border:1px solid #334155">✎ id</button><button onclick="adminDeleteAuthorCode('${escapeHtml(c.code)}')" class="adm-act" style="background:linear-gradient(135deg,#7f1d1d,#450a0a)">🗑</button></div></div>`
   ).join('');
   box.innerHTML = rows || '<div class="net-empty">Пока нет ни одного кода автора.</div>';
 }
 
+function adminEditAuthorCode(code, oldUid, oldName) {
+  const newUid = prompt(`Меняем ID-код автора для ${code}\nТекущий ownerUid: ${oldUid}\nВведи новый id аккаунта (player-… или #ID):`, oldUid);
+  if (newUid === null) return;
+  const trimmed = newUid.trim();
+  if (!trimmed) { Toast.error('ID не может быть пустым'); return; }
+  adminUpdateAuthorCode(code, trimmed, oldName);
+}
+
+async function adminUpdateAuthorCode(code, newOwnerUid, ownerName) {
+  if (!(await ServerAPI.ping(true))) { Toast.error('Сервер оффлайн — смена id невозможна, но сохраню в локальный vault'); try { if (typeof IdentityVault !== 'undefined') { const vault = IdentityVault.loadAuthorCodesVault() || { codes: [] }; let found = false; vault.codes = vault.codes.map(c => { if (c.code === code) { found = true; return Object.assign({}, c, { ownerUid: newOwnerUid }); } return c; }); if (!found) vault.codes.push({ code, ownerUid: newOwnerUid, ownerName }); IdentityVault.saveAuthorCodesVault(vault); } } catch (e) {} renderAdminAuthorList(); return; }
+  const { data } = await ServerAPI.req('POST', '/api/admin/author-codes/update', { code, ownerUid: newOwnerUid, ownerName }, adminHeaders());
+  if (!data.ok) { Toast.error(data.error || 'Не удалось обновить id'); return; }
+  Toast.gold(`✅ ID-код автора ${escapeHtml(code)} теперь привязан к <b>${escapeHtml(newOwnerUid)}</b>`);
+  AuthorRegistry.load(true);
+  renderAdminAuthorList();
+  try { if (typeof IdentityVault !== 'undefined') IdentityVault.saveAuthorCodesVault(await AuthorRegistry.load()); } catch (e) {}
+}
+
+async function adminDeleteAuthorCode(code) {
+  const ok = await ConfirmDialog.ask({ icon: '🗑', title: `Удалить код ${code}?`, text: `Код автора <b>${escapeHtml(code)}</b> будет удалён из реестра.`, okText: 'Удалить', danger: true });
+  if (!ok) return;
+  if (!(await ServerAPI.ping(true))) { Toast.error('Сервер оффлайн'); return; }
+  const { data } = await ServerAPI.req('POST', '/api/admin/author-codes/delete', { code }, adminHeaders());
+  if (!data.ok) { Toast.error(data.error || 'Не удалось удалить'); return; }
+  Toast.info(`Код ${escapeHtml(code)} удалён`);
+  AuthorRegistry.load(true);
+  renderAdminAuthorList();
+}
+
 /* --------------------------------------------------------------------------
-   ЭКСПЕРИМЕНТ: АВТОПРОБУЖДЕНИЕ СЕРВЕРА
-   Вместо плашки «Включить сервер» игра сама тихо пингует сервер в фоне,
-   пока он не проснётся (как будто ты нажал кнопку сам).
+   ADMIN VAULT BACKUP — кнопка «Сохранить все данные в localStorage»
+   Сохраняет ВСЕХ игроков, их сейвы, статусы, галочки в localStorage телефона
+   админа. При следующем входе (если сервер чистый) — автоматически
+   восстанавливает их на сервер.
+   -------------------------------------------------------------------------- */
+const AdminVaultBackup = {
+  async saveAllToLocal() {
+    if (!(await ServerAPI.ping(true))) { Toast.error('Сервер оффлайн — не могу скачать данные'); return; }
+    const btn = $('adminBackupSaveBtn');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Скачиваю...'; }
+    try {
+      // основной список игроков
+      const { data: listData } = await ServerAPI.req('GET', '/api/admin/players', null, adminHeaders());
+      if (!listData.ok) throw new Error(listData.error || 'не удалось получить список игроков');
+      // дамп всего сервера (если есть endpoint) — иначе собираем по деталям
+      let dump = null;
+      try {
+        const { data: dumpData } = await ServerAPI.req('GET', '/api/admin/dump', null, adminHeaders());
+        if (dumpData.ok) dump = dumpData;
+      } catch (e) {}
+      let playersDetailed = [];
+      if (!dump) {
+        // fallback: грузим детали для каждого игрока (до 200)
+        const slice = listData.players.slice(0, 200);
+        for (const p of slice) {
+          try {
+            const { data } = await ServerAPI.req('GET', `/api/admin/players/detail?uid=${encodeURIComponent(p.uid)}`, null, adminHeaders());
+            if (data.ok) playersDetailed.push({ player: data.player, save: data.save });
+          } catch (e) {}
+        }
+      }
+      const backup = {
+        players: listData.players,
+        playersDetailed,
+        dump,
+        statusLedger: (typeof IdentityVault !== 'undefined') ? IdentityVault.loadStatusLedger() : [],
+        playersVault: (typeof IdentityVault !== 'undefined') ? IdentityVault.loadPlayersVault() : {},
+        authorCodes: await (typeof AuthorRegistry !== 'undefined' ? AuthorRegistry.load() : Promise.resolve({ codes: [] })),
+        at: Date.now(),
+        by: state.user ? state.user.nick : 'admin',
+        byUid: state.user ? state.user.id : null
+      };
+      if (typeof IdentityVault !== 'undefined') {
+        IdentityVault.saveAdminBackup(backup);
+        IdentityVault.savePlayersBulk(listData.players);
+      } else {
+        localStorage.setItem('shkola_admin_full_backup_v1', JSON.stringify(backup));
+      }
+      Toast.gold(`💾 Сохранено в localStorage телефона: <b>${listData.players.length}</b> игроков, ${playersDetailed.length} детальных сейвов, ${backup.statusLedger.length} записей статусов. Теперь даже если сервер сотрётся — телефон восстановит всё!`, 9000);
+      this.renderStatus();
+    } catch (e) {
+      Toast.error('Ошибка бэкапа: ' + (e.message || e));
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '💾 Сохранить все данные в localStorage'; }
+    }
+  },
+
+  async restoreFromLocal() {
+    const backup = (typeof IdentityVault !== 'undefined') ? IdentityVault.loadAdminBackup() : null;
+    const raw = backup || (() => { try { return JSON.parse(localStorage.getItem('shkola_admin_full_backup_v1') || 'null'); } catch (e) { return null; } })();
+    if (!raw) { Toast.error('В localStorage нет бэкапа — сначала нажми «Сохранить все данные»'); return; }
+    if (!(await ServerAPI.ping(true))) { Toast.error('Сервер оффлайн — не могу восстановить'); return; }
+    const ok = await ConfirmDialog.ask({
+      icon: '♻️', title: 'Восстановить на сервер из localStorage?',
+      text: `В бэкапе от <b>${new Date(raw.at || Date.now()).toLocaleString('ru-RU')}</b>: <b>${(raw.players || []).length}</b> игроков. Они будут перезалиты на сервер (существующие не удалятся, а обновятся). Продолжить?`,
+      okText: 'Восстановить', danger: false
+    });
+    if (!ok) return;
+    const btn = $('adminBackupRestoreBtn');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Восстанавливаю...'; }
+    try {
+      const { data } = await ServerAPI.req('POST', '/api/admin/restore', { backup: raw }, adminHeaders(), 20000);
+      if (!data.ok) throw new Error(data.error || 'сервер отклонил восстановление');
+      Toast.gold(`♻️ Восстановлено на сервер: игроков ${data.restoredPlayers || 0}, сейвов ${data.restoredSaves || 0}, статусов ${data.restoredStatuses || 0}. Сервер снова в норме!`, 9000);
+      adminLoadPlayers(true);
+      this.renderStatus();
+    } catch (e) {
+      Toast.error('Ошибка восстановления: ' + (e.message || e));
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '♻️ Восстановить на сервер из localStorage'; }
+    }
+  },
+
+  async tryAutoRestore() {
+    try {
+      if (typeof IdentityVault === 'undefined') return false;
+      const backup = IdentityVault.loadAdminBackup();
+      if (!backup) return false;
+      if (!state.user || state.adminRole !== 'owner') return false;
+      if (!(await ServerAPI.ping(true))) return false;
+      // проверяем сколько игроков на сервере — если 0 или в 3 раза меньше бэкапа — автовосстанавливаем
+      const { data: overview } = await ServerAPI.req('GET', '/api/admin/overview', null, adminHeaders()).catch(() => ({ data: {} }));
+      const serverCount = overview.players || 0;
+      const backupCount = (backup.players || []).length;
+      if (serverCount === 0 || (backupCount > 10 && serverCount < backupCount / 3)) {
+        Toast.info(`♻️ Обнаружен вайп сервера (на сервере ${serverCount}, в бэкапе ${backupCount}). Автовосстанавливаю из localStorage телефона...`, 8000);
+        const { data } = await ServerAPI.req('POST', '/api/admin/restore', { backup }, adminHeaders(), 20000);
+        if (data.ok) {
+          Toast.gold(`✅ Автовосстановление завершено: ${data.restoredPlayers} игроков, ${data.restoredSaves} сейвов вернулись на сервер из твоего телефона!`, 9000);
+          return true;
+        }
+      }
+    } catch (e) {}
+    return false;
+  },
+
+  renderStatus() {
+    const el = $('adminBackupStatus');
+    if (!el) return;
+    const backup = (typeof IdentityVault !== 'undefined') ? IdentityVault.loadAdminBackup() : null;
+    if (!backup) {
+      el.textContent = 'Бэкапа в localStorage нет';
+      el.className = 'text-[9px] font-mono text-slate-500';
+    } else {
+      const age = Math.round((Date.now() - (backup.at || 0)) / 60000);
+      const ageText = age < 60 ? `${age} мин назад` : `${Math.round(age / 60)} ч назад`;
+      el.textContent = `Бэкап: ${(backup.players || []).length} игроков от ${new Date(backup.at).toLocaleTimeString('ru-RU')} (${ageText}) · ${Object.keys(backup.playersVault || {}).length} в vault`;
+      el.className = 'text-[9px] font-mono text-emerald-400';
+    }
+  },
+
+  clearBackup() {
+    ConfirmDialog.ask({ icon: '🧹', title: 'Удалить локальный бэкап?', text: 'Бэкап всех игроков из localStorage телефона будет удалён.', okText: 'Удалить', danger: true }).then(ok => {
+      if (!ok) return;
+      if (typeof IdentityVault !== 'undefined') IdentityVault.clearAdminBackup();
+      try { localStorage.removeItem('shkola_admin_full_backup_v1'); } catch (e) {}
+      Toast.info('Локальный бэкап удалён');
+      this.renderStatus();
+    });
+  }
+};
+
+/* --------------------------------------------------------------------------
+   АВТОПРОБУЖДЕНИЕ СЕРВЕРА — телефон сам будит сервер полностью
+   Сезон 4.0: сервер может спать (Render free), но телефон игрока
+   автоматически его будит при входе, при возврате во вкладку и каждые
+   30 секунд пока оффлайн. Настройка autoWake теперь всегда включена.
    -------------------------------------------------------------------------- */
 const AutoWake = {
   _timer: null,
   _started: 0,
-  enabled() { return !!(state.settings && state.settings.autoWake); },
+  _keepAliveTimer: null,
+  enabled() {
+    // всегда включен — телефон сам будит сервер
+    return true;
+  },
   start() {
-    if (!this.enabled() || this._timer) return;
+    if (this._timer) return;
     this._started = Date.now();
     document.body.classList.add('auto-wake-on');
     const tick = async () => {
-      if (!this.enabled()) return this.stop();
       const on = await ServerAPI.ping(true).catch(() => false);
       if (on) {
         this.stop();
-        Toast.gold('⚡ Сервер проснулся автоматически (эксперимент). Онлайн-функции активны!', 6000);
+        Toast.gold('⚡ Сервер проснулся автоматически! Онлайн-функции активны — каждое действие сохраняется ☁️', 6000);
         if (typeof Community !== 'undefined' && Modal.isOpen('communityModal')) Community.refreshChat(true);
         if (typeof AuthGate !== 'undefined') AuthGate.refreshNetworkState(false);
+        if (typeof NetPlay !== 'undefined' && Modal.isOpen('netplayModal')) NetPlay.refreshAll();
+        // после пробуждения — сразу пушим vault на сервер
+        try {
+          if (typeof CloudSave !== 'undefined' && state.user) CloudSave.push(false);
+          if (typeof AdminVaultBackup !== 'undefined' && typeof IdentityVault !== 'undefined' && IdentityVault.hasAdminBackup()) {
+            AdminVaultBackup.tryAutoRestore();
+          }
+        } catch (e) {}
+        this.startKeepAlive();
         return;
       }
-      if (Date.now() - this._started > 4 * 60 * 1000) { this.stop(); return; } // 4 минуты — хватит
-      this._timer = setTimeout(tick, 6000);
+      if (Date.now() - this._started > 5 * 60 * 1000) { this.stop(); return; }
+      this._timer = setTimeout(tick, 4000);
     };
-    this._timer = setTimeout(tick, 100);
+    this._timer = setTimeout(tick, 300);
   },
   stop() {
     clearTimeout(this._timer); this._timer = null;
     document.body.classList.remove('auto-wake-on');
+  },
+  startKeepAlive() {
+    if (this._keepAliveTimer) return;
+    // держим сервер проснувшимся пока вкладка открыта: пинг каждые 45 сек
+    this._keepAliveTimer = setInterval(() => {
+      if (typeof ServerAPI !== 'undefined' && document.visibilityState === 'visible') {
+        ServerAPI.ping(true).catch(() => {});
+      }
+    }, 45000);
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) {
+        // вернулся в игру — сразу будим если уснул
+        ServerAPI.ping(true).then(on => { if (!on) this.start(); }).catch(() => this.start());
+      }
+    });
   }
 };
 
@@ -1883,15 +2266,21 @@ function NetBoot() {
   // Приветствие при входе: «загляни в аккаунт — галочка или код автора, твой ID тут»
   maybeShowEntryGreeting();
 
+  // телефон сам будит сервер — стартуем сразу, даже если онлайн
+  try { AutoWake.start(); AutoWake.startKeepAlive(); } catch (e) {}
+  // если есть локальный админ-бэкап — попробуем автовосстановить при старте
+  try {
+    if (typeof IdentityVault !== 'undefined' && IdentityVault.hasAdminBackup()) {
+      // отложим чтобы ping успел
+      setTimeout(() => { try { if (typeof AdminVaultBackup !== 'undefined') AdminVaultBackup.tryAutoRestore(); } catch (e) {} }, 3000);
+    }
+  } catch (e) {}
+
   ServerAPI.ping(true).then(async on => {
     renderServerStatus();
-    // Эксперименты
-    if (!on && AutoWake.enabled()) AutoWake.start();
+    if (!on) AutoWake.start();
     ChatNotify.start();
     DmInbox.startPolling();
-    // Уникальный ID запрашиваем ВСЕГДА (даже если сейчас оффлайн): sync() сам
-    // повторит попытку, как только сервер оживёт. Без этого ID не выдавался,
-    // если при загрузке страницы бесплатный Render спал.
     if (state.user) NetIdentity.sync();
     if (!on) return;
     if (state.user) {

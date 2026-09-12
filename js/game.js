@@ -46,14 +46,17 @@ const state = {
   pendingAuthEmail: null,
   pendingAuthTag: null,
   pendingAuthVerified: false,
-  seasonWipeToast: false
+  seasonWipeToast: false,
+  accountResetToast: false,
+  accountResetOldUser: null,
+  apologyGiftPending: false // сезон 3.5 — подарок-извинение нужно выдать
 };
 
 /* --------------------------------------------------------------------------
    ЗАГРУЗКА / СОХРАНЕНИЕ
    -------------------------------------------------------------------------- */
 function loadGame() {
-  const { data, migrated, fresh, wiped, carriedUser } = SaveManager.load();
+  const { data, migrated, fresh, wiped, carriedUser, hadOldSave, oldUser } = SaveManager.load();
 
   state.balance = data.balance;
   state.inventory = data.inventory;
@@ -91,9 +94,34 @@ function loadGame() {
   if (migrated) {
     Toast.success('Старый прогресс из версии 1.0 перенесён — привет в Сезоне 2! 🎒', 5000);
   }
-  if (wiped && carriedUser) {
-    state.seasonWipeToast = true; // NetBoot покажет после приветствия — чтобы тосты не слиплись
+  // v13 — ПОЛНЫЙ вайп аккаунтов 3.9: показываем одноразовое уведомление «прости, твой аккаунт был сброшен»
+  // v14 — сезон 3.5: извинительный подарок за вайп
+  const metaForWipe = MetaStore.read();
+  if (wiped && (carriedUser || hadOldSave)) {
+    // показываем только если ещё не показывали для этой версии сохранения
+    if (metaForWipe.resetNoticeSeen !== SAVE_VERSION) {
+      state.accountResetToast = true;
+      state.accountResetOldUser = oldUser || null;
+      state.seasonWipeToast = false;
+    }
+  } else if (wiped && carriedUser) {
+    state.seasonWipeToast = true;
   }
+
+  // Сезон 3.5 — подарок-извинение: каждый, кто был сброшен, получает дорогой предмет бесплатно
+  // Выдаётся один раз на сезон (флаг apologyGiftSeen), даже если fresh
+  try {
+    const metaApology = MetaStore.read();
+    const alreadyGotGift = metaApology.apologyGiftSeen === SAVE_VERSION || state.stats.apologyGiftClaimed;
+    const shouldGetGift = !alreadyGotGift && (hadOldSave || carriedUser || wiped || metaForWipe.resetNoticeSeen === 13 || fresh);
+    // В сезоне 3.5 даём подарок ВСЕМ при первом входе в 3.5, но особенно тем, кто был сброшен
+    if (shouldGetGift || (!alreadyGotGift && !state.stats.apologyGiftClaimed)) {
+      state.apologyGiftPending = true;
+    }
+  } catch (e) {
+    state.apologyGiftPending = true;
+  }
+
   return data;
 }
 
@@ -119,10 +147,53 @@ function snapshot() {
   };
 }
 
+/* Сезон 3.5 — подарок-извинение за вайп 3.9: дорогой предмет бесплатно */
+function giveApologyGiftIfNeeded() {
+  if (!state.apologyGiftPending) return false;
+  const meta = MetaStore.read();
+  if (meta.apologyGiftSeen === SAVE_VERSION || state.stats.apologyGiftClaimed) {
+    state.apologyGiftPending = false;
+    return false;
+  }
+  const proto = ITEMS_BY_ID['gift_apology_35'] || ITEMS_BY_ID['sch_golden_diary'] || ITEMS_BY_ID['cs_karambit_fade'];
+  if (!proto) return false;
+  // Не даём дубликат если уже есть в рюкзаке
+  if (state.inventory.some(it => it.id === proto.id)) {
+    MetaStore.write(Object.assign(MetaStore.read(), { apologyGiftSeen: SAVE_VERSION }));
+    state.stats.apologyGiftClaimed = true;
+    state.apologyGiftPending = false;
+    persist(true);
+    return false;
+  }
+  const gift = Object.assign({}, proto, { uid: RNG.uid('apology'), wonAt: nowTimeLabel() });
+  state.inventory.unshift(gift);
+  trackBiggestDrop(gift);
+  state.stats.apologyGiftClaimed = true;
+  state.apologyGiftPending = false;
+  MetaStore.write(Object.assign(MetaStore.read(), { apologyGiftSeen: SAVE_VERSION }));
+  persist(true);
+  // Пуш на сервер сразу — каждое действие сохраняется на сервере (сезон 3.5)
+  if (typeof CloudSave !== 'undefined') {
+    try { CloudSave.push(false); } catch (e) {}
+  }
+  setTimeout(() => {
+    audio.init();
+    audio.playSecret();
+    Fx.gold(250);
+    Fx.secretRain();
+    Toast.gold(`🎁 <b>Подарок-извинение сезона 3.5!</b> За полный сброс аккаунтов в 3.9 из-за технических неполадок — вы бесплатно получаете <b>${escapeHtml(proto.name)}</b> стоимостью <b class="text-amber-300">${fmt(proto.price)} ₽</b>! Теперь всё в норме ❤️ Спасибо, что остаётесь с нами!`, 12000);
+  }, 800);
+  return true;
+}
+
 function persist(immediate = false) {
   if (immediate) {
     SaveManager.save(snapshot());
     SettingsStore.toCookie(state.settings);
+    // Сезон 3.5: каждое сохранение сразу улетает на сервер — аккаунт всегда отобразится
+    if (typeof CloudSave !== 'undefined' && state.user) {
+      try { CloudSave.push(false); } catch (e) {}
+    }
     return;
   }
   schedulePersist();
@@ -135,6 +206,10 @@ function schedulePersist() {
     persistTimer = null;
     SaveManager.save(snapshot());
     SettingsStore.toCookie(state.settings);
+    // Сезон 3.5: каждое действие сохраняется на сервере, не только локально
+    if (typeof CloudSave !== 'undefined' && state.user) {
+      try { CloudSave.push(false); } catch (e) {}
+    }
   }, 400);
 }
 
@@ -166,6 +241,190 @@ function rankForLevel(level) {
 
 function nextRankForLevel(level) {
   return RANKS.find(r => r.level === level + 1) || null;
+}
+
+/* ---------- 4.1 ПЕРЕРОЖДЕНИЕ ---------- */
+function getRebirthCard(lvl) {
+  if (!lvl) return null;
+  return (typeof REBIRTH_CARDS !== 'undefined' ? REBIRTH_CARDS.find(c => c.level === lvl) : null) || null;
+}
+function getCurrentCard() {
+  const r = state.stats.rebirth || 0;
+  if (r <= 0) return null;
+  return getRebirthCard(r);
+}
+function getCreditLimit() {
+  const c = getCurrentCard();
+  return c ? c.limit : 0;
+}
+function getCreditAvailable() {
+  const limit = getCreditLimit();
+  const debt = state.stats.creditDebt || 0;
+  return Math.max(0, limit - debt);
+}
+function getRebirthRequirement(lvl) {
+  return (typeof REBIRTH_REQUIREMENTS !== 'undefined' ? REBIRTH_REQUIREMENTS.find(x => x.level === lvl) : null) || null;
+}
+function canRebirthNext() {
+  const cur = state.stats.rebirth || 0;
+  if (cur >= REBIRTH_MAX) return { ok: false, reason: 'MAX' };
+  const nxt = cur + 1;
+  const req = getRebirthRequirement(nxt);
+  if (!req) return { ok: false, reason: 'NOREQ' };
+  if ((state.stats.level || 1) < req.needLevel) return { ok: false, reason: 'LEVEL', need: req.needLevel };
+  if ((state.stats.casesOpened || 0) < req.needCases) return { ok: false, reason: 'CASES', need: req.needCases };
+  if (state.balance < req.needMoney) return { ok: false, reason: 'MONEY', need: req.needMoney };
+  if ((state.stats.creditDebt || 0) > 0) return { ok: false, reason: 'DEBT' };
+  return { ok: true, next: nxt, req };
+}
+function formatRebirthDebtTimer() {
+  const debt = state.stats.creditDebt || 0;
+  if (debt <= 0) return '';
+  const borrowAt = state.stats.creditBorrowAt || 0;
+  const elapsed = Date.now() - borrowAt;
+  const remain = Math.max(0, (typeof CREDIT_BANKRUPT_AFTER_MS !== 'undefined' ? CREDIT_BANKRUPT_AFTER_MS : 3600000) - elapsed);
+  const m = Math.floor(remain / 60000);
+  const s = Math.floor((remain % 60000) / 1000);
+  return `${m}м ${s}с`;
+}
+function checkCreditBankrupt() {
+  const debt = state.stats.creditDebt || 0;
+  if (debt <= 0) return false;
+  const borrowAt = state.stats.creditBorrowAt || 0;
+  if (!borrowAt) return false;
+  const now = Date.now();
+  const after = typeof CREDIT_BANKRUPT_AFTER_MS !== 'undefined' ? CREDIT_BANKRUPT_AFTER_MS : 3600000;
+  if (now - borrowAt < after) return false;
+  // уже банкрот?
+  if (state.stats.bankruptUntil && state.stats.bankruptUntil > now) return false;
+  // триггер
+  const chance = typeof CREDIT_BANKRUPT_CHANCE !== 'undefined' ? CREDIT_BANKRUPT_CHANCE : 0.15;
+  const isVozduhan = Math.random() < chance;
+  state.stats.bankruptType = isVozduhan ? 'vozduhan' : 'bankrupt';
+  state.stats.bankruptUntil = now + 24 * 60 * 60 * 1000; // 24ч позора
+  // выдаём титул в профиль если есть
+  if (state.user) {
+    const st = state.stats.bankruptType;
+    if (st && state.user) {
+      state.user.status = st; // временно ставим статус, владелец может снять, но для отображения в чате
+    }
+  }
+  Toast.error(isVozduhan ? '🌬 Ты получил титул ВОЗДУХАН! Верни долг банку!' : '💸 Ты получил титул БАНКРОТ! Верни долг в течение часа было надо...', 6000);
+  persist(true);
+  if (typeof CloudSave !== 'undefined' && CloudSave.push) CloudSave.push();
+  renderProfile();
+  return true;
+}
+function repayCredit(amount) {
+  amount = Math.max(0, Number(amount) || 0);
+  if (amount <= 0) return { ok: false };
+  const debt = state.stats.creditDebt || 0;
+  if (debt <= 0) { Toast.info('У тебя нет долга'); return { ok: false }; }
+  if (state.balance < amount) { Toast.error('Недостаточно баланса для возврата'); return { ok: false }; }
+  const pay = Math.min(amount, debt);
+  state.balance -= pay;
+  state.stats.creditDebt = Math.max(0, debt - pay);
+  if (state.stats.creditDebt <= 0) {
+    state.stats.creditDebt = 0;
+    state.stats.creditBorrowAt = 0;
+    // снимаем банкрот если долг закрыт
+    if (state.stats.bankruptType) {
+      Toast.success('✅ Долг закрыт! Титул банкрота снят.');
+      state.stats.bankruptType = '';
+      state.stats.bankruptUntil = 0;
+      if (state.user && (state.user.status === 'bankrupt' || state.user.status === 'vozduhan')) {
+        state.user.status = '';
+      }
+    } else {
+      Toast.success(`✅ Вернул ${fmt(pay)} ₽ долга`);
+    }
+  } else {
+    Toast.success(`Вернул ${fmt(pay)} ₽, осталось ${fmt(state.stats.creditDebt)} ₽`);
+  }
+  persist(true);
+  uiUpdate();
+  renderProfile();
+  return { ok: true, paid: pay };
+}
+function repayAllCredit() {
+  const debt = state.stats.creditDebt || 0;
+  if (debt <= 0) return;
+  if (state.balance <= 0) { Toast.error('Нет денег для возврата'); return; }
+  const pay = Math.min(state.balance, debt);
+  repayCredit(pay);
+}
+function tryPayWithCredit(cost) {
+  cost = Number(cost) || 0;
+  if (cost <= 0) return { ok: true, usedBalance: 0, usedCredit: 0 };
+  if (state.balance >= cost) {
+    // хватает баланса
+    state.balance -= cost;
+    return { ok: true, usedBalance: cost, usedCredit: 0 };
+  }
+  const need = cost - state.balance;
+  const avail = getCreditAvailable();
+  if (avail <= 0 || need > avail) {
+    return { ok: false, need, avail };
+  }
+  // используем весь баланс + кредит
+  const usedBal = state.balance;
+  state.balance = 0;
+  state.stats.creditDebt = (state.stats.creditDebt || 0) + need;
+  state.stats.creditBorrowAt = Date.now();
+  state.stats.creditHistory = (state.stats.creditHistory || 0) + need;
+  // первый кредит — показываем подсказку
+  if (!state.stats.rebirthNotified) {
+    state.stats.rebirthNotified = true;
+    Toast.info(`💳 Взял ${fmt(need)} ₽ в кредит по карте ${getCurrentCard()?.name || ''}. Верни за час, иначе — титул банкрота!`, 7000);
+  }
+  return { ok: true, usedBalance: usedBal, usedCredit: need };
+}
+function doRebirth() {
+  const chk = canRebirthNext();
+  if (!chk.ok) {
+    let msg = 'Не могу переродиться';
+    if (chk.reason === 'MAX') msg = 'Ты уже на максимальном перерождении (10)';
+    else if (chk.reason === 'LEVEL') msg = `Нужен ${chk.need} уровень, у тебя ${state.stats.level}`;
+    else if (chk.reason === 'CASES') msg = `Нужно открыть ${fmt(chk.need)} кейсов, у тебя ${fmt(state.stats.casesOpened||0)}`;
+    else if (chk.reason === 'MONEY') msg = `Нужно ${fmt(chk.need)} ₽, у тебя ${fmt(state.balance)} ₽`;
+    else if (chk.reason === 'DEBT') msg = 'Сначала верни кредит! Долг — ' + fmt(state.stats.creditDebt) + ' ₽';
+    Toast.error(msg);
+    return;
+  }
+  const nextLvl = chk.next;
+  const card = getRebirthCard(nextLvl);
+  if (!card) { Toast.error('Карта не найдена'); return; }
+  Modal.confirm({
+    title: `Переродиться в ${card.name}?`,
+    text: `Ты перейдёшь на ${nextLvl} перерождение и получишь ${card.name} с лимитом ${fmt(card.limit)} ₽. Весь прогресс (баланс, рюкзак, уровень) сбросится, но карта останется навсегда. Продолжить?`,
+    confirmText: '🔄 ПЕРЕРОДИТЬСЯ',
+    cancelText: 'Отмена',
+    danger: false,
+    onConfirm: () => {
+      // списываем требование денег если есть
+      if (chk.req.needMoney > 0) state.balance -= chk.req.needMoney;
+      state.stats.rebirth = nextLvl;
+      // сброс
+      state.balance = 2000;
+      state.inventory = [];
+      state.stats.level = 1;
+      state.stats.xp = 0;
+      state.stats.creditDebt = 0;
+      state.stats.creditBorrowAt = 0;
+      state.stats.bankruptType = '';
+      state.stats.bankruptUntil = 0;
+      // титулы
+      if (!state.stats.unlockedTitles.includes(card.title)) state.stats.unlockedTitles.push(card.title);
+      // стартовые предметы + подарок если был
+      try { if (typeof START_ITEMS !== 'undefined') state.inventory = START_ITEMS.map(id => { const proto = ITEMS_BY_ID[id]; return proto ? Object.assign({}, proto, { uid: 'rebirth_' + id + '_' + Math.random().toString(36).slice(2,6) }) : null; }).filter(Boolean); } catch(e){}
+      Toast.success(`🔄 Перерождение ${nextLvl}! Получена ${card.name} — лимит ${fmt(card.limit)} ₽`, 6000);
+      Fx.burst(80, [card.color || '#ffd700', '#ff00ff', '#00f0ff']);
+      audio.init(); audio.playLevelUp();
+      persist(true);
+      renderAll();
+      openRebirthModal();
+    }
+  });
 }
 
 function addXp(amount, { silent = false } = {}) {
@@ -342,6 +601,9 @@ function renderAll() {
   if (Modal.isOpen('profileModal')) renderProfile();
 
   updateDailyIndicator();
+
+  // 4.1 кредит — проверка просрочки каждую отрисовку (дешёво)
+  try { checkCreditBankrupt(); } catch(e) {}
 }
 
 function renderUpgradeHud() {
@@ -577,6 +839,12 @@ function autoPickDeposit() {
    -------------------------------------------------------------------------- */
 function startUpgradeRoll() {
   if (state.isRolling) return;
+  if (typeof ServerAPI !== 'undefined' && !ServerAPI.isOnline() && !window.__shkoladropServerOnline) {
+    if (showServerRequiredModalIfNeeded()) {
+      Toast.error('Сначала подключись к серверу — апгрейдер требует онлайн (сезон 3.5) 🌐');
+      return;
+    }
+  }
   if (!state.selectedDeposit || !state.selectedTarget) return;
 
   const wagered = state.selectedDeposit;
@@ -884,22 +1152,30 @@ function chanceToOne(pct) {
 
 /* Список кейсов (бета-ветка 3.6 удалена — бета-кейсы больше не показываются) */
 function activeCasesList() {
-  return CASES_LIST.filter(c => !c.beta);
+  const showBeta41 = !!(state.settings && state.settings.beta41);
+  return CASES_LIST.filter(c => {
+    if (c.beta) return false; // старая бета 3.6 отключена навсегда
+    if (c.beta41 && !showBeta41) return false;
+    return true;
+  });
 }
 
 /* Карточка кейса на витрине */
 function buildCaseCard(c) {
   const selected = c.id === state.selectedCase.id;
-  const affordable = state.balance >= casePrice(c);
+  const canAffordBalance = state.balance >= casePrice(c);
+  const canAffordCredit = canAffordBalance || (getCreditAvailable() > 0 && (state.balance + getCreditAvailable()) >= casePrice(c));
+  const affordable = canAffordBalance || canAffordCredit;
   const card = document.createElement('div');
-  card.className = `case-card ${selected ? 'case-card-selected' : ''} ${c.secret ? 'case-card-secret' : ''} ${!affordable && c.secret ? 'case-card-locked' : ''} ${c.beta ? 'case-card-beta' : ''}`;
+  card.className = `case-card ${selected ? 'case-card-selected' : ''} ${c.secret ? 'case-card-secret' : ''} ${!affordable && c.secret ? 'case-card-locked' : ''} ${c.beta ? 'case-card-beta' : ''} ${c.beta41 ? 'case-card-beta41' : ''}`;
   card.innerHTML = `
-    <div class="text-3xl mb-1 relative z-10">${c.image ? `<img src="${escapeHtml(c.image)}" alt="${escapeHtml(c.name)}" class="case-cover" onerror="this.style.display='none';this.nextElementSibling.style.display='block';"><span style="display:none">${c.icon}</span>` : (c.secret && !affordable ? '🔒' : c.icon)}</div>
+    <div class="text-3xl mb-1 relative z-10">${c.image ? `<img src="${escapeHtml(c.image)}" alt="${escapeHtml(c.name)}" class="case-cover" onerror="this.style.display='none';this.nextElementSibling.style.display='block';"><span style="display:none">${c.icon}</span>` : (c.secret && !canAffordBalance ? '🔒' : c.icon)}</div>
     <div class="text-xs font-bold font-cs ${c.secret ? 'secret-shine' : 'text-white'} leading-tight relative z-10">${escapeHtml(c.name)}</div>
     <div class="text-[10px] text-slate-400 line-clamp-1 my-1 relative z-10">${escapeHtml(c.desc)}</div>
-    <div class="text-xs font-cs font-bold relative z-10" style="color:${c.color}">${fmt(casePrice(c))} ₽</div>
+    <div class="text-xs font-cs font-bold relative z-10" style="color:${c.color}">${fmt(casePrice(c))} ₽ ${canAffordCredit && !canAffordBalance ? '<span class="text-[9px] text-cyan-300">💳 кредит</span>' : ''}</div>
     ${c.beta ? '<div class="beta-case-flag">🧪 ЭКСПЕРИМЕНТАЛЬНО</div>' : ''}
-    ${c.secret ? `<div class="text-[9px] text-fuchsia-300 mt-0.5 relative z-10">${affordable ? 'ДОСТУПЕН! ТЫ ЛЕГЕНДА' : 'секретный · нужен 10 000 000 ₽'}</div>` : ''}
+    ${c.beta41 ? '<div class="beta-case-flag" style="background:rgba(99,102,241,0.3);border-color:rgba(99,102,241,0.6);color:#a5b4fc">🚀 БЕТА 4.1</div>' : ''}
+    ${c.secret ? `<div class="text-[9px] text-fuchsia-300 mt-0.5 relative z-10">${canAffordBalance ? 'ДОСТУПЕН! ТЫ ЛЕГЕНДА' : 'секретный · нужен 10 000 000 ₽'}</div>` : ''}
   `;
   card.onclick = () => selectCase(c.id);
   return card;
@@ -918,7 +1194,9 @@ function renderCasesUI() {
   $('casesCountLabel').textContent = `${allCases.length} кейсов · ${ALL_MASTER_ITEMS.length} предметов`;
   $('casesOpenedLabel').textContent = `всего: ${fmt(state.stats.casesOpened || 0)}`;
 
-  const enoughMoney = state.balance >= selectedPrice;
+  const creditAvail = getCreditAvailable();
+  const enoughMoney = state.balance >= selectedPrice || (creditAvail > 0 && (state.balance + creditAvail) >= selectedPrice);
+  const needCredit = enoughMoney && state.balance < selectedPrice;
   const openBtn = $('btnOpenCase');
   const openText = $('btnOpenCaseText');
   const openX5 = $('btnOpenCaseX5');
@@ -930,16 +1208,22 @@ function renderCasesUI() {
     openX5.classList.add('opacity-50');
   } else {
     openBtn.disabled = !enoughMoney;
-    openText.textContent = enoughMoney
-      ? `ОТКРЫТЬ ЗА ${shortMoney(selectedPrice)} ₽`
-      : `НУЖНО ${shortMoney(selectedPrice)} ₽`;
+    if (enoughMoney) {
+      openText.textContent = needCredit ? `ОТКРЫТЬ В КРЕДИТ 💳 ${shortMoney(selectedPrice)} ₽` : `ОТКРЫТЬ ЗА ${shortMoney(selectedPrice)} ₽`;
+    } else {
+      openText.textContent = `НУЖНО ${shortMoney(selectedPrice)} ₽`;
+    }
     const x5Cost = selectedPrice * 5;
-    openX5.disabled = state.balance < x5Cost;
-    openX5.classList.toggle('opacity-50', state.balance < x5Cost);
-    openX5.textContent = state.selectedCase.secret ? 'x5 🔒' : `x5 · ${shortMoney(x5Cost)}₽`;
+    const enoughX5 = state.balance >= x5Cost || (creditAvail > 0 && (state.balance + creditAvail) >= x5Cost);
+    openX5.disabled = !enoughX5;
+    openX5.classList.toggle('opacity-50', !enoughX5);
+    openX5.textContent = state.selectedCase.secret ? 'x5 🔒' : (enoughX5 && state.balance < x5Cost ? `x5 💳 ${shortMoney(x5Cost)}₽` : `x5 · ${shortMoney(x5Cost)}₽`);
   }
 
-  const affordableList = allCases.filter(c => state.balance >= casePrice(c));
+  const affordableList = allCases.filter(c => {
+    const p = casePrice(c);
+    return state.balance >= p || (creditAvail > 0 && (state.balance + creditAvail) >= p);
+  });
   const topList = allCases.filter(c => !c.secret && !c.beta && c.price >= 45000);
   const secretList = allCases.filter(c => c.secret);
 
@@ -1106,11 +1390,25 @@ function currentCaseWinner() {
 
 function openSelectedCase() {
   if (state.isOpeningCase) return;
+  // Сезон 3.5 — обязательный онлайн: без сервера не открываем кейсы, чтобы аккаунт отобразился
+  if (typeof ServerAPI !== 'undefined' && !ServerAPI.isOnline() && !window.__shkoladropServerOnline) {
+    if (showServerRequiredModalIfNeeded()) {
+      Toast.error('Сначала подключись к серверу — игра не пускает играть пока не подключится (сезон 3.5) 🌐');
+      return;
+    }
+  }
   const caseObj = state.selectedCase;
   const price = casePrice(caseObj);
-  if (state.balance < price) {
-    Toast.error(`Не хватает монет: нужно ${fmt(price)} ₽`);
+  const payRes = tryPayWithCredit(price);
+  if (!payRes.ok) {
+    const need = payRes.need ? fmt(payRes.need) : fmt(price);
+    const limit = getCreditLimit();
+    if (limit > 0) Toast.error(`Не хватает монет: нужно ${fmt(price)} ₽, кредит доступно ${fmt(payRes.avail||0)} ₽ (лимит ${fmt(limit)} ₽)`);
+    else Toast.error(`Не хватает монет: нужно ${fmt(price)} ₽. Получи карту перерождения для кредита!`);
     return;
+  }
+  if (payRes.usedCredit > 0) {
+    Toast.info(`💳 Открытие в кредит: ${fmt(payRes.usedBalance)} ₽ баланс + ${fmt(payRes.usedCredit)} ₽ кредит`, 4000);
   }
 
   const isSecret = !!caseObj.secret;
@@ -1121,7 +1419,7 @@ function openSelectedCase() {
   audio.init();
   audio.playCoin();
   state.isOpeningCase = true;
-  spendMoney(price);
+  // spendMoney уже учтён в tryPayWithCredit (баланс + долг)
   // Спонсорство: 10% от стоимости кейса — владельцу введённого кода автора
   if (typeof NetAuthor !== 'undefined') NetAuthor.trackCaseSpend(price, caseObj.id);
   state.stats.casesOpened = (state.stats.casesOpened || 0) + 1;
@@ -1160,6 +1458,12 @@ function openSelectedCase() {
 
 function openSelectedCaseMulti(count = 5) {
   if (state.isOpeningCase) return;
+  if (typeof ServerAPI !== 'undefined' && !ServerAPI.isOnline() && !window.__shkoladropServerOnline) {
+    if (showServerRequiredModalIfNeeded()) {
+      Toast.error('Подключись к серверу — без него нельзя открывать кейсы (сезон 3.5) 🌐');
+      return;
+    }
+  }
   const caseObj = state.selectedCase;
   const cost = casePrice(caseObj) * count;
 
@@ -1167,15 +1471,18 @@ function openSelectedCaseMulti(count = 5) {
     Toast.error('Секретный кейс открывается только по одному — так задумано 🐱');
     return;
   }
-  if (state.balance < cost) {
-    Toast.error(`Для x${count} нужно ${fmt(cost)} ₽`);
+  const payResM = tryPayWithCredit(cost);
+  if (!payResM.ok) {
+    const limit = getCreditLimit();
+    if (limit > 0) Toast.error(`Для x${count} нужно ${fmt(cost)} ₽, кредит доступно ${fmt(payResM.avail||0)} ₽`);
+    else Toast.error(`Для x${count} нужно ${fmt(cost)} ₽`);
     return;
   }
+  if (payResM.usedCredit > 0) Toast.info(`💳 x${count} в кредит: ${fmt(payResM.usedBalance)} ₽ баланс + ${fmt(payResM.usedCredit)} ₽ кредит`, 4000);
 
   audio.init();
   audio.playCoin();
   state.isOpeningCase = true;
-  spendMoney(cost);
   // Спонсорство: 10% от стоимости открытия — автору кода
   if (typeof NetAuthor !== 'undefined') NetAuthor.trackCaseSpend(cost, caseObj.id);
   state.stats.casesOpened = (state.stats.casesOpened || 0) + count;
@@ -1337,9 +1644,10 @@ function setInvFilter(type) {
 function inventoryList() {
   const school = state.inventory.filter(i => i.category === 'school');
   const cs2 = state.inventory.filter(i => i.category === 'cs2');
-  const games = state.inventory.filter(i => i.category === 'other');
+  const games = state.inventory.filter(i => ['other','beta','beta41'].includes(i.category));
   const cats = state.inventory.filter(i => i.category === 'cat');
   const upgrades = state.inventory.filter(i => i.category === 'upgrade');
+  const beta41 = state.inventory.filter(i => i.category === 'beta41');
 
   let list = state.inventory;
   if (state.invFilter === 'school') list = school;
@@ -1347,6 +1655,7 @@ function inventoryList() {
   if (state.invFilter === 'games') list = games;
   if (state.invFilter === 'cat') list = cats;
   if (state.invFilter === 'upgrade') list = upgrades;
+  if (state.invFilter === 'beta41') list = beta41;
 
   const search = ($('invSearchInput')?.value || '').trim().toLowerCase();
   if (search) list = list.filter(i => i.name.toLowerCase().includes(search));
@@ -1572,8 +1881,8 @@ function renderModalItems() {
   } else {
     if (state.targetFilter === 'all') list = ALL_MASTER_ITEMS;
     else if (state.targetFilter === 'cs2') list = CS2_CATALOG;
-    else if (state.targetFilter === 'school') list = SCHOOL_CATALOG;
-    else if (state.targetFilter === 'other') list = OTHER_GAMES_CATALOG;
+    else if (state.targetFilter === 'school') list = [...SCHOOL_CATALOG, ...(typeof GOLDEN_CATALOG !== 'undefined' ? GOLDEN_CATALOG : [])];
+    else if (state.targetFilter === 'other') list = [...OTHER_GAMES_CATALOG, ...(typeof BETA_CATALOG !== 'undefined' ? BETA_CATALOG : []), ...(typeof BETA41_CATALOG !== 'undefined' ? BETA41_CATALOG : []), ...(typeof SEASON3_CATALOG !== 'undefined' ? SEASON3_CATALOG : []), ...(typeof ULTRA_CATALOG !== 'undefined' ? ULTRA_CATALOG : [])];
     else if (state.targetFilter === 'cat') list = CAT_CATALOG;
     else if (state.targetFilter === 'upgrade') list = UPGRADE_CATALOG;
   }
@@ -1640,9 +1949,12 @@ function renderShop() {
   const items = shopCatalog();
   $('shopCountLabel').textContent = `${items.length} базовых`;
 
+  const creditAvail = getCreditAvailable();
   list.innerHTML = items.map(item => {
     const rarity = rarityOf(item);
-    const canAfford = state.balance >= item.price;
+    const canAffordBal = state.balance >= item.price;
+    const canAfford = canAffordBal || (creditAvail > 0 && (state.balance + creditAvail) >= item.price);
+    const needCredit = canAfford && !canAffordBal;
     return `
       <div class="bg-slate-900/80 border border-slate-800/80 rounded-xl p-2.5 flex items-center justify-between gap-2">
         <div class="flex items-center space-x-2.5 min-w-0">
@@ -1650,12 +1962,12 @@ function renderShop() {
           <div class="min-w-0">
             <div class="text-xs font-bold text-white line-clamp-1">${escapeHtml(item.name)}</div>
             <div class="text-[10px] text-slate-400 line-clamp-1">${escapeHtml(item.desc || '')}</div>
-            <div class="text-[11px] font-cs font-bold" style="color:${rarity.color}">${fmt(item.price)} ₽</div>
+            <div class="text-[11px] font-cs font-bold" style="color:${rarity.color}">${fmt(item.price)} ₽ ${needCredit ? '<span class="text-cyan-300">💳</span>' : ''}</div>
           </div>
         </div>
         <button data-buy="${item.id}" ${canAfford ? '' : 'disabled'} class="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold font-cs transition ${
-          canAfford ? 'bg-orange-500 text-black hover:brightness-110 active:scale-95' : 'bg-slate-800 text-slate-500 cursor-not-allowed'
-        }">Купить</button>
+          canAfford ? (needCredit ? 'bg-cyan-600 text-white hover:brightness-110 active:scale-95' : 'bg-orange-500 text-black hover:brightness-110 active:scale-95') : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+        }">${needCredit ? 'В кредит' : 'Купить'}</button>
       </div>
     `;
   }).join('');
@@ -1691,14 +2003,19 @@ function buySchoolItem(id) {
     return;
   }
   const proto = shopCatalog().find(i => i.id === id);
-  if (!proto || state.balance < proto.price) return;
+  if (!proto) return;
+  const pay = tryPayWithCredit(proto.price);
+  if (!pay.ok) {
+    Toast.error(`Не хватает: нужно ${fmt(proto.price)} ₽`);
+    return;
+  }
   audio.init();
   audio.playCoin();
-  spendMoney(proto.price);
   const newItem = Object.assign({}, proto, { uid: RNG.uid('shop') });
   state.inventory.unshift(newItem);
   if (!state.selectedDeposit) state.selectedDeposit = newItem;
-  Toast.success(`Куплено: ${escapeHtml(proto.name)} за ${fmt(proto.price)} ₽`);
+  if (pay.usedCredit > 0) Toast.success(`Куплено в кредит 💳: ${escapeHtml(proto.name)} — ${fmt(pay.usedBalance)} ₽ баланс + ${fmt(pay.usedCredit)} ₽ кредит`);
+  else Toast.success(`Куплено: ${escapeHtml(proto.name)} за ${fmt(proto.price)} ₽`);
   uiUpdate();
   persist();
 }
@@ -2212,25 +2529,27 @@ function renderPromoList() {
     const vipHint = state.stats.vipActive
       ? '<br><span class="text-amber-400">👑 VIP-статус активен — налог миллионера отключён навсегда!</span>'
       : `<br><span class="text-fuchsia-400">VIP за ${VIP_PRICE_RUB}₽ отключает налог миллионера навсегда</span>`;
-    box.innerHTML = `<span class="text-[10px] text-slate-500">Пока ни один код не активирован. Подсказка: следи за видео David Lite 🎬<br><span class="text-fuchsia-400">Коды обновления 3.0.2: NEWUPDATE2026, GORABOGDAN5G</span>${vipHint}</span>`;
+    // Промокоды скрыты — только владелец знает их. Показываем только подсказку без списка.
+    box.innerHTML = `<span class="text-[10px] text-slate-500">Пока ни один код не активирован. Подсказка: следи за видео David Lite 🎬<br><span class="text-slate-400">Промокоды скрыты — их знает только владелец. Введи код, если он у тебя есть.</span>${vipHint}</span>`;
     return;
   }
   box.innerHTML = used.map(code => {
-    const isVip = code.startsWith('VIP-') && VIP_CODES.includes(code);
+    const isVip = code.startsWith('VIP-') && (typeof VIP_CODES !== 'undefined' && VIP_CODES.includes(code));
     if (isVip) {
-      return `<span class="text-[9px] px-2 py-0.5 rounded-full bg-amber-950/70 border border-amber-600/60 text-amber-300 font-mono" title="VIP активирован навечно">👑 ${escapeHtml(code)} ✓ · ВЕЧНЫЙ VIP</span>`;
+      return `<span class="text-[9px] px-2 py-0.5 rounded-full bg-amber-950/70 border border-amber-600/60 text-amber-300 font-mono" title="VIP активирован навечно">👑 ✓ · ВЕЧНЫЙ VIP</span>`;
     }
-    const p = PROMO_CODES[code];
+    const p = (typeof PROMO_CODES !== 'undefined' && PROMO_CODES[code]) ? PROMO_CODES[code] : null;
     let rewardLabel = '';
     if (p) {
       if (p.item) {
-        const it = ITEMS_BY_ID[p.item];
+        const it = (typeof ITEMS_BY_ID !== 'undefined' && ITEMS_BY_ID[p.item]) ? ITEMS_BY_ID[p.item] : null;
         rewardLabel = ' · ' + (it ? it.name : 'предмет');
       } else if (p.money) {
         rewardLabel = ' · ' + fmt(p.money) + '₽';
       }
     }
-    return `<span class="text-[9px] px-2 py-0.5 rounded-full bg-emerald-950/60 border border-emerald-800 text-emerald-300 font-mono">${escapeHtml(code)} ✓${rewardLabel}</span>`;
+    // Не показываем сам код — только факт активации и награду, чтобы коды не утекали
+    return `<span class="text-[9px] px-2 py-0.5 rounded-full bg-emerald-950/60 border border-emerald-800 text-emerald-300 font-mono">✓ активирован${rewardLabel}</span>`;
   }).join('');
 }
 
@@ -2482,6 +2801,80 @@ function renderProfile() {
     stEl.textContent = st && typeof statusLabel === 'function' ? statusLabel(st) : (state.user && state.user.role === 'admin' ? '🛡 АДМИН' : 'обычный');
   }
 
+  // ---- 4.1 Rebirth UI ----
+  try {
+    const rLvl = state.stats.rebirth || 0;
+    const rBadge = $('rebirthLevelBadge');
+    if (rBadge) rBadge.textContent = `${rLvl} / ${REBIRTH_MAX}`;
+    const cardDisp = $('rebirthCardDisplay');
+    const creditInfo = $('creditInfo');
+    const bankruptWarn = $('bankruptWarning');
+    const curCard = getCurrentCard();
+    if (cardDisp) {
+      if (!curCard) {
+        cardDisp.innerHTML = `<div class="text-[10px] text-slate-500">Нет карты — переродись, чтобы получить <b class="text-amber-300">бронзовую кредитку</b> на 1 000 ₽</div>`;
+        cardDisp.className = 'rounded-lg p-2.5 border border-slate-800 bg-slate-950/70 text-center';
+      } else {
+        cardDisp.className = `rounded-lg p-2.5 border bg-gradient-to-br ${curCard.bg} border-amber-500/30 text-center`;
+        cardDisp.innerHTML = `
+          <div class="flex items-center justify-center gap-2">
+            <span class="text-2xl">${curCard.icon}</span>
+            <div class="text-left">
+              <div class="text-[12px] font-black text-white">${escapeHtml(curCard.name)}</div>
+              <div class="text-[10px] text-slate-200">Лимит ${fmt(curCard.limit)} ₽ · ${rLvl} уровень</div>
+            </div>
+          </div>
+          <div class="text-[9px] text-slate-300 mt-1">${escapeHtml(curCard.desc)}</div>
+        `;
+      }
+    }
+    if (creditInfo) {
+      const debt = state.stats.creditDebt || 0;
+      const limit = getCreditLimit();
+      const avail = getCreditAvailable();
+      const borrowAt = state.stats.creditBorrowAt || 0;
+      if (rLvl === 0) {
+        creditInfo.innerHTML = `💳 Кредит доступен только после 1-го перерождения.`;
+      } else if (debt > 0) {
+        const timer = formatRebirthDebtTimer();
+        creditInfo.innerHTML = `
+          Долг: <b class="text-rose-300">${fmt(debt)} ₽</b> · Доступно: <b class="text-cyan-300">${fmt(avail)} ₽</b> / ${fmt(limit)} ₽<br>
+          ⏳ Вернуть за: <b class="text-amber-300">${timer}</b> — иначе титул банкрота!
+        `;
+      } else {
+        creditInfo.innerHTML = `Лимит: <b class="text-emerald-300">${fmt(limit)} ₽</b> · Доступно: <b class="text-cyan-300">${fmt(avail)} ₽</b> · Долга нет ✅`;
+      }
+    }
+    if (bankruptWarn) {
+      const debt = state.stats.creditDebt || 0;
+      const bType = state.stats.bankruptType;
+      const bUntil = state.stats.bankruptUntil || 0;
+      const now = Date.now();
+      if (bType && bUntil > now) {
+        bankruptWarn.classList.remove('hidden');
+        if (bType === 'bankrupt') {
+          bankruptWarn.className = 'text-[10px] font-bold p-1.5 rounded-lg border bg-rose-950/50 border-rose-800/60 text-rose-300';
+          bankruptWarn.textContent = `💸 ТИТУЛ БАНКРОТ до ${new Date(bUntil).toLocaleTimeString()} — верни долг ${fmt(debt)} ₽ чтобы снять!`;
+        } else {
+          bankruptWarn.className = 'text-[10px] font-bold p-1.5 rounded-lg border bg-sky-950/40 border-sky-800/50 text-sky-300';
+          bankruptWarn.textContent = `🌬 ТИТУЛ ВОЗДУХАН до ${new Date(bUntil).toLocaleTimeString()} — верни долг ${fmt(debt)} ₽!`;
+        }
+      } else if (debt > 0 && state.stats.creditBorrowAt) {
+        const elapsed = now - (state.stats.creditBorrowAt||0);
+        const after = CREDIT_BANKRUPT_AFTER_MS || 3600000;
+        if (elapsed > after * 0.8) {
+          bankruptWarn.classList.remove('hidden');
+          bankruptWarn.className = 'text-[10px] font-bold p-1.5 rounded-lg border bg-amber-950/50 border-amber-800/60 text-amber-300';
+          bankruptWarn.textContent = `⚠️ До банкрота осталось ${formatRebirthDebtTimer()}! Срочно верни ${fmt(debt)} ₽`;
+        } else {
+          bankruptWarn.classList.add('hidden');
+        }
+      } else {
+        bankruptWarn.classList.add('hidden');
+      }
+    }
+  } catch(e) { console.warn('rebirth ui', e); }
+
   if (state.profileTab === 'ach') renderAchievements();
 }
 
@@ -2517,7 +2910,78 @@ function applySettingsToUI() {
   $('versionBadge').textContent = `v${APP_VERSION} Stable`;
   setTogglePill($('setAutoWakeToggle'), !!s.autoWake);
   setTogglePill($('setChatNotifyToggle'), !!s.chatNotify);
+  setTogglePill($('setBeta41Toggle'), !!s.beta41);
 }
+
+/* ---------- 4.1 Beta41 toggle ---------- */
+function toggleBeta41Setting() {
+  state.settings.beta41 = !state.settings.beta41;
+  applySettingsToUI();
+  saveSettings();
+  if (state.settings.beta41) {
+    Toast.info('🚀 Бета 4.1 включена! Появились кейсы и предметы вне школьной тематики + перерождение', 5000);
+  } else {
+    Toast.info('Бета 4.1 выключена — нешкольные предметы скрыты');
+  }
+  renderCasesUI();
+}
+
+/* ---------- 4.1 Rebirth Modal ---------- */
+function openRebirthModal() {
+  const listEl = $('rebirthCardsList');
+  const reqEl = $('rebirthNextReq');
+  const doBtn = $('rebirthDoBtn');
+  const cur = state.stats.rebirth || 0;
+  if (listEl) {
+    listEl.innerHTML = REBIRTH_CARDS.map(card => {
+      const owned = cur >= card.level;
+      const isNext = cur + 1 === card.level;
+      const isCur = cur === card.level;
+      return `
+        <div class="flex items-center gap-2 p-2 rounded-lg border ${owned ? 'bg-gradient-to-br ' + card.bg + ' border-amber-500/40' : 'bg-slate-900/60 border-slate-800'} ${isCur ? 'ring-1 ring-amber-400' : ''}">
+          <span class="text-xl">${card.icon}</span>
+          <div class="flex-1 min-w-0">
+            <div class="text-[11px] font-bold ${owned ? 'text-white' : 'text-slate-400'}">${card.level}. ${escapeHtml(card.name)} ${owned ? '✅' : ''} ${isCur ? '— текущая' : ''}</div>
+            <div class="text-[10px] ${owned ? 'text-slate-200' : 'text-slate-500'}">Лимит ${fmt(card.limit)} ₽</div>
+            <div class="text-[9px] text-slate-400">${escapeHtml(card.desc)}</div>
+          </div>
+          <span class="text-[9px] font-bold px-1.5 py-0.5 rounded ${owned ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-800 text-slate-500'}">${owned ? 'есть' : (isNext ? 'след.' : '—')}</span>
+        </div>
+      `;
+    }).join('');
+  }
+  if (reqEl) {
+    if (cur >= REBIRTH_MAX) {
+      reqEl.innerHTML = `<b class="text-amber-300">🏆 Максимум!</b> Ты на 10-м перерождении — радужная карта ${fmt(100000000000)} ₽! Больше перерождений нет.`;
+    } else {
+      const chk = canRebirthNext();
+      const req = chk.req;
+      if (!req) reqEl.textContent = 'Требования не найдены';
+      else {
+        const lvlOk = (state.stats.level||1) >= req.needLevel;
+        const caseOk = (state.stats.casesOpened||0) >= req.needCases;
+        const moneyOk = state.balance >= req.needMoney;
+        const debtOk = (state.stats.creditDebt||0) <= 0;
+        reqEl.innerHTML = `
+          <div class="text-[10px] font-bold text-amber-300 mb-1">Следующее: ${REBIRTH_CARDS[cur].name} → ${REBIRTH_CARDS[cur+1-1]?.name || ''} (ур. ${cur+1})</div>
+          <div class="${lvlOk ? 'text-emerald-400' : 'text-rose-400'}">• Уровень: ${state.stats.level} / ${req.needLevel} ${lvlOk ? '✅' : '❌'}</div>
+          <div class="${caseOk ? 'text-emerald-400' : 'text-rose-400'}">• Кейсов открыто: ${fmt(state.stats.casesOpened||0)} / ${fmt(req.needCases)} ${caseOk ? '✅' : '❌'}</div>
+          <div class="${moneyOk ? 'text-emerald-400' : 'text-rose-400'}">• Деньги: ${fmt(state.balance)} / ${fmt(req.needMoney)} ${moneyOk ? '✅' : '❌'}</div>
+          <div class="${debtOk ? 'text-emerald-400' : 'text-rose-400'}">• Долг: ${fmt(state.stats.creditDebt||0)} ₽ — ${debtOk ? 'нет ✅' : 'верни долг ❌'}</div>
+          ${!chk.ok ? `<div class="mt-1 text-[10px] text-rose-300">Не хватает условий для перерождения</div>` : `<div class="mt-1 text-[10px] text-emerald-300">Готов к перерождению! Жми кнопку ниже</div>`}
+        `;
+      }
+    }
+  }
+  if (doBtn) {
+    const chk = canRebirthNext();
+    doBtn.disabled = !chk.ok;
+    doBtn.classList.toggle('opacity-50', !chk.ok);
+    doBtn.textContent = chk.ok ? `🔄 ПЕРЕРОДИТЬСЯ В ${cur+1} УРОВЕНЬ` : (cur>=REBIRTH_MAX ? 'МАКСИМУМ ДОСТИГНУТ' : 'НЕ ГОТОВ');
+  }
+  Modal.open('rebirthModal');
+}
+function closeRebirthModal() { Modal.close('rebirthModal'); }
 
 function saveSettings() {
   SettingsStore.toCookie(state.settings);
@@ -2792,7 +3256,167 @@ function closeWelcomeDisclaimer() {
   }
   MetaStore.write(Object.assign(MetaStore.read(), { welcomeSeen: true }));
   showCookieBannerIfNeeded();
+  // Сначала показываем уведомление о сбросе аккаунта (если был вайп), потом «что нового»
+  if (!showAccountResetNoticeIfNeeded()) {
+    showWhatsNewIfNeeded();
+  }
+}
+
+/* --------------------------------------------------------------------------
+   УВЕДОМЛЕНИЕ О СБРОСЕ АККАУНТА (вайп 3.9 → подарок 3.5)
+   Показывается ОДИН раз на первый вход после полного сброса: «прости, твой
+   аккаунт был сброшен». Потом флаг resetNoticeSeen не даёт показывать снова.
+   Сезон 3.5: сразу после этого даём дорогой подарок-извинение.
+   -------------------------------------------------------------------------- */
+function showAccountResetNoticeIfNeeded() {
+  if (!state.accountResetToast) return false;
+  const modal = $('accountResetModal');
+  if (!modal) {
+    // fallback — тост, если модалки нет в DOM
+    Toast.error('Прости, твой аккаунт был сброшен в связи с вайпом сезона 3.9. Но в 3.5 ты бесплатно получишь дорогой предмет! 🎁', 10000);
+    MetaStore.write(Object.assign(MetaStore.read(), { resetNoticeSeen: SAVE_VERSION }));
+    state.accountResetToast = false;
+    // сразу выдаём подарок
+    setTimeout(() => giveApologyGiftIfNeeded(), 500);
+    return true;
+  }
+  // Персонализируем текст, если помним старый ник
+  const old = state.accountResetOldUser;
+  const nameEl = $('accountResetOldName');
+  const wrapEl = $('accountResetOldNameWrap');
+  if (nameEl) nameEl.textContent = old && old.nick ? old.nick : '';
+  if (wrapEl) {
+    if (old && old.nick) wrapEl.classList.remove('hidden');
+    else wrapEl.classList.add('hidden');
+  }
+  Modal.open('accountResetModal');
+  return true;
+}
+
+function closeAccountResetModal() {
+  audio.init();
+  audio.playTick();
+  Modal.close('accountResetModal');
+  MetaStore.write(Object.assign(MetaStore.read(), { resetNoticeSeen: SAVE_VERSION }));
+  state.accountResetToast = false;
+  // Сезон 3.5 — сразу после закрытия показываем подарок-извинение
+  if (state.apologyGiftPending) {
+    setTimeout(() => {
+      giveApologyGiftIfNeeded();
+      showApologyGiftModalIfNeeded();
+    }, 400);
+  }
+  // После закрытия — показываем «что нового» и остальное
   showWhatsNewIfNeeded();
+  showCookieBannerIfNeeded();
+}
+
+/* --------------------------------------------------------------------------
+   ПОДАРОК-ИЗВИНЕНИЕ СЕЗОНА 3.5
+   -------------------------------------------------------------------------- */
+function showApologyGiftModalIfNeeded() {
+  const meta = MetaStore.read();
+  if (meta.apologyGiftSeen !== SAVE_VERSION) return false;
+  // если уже показывали модал подарка — не спамим
+  if (meta.apologyModalSeen === SAVE_VERSION) return false;
+  const modal = $('apologyGiftModal');
+  if (!modal) return false;
+  const proto = ITEMS_BY_ID['gift_apology_35'];
+  const box = $('apologyGiftItemBox');
+  if (box && proto) {
+    box.innerHTML = `
+      <div class="flex-shrink-0">${renderItemMedia(proto, 'w-12 h-12 text-2xl')}</div>
+      <div class="text-left">
+        <div class="text-[11px] font-bold text-white">${escapeHtml(proto.name)}</div>
+        <div class="text-[10px] text-amber-300 font-mono">${fmt(proto.price)} ₽ · ${rarityOf(proto).name} · уже в рюкзаке 🎒</div>
+      </div>
+    `;
+  }
+  Modal.open('apologyGiftModal');
+  return true;
+}
+
+function closeApologyGiftModal() {
+  audio.init();
+  audio.playTick();
+  Modal.close('apologyGiftModal');
+  MetaStore.write(Object.assign(MetaStore.read(), { apologyModalSeen: SAVE_VERSION }));
+  showWhatsNewIfNeeded();
+}
+
+/* --------------------------------------------------------------------------
+   ОБЯЗАТЕЛЬНОЕ ПОДКЛЮЧЕНИЕ К СЕРВЕРУ (сезон 3.5)
+   Игра не пускает играть, пока не подключится к серверам — чтобы аккаунт
+   точно отобразился в базе. При загрузке прелоадер уже ждёт сервер, но
+   если связь пропала во время игры — показываем модал.
+   -------------------------------------------------------------------------- */
+let _serverRequiredTimer = null;
+function showServerRequiredModalIfNeeded() {
+  const modal = $('serverRequiredModal');
+  if (!modal) return false;
+  // если сервер уже онлайн — не показываем
+  if (typeof ServerAPI !== 'undefined' && ServerAPI.isOnline()) return false;
+  if (typeof window !== 'undefined' && window.__shkoladropServerOnline) return false;
+  Modal.open('serverRequiredModal');
+  updateServerRequiredStatus();
+  // авто-ретрай каждые 4 сек
+  if (_serverRequiredTimer) clearInterval(_serverRequiredTimer);
+  _serverRequiredTimer = setInterval(() => {
+    updateServerRequiredStatus();
+    checkServerConnectionForGate();
+  }, 4000);
+  return true;
+}
+
+function updateServerRequiredStatus() {
+  const el = $('serverRequiredStatus');
+  if (!el) return;
+  const tries = (typeof window !== 'undefined' && window.__preloaderRetry) ? window.__preloaderRetry : 0;
+  if (typeof ServerAPI !== 'undefined' && ServerAPI.isOnline()) {
+    el.textContent = 'Подключение успешно! Добро пожаловать 🎒';
+    el.className = 'text-[11px] leading-relaxed text-emerald-300 font-mono';
+  } else {
+    el.textContent = tries > 2 ? 'Сервер спит, будим... ⏳ подождите, подключение скоро будет — просто подождите' : 'Подключение к серверу, подождите... сервер спит, будим';
+    el.className = 'text-[11px] leading-relaxed text-amber-300 font-mono';
+  }
+}
+
+async function checkServerConnectionForGate() {
+  if (typeof ServerAPI === 'undefined') return false;
+  const online = await ServerAPI.ping(true);
+  if (online) {
+    closeServerRequiredModal();
+    Toast.gold('🌐 Подключение успешно! Добро пожаловать — теперь каждое действие сохраняется на сервере ☁️', 6000);
+    // сразу пушим текущий прогресс
+    if (typeof CloudSave !== 'undefined') CloudSave.push(false);
+    return true;
+  }
+  return false;
+}
+
+function closeServerRequiredModal() {
+  Modal.close('serverRequiredModal');
+  if (_serverRequiredTimer) { clearInterval(_serverRequiredTimer); _serverRequiredTimer = null; }
+}
+
+async function retryServerConnection() {
+  const btn = document.querySelector('#serverRequiredModal button');
+  const orig = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Подключаюсь... ⏳'; }
+  updateServerRequiredStatus();
+  // пробуем разбудить сервер как в Community
+  if (typeof wakeCommunityServer === 'function') {
+    await wakeCommunityServer(btn);
+  } else {
+    await checkServerConnectionForGate();
+  }
+  if (btn) { btn.disabled = false; btn.textContent = orig || '⚡ Подключиться к серверу'; }
+  if (typeof ServerAPI !== 'undefined' && ServerAPI.isOnline()) {
+    closeServerRequiredModal();
+  } else {
+    updateServerRequiredStatus();
+    Toast.info('Сервер пока спит — подождите ещё немного, он просыпается ~минуту ⏳', 5000);
+  }
 }
 
 /* --------------------------------------------------------------------------
@@ -2940,6 +3564,7 @@ function openAdminModal() {
   // Онлайн-разделы панели: список игроков с галочками и реестр кодов авторов
   if (typeof adminLoadPlayers === 'function') adminLoadPlayers();
   if (adminHas('authorcodes') && typeof renderAdminAuthorList === 'function') renderAdminAuthorList();
+  if (typeof AdminVaultBackup !== 'undefined' && typeof AdminVaultBackup.renderStatus === 'function') AdminVaultBackup.renderStatus();
 }
 
 /* Показываем только те блоки панели, на которые у роли есть права */
@@ -3180,9 +3805,57 @@ function initGame() {
   // Шлагбаум «введите аккаунт» — если профиля ещё нет (js/netplay.js)
   if (typeof AuthGate !== 'undefined') AuthGate.onBoot();
 
-  // Первое сохранение нового формата
+  // Первое сохранение нового формата — сразу пушим на сервер (сезон 3.5: каждое действие на сервер)
   persist(true);
+  // Явно пушим в облако, чтобы аккаунт точно отобразился в базе даже если игрок офлайн
+  if (typeof CloudSave !== 'undefined' && state.user) {
+    setTimeout(() => { try { CloudSave.push(false); } catch (e) {} }, 800);
+  }
 
   // Ревизия VIP (аннулированные утёкшие коды) — асинхронно, после старта
   auditVip();
+
+  // Сезон 3.5 — обязательный онлайн: если сервер не подключен через 1.5 сек после загрузки — показываем модал
+  setTimeout(() => {
+    if (typeof ServerAPI !== 'undefined' && !ServerAPI.isOnline() && !window.__shkoladropServerOnline) {
+      showServerRequiredModalIfNeeded();
+    }
+  }, 1500);
+
+  // Сезон 3.5 — подарок-извинение: если флаг pending — выдаём и показываем модал (если не вайп)
+  setTimeout(() => {
+    if (state.apologyGiftPending) {
+      giveApologyGiftIfNeeded();
+      // если не было вайп-модала — сразу показываем подарок
+      if (!state.accountResetToast) {
+        showApologyGiftModalIfNeeded();
+      }
+    } else {
+      // если подарок уже получен, но модал ещё не видели — покажем
+      const meta = MetaStore.read();
+      if (meta.apologyGiftSeen === SAVE_VERSION && meta.apologyModalSeen !== SAVE_VERSION) {
+        showApologyGiftModalIfNeeded();
+      }
+    }
+  }, 900);
+
+  // Если был полный вайп 3.9 и приветствие уже закрыто — сразу показываем уведомление о сбросе
+  const welcomeEl = $('welcomeDisclaimerModal');
+  const welcomeVisible = welcomeEl && !welcomeEl.classList.contains('hidden') && welcomeEl.style.display !== 'none';
+  if (state.accountResetToast && !welcomeVisible) {
+    // Небольшая задержка, чтобы UI успел отрисоваться
+    setTimeout(() => showAccountResetNoticeIfNeeded(), 600);
+  }
+
+  // 4.1 кредит — проверка просрочки каждую минуту + обновление таймера в профиле
+  setInterval(() => {
+    try {
+      const hadDebt = (state.stats.creditDebt||0) > 0;
+      checkCreditBankrupt();
+      if (hadDebt || (state.stats.creditDebt||0)>0) {
+        if (Modal.isOpen('profileModal')) renderProfile();
+        if (Modal.isOpen('rebirthModal')) openRebirthModal();
+      }
+    } catch(e) {}
+  }, 30000);
 }
