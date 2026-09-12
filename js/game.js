@@ -271,10 +271,11 @@ function canRebirthNext() {
   const nxt = cur + 1;
   const req = getRebirthRequirement(nxt);
   if (!req) return { ok: false, reason: 'NOREQ' };
-  if ((state.stats.level || 1) < req.needLevel) return { ok: false, reason: 'LEVEL', need: req.needLevel };
-  if ((state.stats.casesOpened || 0) < req.needCases) return { ok: false, reason: 'CASES', need: req.needCases };
-  if (state.balance < req.needMoney) return { ok: false, reason: 'MONEY', need: req.needMoney };
-  if ((state.stats.creditDebt || 0) > 0) return { ok: false, reason: 'DEBT' };
+  // req отдаём всегда — по нему рисуется чек-лист требований в модалке
+  if ((state.stats.level || 1) < req.needLevel) return { ok: false, reason: 'LEVEL', need: req.needLevel, req };
+  if ((state.stats.casesOpened || 0) < req.needCases) return { ok: false, reason: 'CASES', need: req.needCases, req };
+  if (state.balance < req.needMoney) return { ok: false, reason: 'MONEY', need: req.needMoney, req };
+  if ((state.stats.creditDebt || 0) > 0) return { ok: false, reason: 'DEBT', req };
   return { ok: true, next: nxt, req };
 }
 function formatRebirthDebtTimer() {
@@ -379,11 +380,12 @@ function tryPayWithCredit(cost) {
   }
   return { ok: true, usedBalance: usedBal, usedCredit: need };
 }
-function doRebirth() {
+async function doRebirth() {
   const chk = canRebirthNext();
   if (!chk.ok) {
     let msg = 'Не могу переродиться';
     if (chk.reason === 'MAX') msg = 'Ты уже на максимальном перерождении (10)';
+    else if (chk.reason === 'NOREQ') msg = 'Требования перерождения не найдены — обнови страницу';
     else if (chk.reason === 'LEVEL') msg = `Нужен ${chk.need} уровень, у тебя ${state.stats.level}`;
     else if (chk.reason === 'CASES') msg = `Нужно открыть ${fmt(chk.need)} кейсов, у тебя ${fmt(state.stats.casesOpened||0)}`;
     else if (chk.reason === 'MONEY') msg = `Нужно ${fmt(chk.need)} ₽, у тебя ${fmt(state.balance)} ₽`;
@@ -394,37 +396,37 @@ function doRebirth() {
   const nextLvl = chk.next;
   const card = getRebirthCard(nextLvl);
   if (!card) { Toast.error('Карта не найдена'); return; }
-  Modal.confirm({
+  const ok = await ConfirmDialog.ask({
+    icon: '🔄',
     title: `Переродиться в ${card.name}?`,
-    text: `Ты перейдёшь на ${nextLvl} перерождение и получишь ${card.name} с лимитом ${fmt(card.limit)} ₽. Весь прогресс (баланс, рюкзак, уровень) сбросится, но карта останется навсегда. Продолжить?`,
-    confirmText: '🔄 ПЕРЕРОДИТЬСЯ',
-    cancelText: 'Отмена',
-    danger: false,
-    onConfirm: () => {
-      // списываем требование денег если есть
-      if (chk.req.needMoney > 0) state.balance -= chk.req.needMoney;
-      state.stats.rebirth = nextLvl;
-      // сброс
-      state.balance = 2000;
-      state.inventory = [];
-      state.stats.level = 1;
-      state.stats.xp = 0;
-      state.stats.creditDebt = 0;
-      state.stats.creditBorrowAt = 0;
-      state.stats.bankruptType = '';
-      state.stats.bankruptUntil = 0;
-      // титулы
-      if (!state.stats.unlockedTitles.includes(card.title)) state.stats.unlockedTitles.push(card.title);
-      // стартовые предметы + подарок если был
-      try { if (typeof START_ITEMS !== 'undefined') state.inventory = START_ITEMS.map(id => { const proto = ITEMS_BY_ID[id]; return proto ? Object.assign({}, proto, { uid: 'rebirth_' + id + '_' + Math.random().toString(36).slice(2,6) }) : null; }).filter(Boolean); } catch(e){}
-      Toast.success(`🔄 Перерождение ${nextLvl}! Получена ${card.name} — лимит ${fmt(card.limit)} ₽`, 6000);
-      Fx.burst(80, [card.color || '#ffd700', '#ff00ff', '#00f0ff']);
-      audio.init(); audio.playLevelUp();
-      persist(true);
-      renderAll();
-      openRebirthModal();
-    }
+    text: `Ты перейдёшь на <b>${nextLvl}</b> перерождение и получишь <b class="text-amber-300">${escapeHtml(card.name)}</b> с лимитом ${fmt(card.limit)} ₽. Весь прогресс (баланс, рюкзак, уровень) сбросится, но карта останется навсегда. Продолжить?`,
+    okText: '🔄 ПЕРЕРОДИТЬСЯ',
+    danger: false
   });
+  if (!ok) return;
+  // повторная проверка — пока был открыт диалог, условия могли измениться
+  const rechk = canRebirthNext();
+  if (!rechk.ok || rechk.next !== nextLvl) { Toast.error('Условия изменились — проверь требования'); return; }
+  state.stats.rebirth = nextLvl;
+  // сброс прогресса (требование «нужно X ₽» — порог входа: баланс всё равно сгорает)
+  state.balance = 2000;
+  state.inventory = [];
+  state.stats.level = 1;
+  state.stats.xp = 0;
+  state.stats.creditDebt = 0;
+  state.stats.creditBorrowAt = 0;
+  state.stats.bankruptType = '';
+  state.stats.bankruptUntil = 0;
+  // титулы
+  if (!state.stats.unlockedTitles.includes(card.title)) state.stats.unlockedTitles.push(card.title);
+  // стартовые предметы + подарок если был
+  try { if (typeof START_ITEMS !== 'undefined') state.inventory = START_ITEMS.map(id => { const proto = ITEMS_BY_ID[id]; return proto ? Object.assign({}, proto, { uid: 'rebirth_' + id + '_' + Math.random().toString(36).slice(2,6) }) : null; }).filter(Boolean); } catch(e){}
+  Toast.success(`🔄 Перерождение ${nextLvl}! Получена ${card.name} — лимит ${fmt(card.limit)} ₽`, 6000);
+  Fx.burst(80, [card.color || '#ffd700', '#ff00ff', '#00f0ff']);
+  audio.init(); audio.playLevelUp();
+  persist(true);
+  renderAll();
+  openRebirthModal();
 }
 
 function addXp(amount, { silent = false } = {}) {
@@ -2967,7 +2969,9 @@ function openRebirthModal() {
       reqEl.innerHTML = `<b class="text-amber-300">🏆 Максимум!</b> Ты на 10-м перерождении — радужная карта ${fmt(100000000000)} ₽! Больше перерождений нет.`;
     } else {
       const chk = canRebirthNext();
-      const req = chk.req;
+      // req берём напрямую из конфига: canRebirthNext при невыполненных
+      // требованиях раньше не отдавал req и игрок видел «Требования не найдены»
+      const req = chk.req || getRebirthRequirement(cur + 1);
       if (!req) reqEl.textContent = 'Требования не найдены';
       else {
         const lvlOk = (state.stats.level||1) >= req.needLevel;
@@ -2975,7 +2979,7 @@ function openRebirthModal() {
         const moneyOk = state.balance >= req.needMoney;
         const debtOk = (state.stats.creditDebt||0) <= 0;
         reqEl.innerHTML = `
-          <div class="text-[10px] font-bold text-amber-300 mb-1">Следующее: ${REBIRTH_CARDS[cur].name} → ${REBIRTH_CARDS[cur+1-1]?.name || ''} (ур. ${cur+1})</div>
+          <div class="text-[10px] font-bold text-amber-300 mb-1">Следующее: ${cur > 0 ? escapeHtml(REBIRTH_CARDS[cur-1].name) + ' → ' : ''}${escapeHtml(REBIRTH_CARDS[cur] ? REBIRTH_CARDS[cur].name : '')} (ур. ${cur+1})</div>
           <div class="${lvlOk ? 'text-emerald-400' : 'text-rose-400'}">• Уровень: ${state.stats.level} / ${req.needLevel} ${lvlOk ? '✅' : '❌'}</div>
           <div class="${caseOk ? 'text-emerald-400' : 'text-rose-400'}">• Кейсов открыто: ${fmt(state.stats.casesOpened||0)} / ${fmt(req.needCases)} ${caseOk ? '✅' : '❌'}</div>
           <div class="${moneyOk ? 'text-emerald-400' : 'text-rose-400'}">• Деньги: ${fmt(state.balance)} / ${fmt(req.needMoney)} ${moneyOk ? '✅' : '❌'}</div>

@@ -13,8 +13,9 @@
     "test": "node server/selftest.js",
     "test:unit": "node tests/crash-math.test.js",
     "test:ui": "node tests/crash-ui.test.js",
+    "test:rebirth": "node tests/rebirth-ui.test.js",
     "test:lint": "node tests/static-check.test.js",
-    "test:all": "npm run test:lint && npm run test && npm run test:unit && npm run test:ui"
+    "test:all": "npm run test:lint && npm run test && npm run test:unit && npm run test:ui && npm run test:rebirth"
   },
   "devDependencies": {
     "jsdom": "^30.0.1"
