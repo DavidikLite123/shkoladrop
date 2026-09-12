@@ -191,6 +191,49 @@ class SoundEngine {
     this.tone(659.25, 0.2, 'triangle', 0.14);
     this.tone(987.77, 0.3, 'triangle', 0.12, 0.12);
   }
+
+  /* ---------- 🚀 Ракета (Crash) ---------- */
+  /** Шумовой залп (взрыв): генерируем затухающий белый шум через lowpass */
+  noise(duration = 0.4, gain = 0.12, cutoff = 900) {
+    if (!this.enabled || !this.ctx || !this.master) return;
+    try {
+      const rate = this.ctx.sampleRate;
+      const len = Math.max(1, Math.floor(rate * duration));
+      const buf = this.ctx.createBuffer(1, len, rate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / len);
+      const src = this.ctx.createBufferSource();
+      src.buffer = buf;
+      const lp = this.ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = cutoff;
+      const g = this.ctx.createGain();
+      g.gain.value = gain;
+      src.connect(lp); lp.connect(g); g.connect(this.master);
+      src.start();
+    } catch (e) {}
+  }
+  /** Старт ракеты: нарастающий гул двигателя */
+  playRocketLaunch() {
+    this.tone(120, 0.7, 'sawtooth', 0.09, 0, 520);
+    this.tone(240, 0.7, 'triangle', 0.06, 0, 900);
+    this.noise(0.7, 0.05, 1400);
+  }
+  /** Тик полёта: высота тона растёт вместе с множителем */
+  playCrashTick(mult) {
+    this.tone(300 + Math.min(900, (mult - 1) * 90), 0.04, 'square', 0.028);
+  }
+  /** Взрыв ракеты: бас + шум */
+  playCrashBoom() {
+    this.tone(150, 0.5, 'sawtooth', 0.16, 0, 42);
+    this.tone(80, 0.7, 'triangle', 0.12, 0.02, 30);
+    this.noise(0.75, 0.18, 900);
+  }
+  /** Успешный вывод: восходящая «касса» */
+  playCashout() {
+    [659.25, 880, 1174.66, 1567.98].forEach((f, i) => this.tone(f, 0.28, 'sine', 0.13, i * 0.06));
+    this.tone(1318.51, 0.4, 'triangle', 0.08, 0.22);
+  }
 }
 
 const audio = new SoundEngine();
