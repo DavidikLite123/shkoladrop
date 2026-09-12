@@ -547,14 +547,21 @@ const ACHIEVEMENTS = [
    Честная математика: точка краша считается на устройстве игрока через
    crypto.getRandomValues (RNG.float) ДО старта полёта — подкрутить по ходу нельзя.
    Распределение: P(ракета долетит до X) = (1 - houseEdge) / X.
-   То есть при выводе на фиксированномX средний возврат = 1 - houseEdge (RTP 95%):
+   При выводе на любом фиксированном X средний возврат = 1 - houseEdge (RTP 95%):
    «максимальная вероятность краша на низких иксах» заложена самой формулой.
-   Формула: roll ∈ [0, 1) → crash = (1 - houseEdge) / (1 - roll), но не ниже 1.00×. */
+
+   Тайминг раунда:
+     0 … takeoffSec  — гарантированный РАЗГОН: множитель держится 1.00×,
+                       краш в этой фазе невозможен (ракета ещё на старте);
+     дальше          — рост по кривой exp(k1·τ + k2·τ²), τ = t − takeoffSec.
+   Минимум времени до возможного взрыва = takeoffSec (здесь 1,2 сек). */
 const CRASH_CONFIG = {
   houseEdge: 0.05,          // 5% — преимущество школы. RTP = 95%
   minBet: 100,              // минимальная ставка
-  maxBet: 1000000000,       // страховка от опечаток в вводе
-  growth: 0.18,             // множитель растёт как exp(growth * t): 2.00× ≈ за 3,9 сек
+  maxBet: 50000000,         // максимальная ставка (50 млн ₽)
+  takeoffSec: 1.2,          // гарантированный разгон: раньше краша быть не может
+  growthLinear: 0.14,       // множитель = exp(k1·τ + k2·τ²) — плавный старт…
+  growthQuad: 0.012,        // …и ускорение на высоких иксах
   maxMultiplier: 1000000,   // жёсткий потолок, чтобы полёт не длился вечно
   minAutoCashout: 1.01,     // автовывод ниже 1.01× бессмысленен
   maxAutoCashout: 1000000,
@@ -565,6 +572,8 @@ const CRASH_CONFIG = {
 
 /* Чистая математика ракеты (без DOM и без внешних зависимостей — чтобы её мог
    поднять и автотест в Node). Её же гоняют тесты: tests/crash-math.test.js */
+
+/** Точка краша по честному roll ∈ [0,1): crash = (1 − edge) / (1 − roll), не ниже 1.00× */
 function crashPointFromRoll(roll) {
   const raw = Number(roll);
   const r = !isFinite(raw) ? 0 : Math.min(Math.max(raw, 0), 0.999999999999);
@@ -573,14 +582,31 @@ function crashPointFromRoll(roll) {
   return Math.min(Math.max(x, 1), CRASH_CONFIG.maxMultiplier);
 }
 
-/** Множитель в момент времени t (секунды от старта): экспоненциальный рост от 1.00× */
-function crashMultiplierAt(elapsedSec) {
-  return Math.exp(CRASH_CONFIG.growth * Math.max(0, Number(elapsedSec) || 0));
+/** Сколько секунд ракета уже «набирает высоту» (без фазы разгона) */
+function crashGrowthTime(elapsedSec) {
+  return Math.max(0, (Number(elapsedSec) || 0) - CRASH_CONFIG.takeoffSec);
 }
 
-/** Через сколько секунд ракета дойдёт до множителя x (для анимации и авто-вывода) */
+/**
+ * Множитель в момент времени t (секунды от нажатия «Запустить»).
+ * Пока длится разгон (t < takeoffSec) — ровно 1.00×, дальше растёт по кривой
+ * exp(k1·τ + k2·τ²): в начале почти линейно и предсказуемо, потом всё быстрее.
+ */
+function crashMultiplierAt(elapsedSec) {
+  const tau = crashGrowthTime(elapsedSec);
+  return Math.exp(CRASH_CONFIG.growthLinear * tau + CRASH_CONFIG.growthQuad * tau * tau);
+}
+
+/**
+ * Через сколько секунд от старта ракета дойдёт до множителя x.
+ * Минимум — takeoffSec: быстрее разгона взрыв случиться не может.
+ */
 function crashTimeToMultiplier(x) {
-  return Math.log(Math.max(1, Number(x) || 1)) / CRASH_CONFIG.growth;
+  const ln = Math.log(Math.max(1, Number(x) || 1));
+  const a = CRASH_CONFIG.growthQuad;
+  const b = CRASH_CONFIG.growthLinear;
+  const tau = a > 0 ? (-b + Math.sqrt(b * b + 4 * a * ln)) / (2 * a) : ln / b;
+  return CRASH_CONFIG.takeoffSec + (isFinite(tau) ? Math.max(0, tau) : 0);
 }
 
 /** Выплата при выводе: ставка × текущий множитель (вниз до целого ₽) */
@@ -594,23 +620,25 @@ function crashPayout(bet, mult) {
    switchTab). Поля:
      id       — уникальный код игры;
      icon/name/desc/badge — как игра выглядит в меню;
+     iconSvg   — ключ встроенной SVG-иконки (js/icons.js); рисуется вместо эмодзи,
+                 чтобы на ОС без эмодзи-шрифтов не было пустых квадратов;
      tab      — какую панель открывать (view + Tab);
      enabled  — можно ли сейчас играть (false = карточка затемнена);
      onOpen   — необязательный свой обработчик вместо switchTab (например, модалка).
    Порядок в массиве = порядок карточек в меню. Первая игра — стартовая вкладка. */
 const MINI_GAMES = [
   {
-    id: 'upgrade', tab: 'upgrade', icon: '⚡', name: 'Апгрейд',
+    id: 'upgrade', tab: 'upgrade', icon: '⚡', iconSvg: 'zap', name: 'Апгрейд',
     desc: 'Занеси свой предмет на цель дороже — шанс считается честно по ценам',
     enabled: () => true
   },
   {
-    id: 'cases', tab: 'cases', icon: '📦', name: 'Кейсы',
+    id: 'cases', tab: 'cases', icon: '📦', iconSvg: 'package', name: 'Кейсы',
     desc: 'Крути школьные, CS2, кошачьи и ютубер-кейсы — дроп честный, шансы открыты',
     enabled: () => true
   },
   {
-    id: 'crash', tab: 'crash', icon: '🚀', name: 'Ракета', badge: 'NEW',
+    id: 'crash', tab: 'crash', icon: '🚀', iconSvg: 'rocket', name: 'Ракета', badge: 'NEW',
     desc: 'Ставь, следи за множителем и успевай забрать выигрыш до взрыва',
     enabled: () => true
   }

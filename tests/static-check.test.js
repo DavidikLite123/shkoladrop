@@ -94,5 +94,53 @@ t('статистика ракеты есть в дефолтах сейва', c
 t('статистика ракеты защищена в санитайзере сейва',
   /crashRounds',\s*'crashWins/.test(storageSrc) && /crashHistory/.test(storageSrc));
 
+/* ---------- 7. Адаптивность и вёрстка ---------- */
+const css = fs.readFileSync(path.join(ROOT, 'css', 'style.css'), 'utf8');
+
+t('в <head> есть корректный viewport',
+  /<meta[^>]+name=["']viewport["'][^>]+width=device-width/.test(html));
+
+t('ширина оболочки задана переменной и меняется по брейкпоинтам',
+  /--app-max:\s*28rem/.test(css) &&
+  /@media\s*\(min-width:\s*768px\)\s*{[^}]*--app-max/.test(css) &&
+  /@media\s*\(min-width:\s*1280px\)\s*{[^}]*--app-max/.test(css));
+t('body и нижнее меню ограничены одной шириной',
+  /body\.shkola-app\s*{[^}]*max-width:\s*var\(--app-max\)/.test(css) &&
+  /\.tabbar\s*{[^}]*max-width:\s*var\(--app-max\)/.test(css));
+t('есть защита от горизонтального скролла',
+  /overflow-x:\s*(clip|hidden)/.test(css));
+
+t('контейнер мини-игры ограничен по ширине и отцентрован',
+  /\.crash-shell\s*{[^}]*max-width:[^;]+;[^}]*margin:\s*0 auto/.test(css) ||
+  /\.crash-shell\s*{[^}]*margin:\s*0 auto/.test(css));
+t('поле полёта резиновое: clamp + относительные единицы',
+  /\.crash-stage\s*{[^}]*height:\s*clamp\([^)]*\)/.test(css) &&
+  /\.crash-stage[\s\S]{0,400}max-height:\s*\d+vh/.test(css));
+t('панель ставки на ПК становится двухколоночной',
+  /\.crash-panel-grid\s*{[^}]*grid-template-columns/.test(css) &&
+  /@media\s*\(min-width:\s*768px\)\s*{[^}]*\.crash-panel-grid\s*{[^}]*1fr 1fr/.test(css));
+t('крупные цели под палец: поля >= 44px, кнопки >= 48px',
+  /\.crash-input\s*{[^}]*min-height:\s*4[4-9]px/.test(css) &&
+  /\.crash-action-btn\s*{[^}]*min-height:\s*(4[89]|5\d)px/.test(css));
+t('есть отдельные правила для узких экранов',
+  /@media\s*\(max-width:\s*360px\)/.test(css));
+
+/* ---------- 8. Иконки: ключи из разметки есть в реестре ---------- */
+const iconsSrc = fs.readFileSync(path.join(ROOT, 'js', 'icons.js'), 'utf8');
+const usedIcons = [...html.matchAll(/data-icon="([^"]+)"/g)].map(m => m[1]);
+const missingIcons = [...new Set(usedIcons)].filter(name => !new RegExp(`\\b${name}:`).test(iconsSrc));
+t('все иконки из разметки есть в js/icons.js', missingIcons.length === 0, missingIcons.join(', '));
+t('реестр иконок не пустой', /rocket:/.test(iconsSrc) && /burst:/.test(iconsSrc) && /banknote:/.test(iconsSrc));
+// Проверяем определения иконок (в комментариях эмодзи допустимы — там они как подписи)
+const iconDefs = iconsSrc.slice(iconsSrc.indexOf('set: {'), iconsSrc.indexOf('has(name)'))
+  .replace(/\/\*[\s\S]*?\*\//g, '');   // комментарии (там эмодзи-подписи) не считаем
+t('иконки — вектор (SVG), а не эмодзи',
+  /viewBox="0 0 24 24"/.test(iconsSrc) && !/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(iconDefs));
+// Порядок подключения — по реальным тегам <script>, а не по первому упоминанию в тексте
+const srcOrder = [...html.matchAll(/<script[^>]+src="(js\/[^"]+)"/g)].map(m => m[1].split('?')[0]);
+t('js/icons.js подключён до модулей мини-игр',
+  srcOrder.indexOf('js/icons.js') >= 0 && srcOrder.indexOf('js/icons.js') < srcOrder.indexOf('js/crash.js'),
+  srcOrder.join(' → '));
+
 console.log(`\n${failed === 0 ? '✅' : '❌'} ${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);

@@ -528,111 +528,133 @@
 
   <!-- ================= TAB: CRASH / РАКЕТА (js/crash.js) ================= -->
   <main id="viewCrash" class="view-panel w-full px-4 mt-2 hidden space-y-3">
-    <div class="flex items-center justify-between">
-      <div>
-        <h2 class="font-cs text-sm font-bold uppercase tracking-wider text-slate-200">🚀 Ракета</h2>
-        <p class="text-[11px] text-slate-400">Ставь, следи за множителем и успевай забрать до взрыва</p>
-      </div>
-      <span class="text-[10px] bg-sky-500/20 text-sky-300 font-bold px-2 py-0.5 rounded-lg border border-sky-500/30">RTP 95%</span>
-    </div>
-
-    <!-- Поле полёта: график набора высоты + текущий множитель -->
-    <div id="crashStage" class="crash-stage">
-      <canvas id="crashCanvas" class="crash-canvas"></canvas>
-      <div class="crash-hud">
-        <div id="crashMultiplier" class="crash-mult">1.00×</div>
-        <div id="crashStatusText" class="text-[10px] text-slate-400">Готов к запуску</div>
-      </div>
-      <div id="crashBoom" class="crash-boom hidden">💥 ВЗРЫВ!</div>
-    </div>
-
-    <!-- Панель управления ставкой -->
-    <div class="w-full bg-slate-900/90 border border-slate-800 rounded-2xl p-3 space-y-3">
-      <div>
-        <div class="flex items-center justify-between mb-1.5">
-          <label for="crashBetInput" class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Ставка</label>
-          <span class="text-[9px] text-slate-500">на балансе <span id="crashBalanceHint" class="text-amber-300 font-bold">0 ₽</span></span>
+    <div class="crash-shell">
+      <div class="flex items-center justify-between gap-2">
+        <div class="min-w-0">
+          <h2 class="font-cs text-sm font-bold uppercase tracking-wider text-slate-200 flex items-center gap-1.5">
+            <i data-icon="rocket" data-icon-size="16" class="text-sky-300 flex-shrink-0"></i><span class="truncate">Ракета</span>
+          </h2>
+          <p class="text-[11px] text-slate-400">Ставь, следи за множителем и успевай забрать до взрыва</p>
         </div>
-        <div class="flex items-center gap-2">
-          <input id="crashBetInput" type="number" inputmode="numeric" min="100" step="100" placeholder="1000"
-                 class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-sm text-white placeholder-slate-600 font-cs font-bold focus:outline-none focus:border-sky-500 transition">
-          <span class="text-xs text-slate-400 font-bold">₽</span>
+        <span class="text-[10px] bg-sky-500/20 text-sky-300 font-bold px-2 py-0.5 rounded-lg border border-sky-500/30 flex-shrink-0">RTP 95%</span>
+      </div>
+
+      <!-- Поле полёта: график набора высоты + текущий множитель -->
+      <div id="crashStage" class="crash-stage">
+        <canvas id="crashCanvas" class="crash-canvas"></canvas>
+        <div class="crash-hud">
+          <div id="crashMultiplier" class="crash-mult">1.00×</div>
+          <div id="crashStatusText" class="text-[10px] text-slate-400">Готов к запуску</div>
         </div>
-        <div id="crashQuickBets" class="flex flex-wrap gap-1.5 mt-2"></div>
-      </div>
-
-      <div>
-        <div class="flex items-center justify-between mb-1.5">
-          <label for="crashAutoInput" class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Автовывод · необязательно</label>
-          <span class="text-[9px] text-slate-500">заберу сам</span>
+        <!-- Подтверждение взрыва: векторная иконка, а не системный эмодзи -->
+        <div id="crashBoom" class="crash-boom hidden">
+          <i data-icon="burst" data-icon-size="26" class="text-rose-300"></i>
+          <span>ВЗРЫВ!</span>
         </div>
-        <div class="flex items-center gap-2">
-          <input id="crashAutoInput" type="number" inputmode="decimal" min="1.01" step="0.1" placeholder="например 2.00"
-                 class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-sm text-white placeholder-slate-600 font-cs font-bold focus:outline-none focus:border-emerald-500 transition">
-          <span class="text-xs text-slate-400 font-bold">×</span>
+      </div>
+
+      <!-- Панель управления ставкой -->
+      <div class="crash-panel w-full bg-slate-900/90 border border-slate-800 rounded-2xl p-3 space-y-3">
+        <div class="crash-panel-grid">
+          <div class="min-w-0">
+            <div class="flex items-center justify-between mb-1.5 gap-2">
+              <label for="crashBetInput" class="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                <i data-icon="banknote" data-icon-size="13" class="text-amber-300"></i><span>Ставка</span>
+              </label>
+              <span class="text-[9px] text-slate-500 whitespace-nowrap">на балансе <span id="crashBalanceHint" class="text-amber-300 font-bold">0 ₽</span></span>
+            </div>
+            <div class="flex items-center gap-2">
+              <input id="crashBetInput" type="number" inputmode="numeric" min="100" step="100" placeholder="1000"
+                     class="crash-input flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-base text-white placeholder-slate-600 font-cs font-bold focus:outline-none focus:border-sky-500 transition">
+              <span class="text-xs text-slate-400 font-bold">₽</span>
+            </div>
+            <div id="crashQuickBets" class="flex flex-wrap gap-1.5 mt-2"></div>
+          </div>
+
+          <div class="min-w-0">
+            <div class="flex items-center justify-between mb-1.5 gap-2">
+              <label for="crashAutoInput" class="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                <i data-icon="target" data-icon-size="13" class="text-emerald-300"></i><span>Автовывод</span>
+              </label>
+              <span class="text-[9px] text-slate-500 whitespace-nowrap">необязательно</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <input id="crashAutoInput" type="number" inputmode="decimal" min="1.01" step="0.1" placeholder="2.00"
+                     class="crash-input flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-base text-white placeholder-slate-600 font-cs font-bold focus:outline-none focus:border-emerald-500 transition">
+              <span class="text-xs text-slate-400 font-bold">×</span>
+            </div>
+            <div id="crashQuickAuto" class="flex flex-wrap gap-1.5 mt-2"></div>
+          </div>
         </div>
-        <div id="crashQuickAuto" class="flex flex-wrap gap-1.5 mt-2"></div>
+
+        <div id="crashLiveWin" class="text-[10px] text-slate-400">Выигрыш сейчас: 0 ₽ (чистыми +0 ₽)</div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <button id="btnCrashStart" onclick="crashStart()"
+                  class="crash-action-btn py-3 rounded-xl bg-gradient-to-r from-sky-500 to-cyan-400 text-slate-950 font-cs font-bold text-[11px] uppercase tracking-wider shadow-lg shadow-sky-500/20 hover:brightness-110 active:scale-95 transition disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 flex items-center justify-center gap-1.5">
+            <i data-icon="play" data-icon-size="14"></i><span id="crashStartLabel">Запустить ракету</span>
+          </button>
+          <button id="btnCrashCashout" onclick="crashCashout()" disabled
+                  class="crash-action-btn py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-lime-400 text-slate-950 font-cs font-bold text-[11px] uppercase tracking-wider shadow-lg shadow-emerald-500/20 hover:brightness-110 active:scale-95 transition disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 flex items-center justify-center gap-1.5">
+            <i data-icon="cashout" data-icon-size="14"></i><span id="crashCashoutLabel">Забрать 0 ₽</span>
+          </button>
+        </div>
+        <div class="text-center text-[9px] text-slate-500 leading-relaxed">
+          Ставка списывается сразу при запуске. Во время полёта поля заблокированы, а первые
+          <span class="text-slate-300">1,2 сек</span> ракета разгоняется — взрыв раньше невозможен.
+        </div>
       </div>
 
-      <div id="crashLiveWin" class="text-[10px] text-slate-400">Выигрыш сейчас: 0 ₽ (чистыми +0 ₽)</div>
+      <!-- Статистика ракеты -->
+      <div class="w-full grid grid-cols-3 gap-2 md:grid-cols-6">
+        <div class="stat-tile">
+          <div class="stat-tile-label">Раундов</div>
+          <div id="crashRoundsStat" class="stat-tile-value text-sky-300">0</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-tile-label">Забрал</div>
+          <div id="crashWinsStat" class="stat-tile-value text-emerald-400">0</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-tile-label">Взрывов</div>
+          <div id="crashLossesStat" class="stat-tile-value text-rose-400">0</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-tile-label">Лучший X</div>
+          <div id="crashBestMultStat" class="stat-tile-value text-amber-400">0.00×</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-tile-label">Лучший выигрыш</div>
+          <div id="crashBestWinStat" class="stat-tile-value text-amber-300">0 ₽</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-tile-label">Профит</div>
+          <div id="crashNetStat" class="stat-tile-value text-slate-300">0 ₽</div>
+        </div>
+      </div>
 
-      <div class="grid grid-cols-2 gap-2">
-        <button id="btnCrashStart" onclick="crashStart()"
-                class="py-3 rounded-xl bg-gradient-to-r from-sky-500 to-cyan-400 text-slate-950 font-cs font-bold text-[11px] uppercase tracking-wider shadow-lg shadow-sky-500/20 hover:brightness-110 active:scale-95 transition disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 flex items-center justify-center gap-1.5">
-          <span>🚀</span><span id="crashStartLabel">ЗАПУСТИТЬ РАКЕТУ</span>
-        </button>
-        <button id="btnCrashCashout" onclick="crashCashout()" disabled
-                class="py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-lime-400 text-slate-950 font-cs font-bold text-[11px] uppercase tracking-wider shadow-lg shadow-emerald-500/20 hover:brightness-110 active:scale-95 transition disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 flex items-center justify-center gap-1.5">
-          <span>💰</span><span id="crashCashoutLabel">ЗАБРАТЬ 0 ₽</span>
-        </button>
+      <!-- Лента последних раундов -->
+      <div class="w-full bg-slate-900/40 border border-slate-800/60 rounded-xl p-2.5">
+        <div class="flex items-center justify-between mb-2 gap-2">
+          <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+            <i data-icon="history" data-icon-size="13" class="text-slate-400"></i><span>Последние раунды</span>
+          </span>
+          <span class="text-[9px] text-slate-500">зелёный — забрал, красный — взрыв</span>
+        </div>
+        <div id="crashHistoryList" class="flex flex-wrap gap-1.5 text-xs"></div>
       </div>
-      <div class="text-center text-[9px] text-slate-500">Во время полёта ставка уже списана и поля заблокированы</div>
-    </div>
 
-    <!-- Статистика ракеты -->
-    <div class="w-full grid grid-cols-3 gap-2">
-      <div class="stat-tile">
-        <div class="stat-tile-label">Раундов</div>
-        <div id="crashRoundsStat" class="stat-tile-value text-sky-300">0</div>
+      <!-- Честность -->
+      <div class="w-full bg-slate-900/40 border border-slate-800/60 rounded-xl p-2.5 text-[10px] text-slate-400 leading-relaxed">
+        <span class="flex items-center gap-1 text-slate-300 font-bold mb-1">
+          <i data-icon="shield" data-icon-size="13" class="text-emerald-300"></i><span>Честная математика</span>
+        </span>
+        Точка краша считается на твоём устройстве через
+        <span class="text-slate-300">crypto.getRandomValues</span> <b>до старта</b> полёта — подкрутить по ходу нельзя.
+        Распределение: P(долететь до X) = 0,95 / X, поэтому краш на низких иксах самый вероятный.
+        Возврат игры (RTP) — <b class="text-emerald-300">95%</b>, преимущество школы — 5%.
+        Множитель растёт по гладкой кривой от 1,00× и ускоряется на высоких коэффициентах.
       </div>
-      <div class="stat-tile">
-        <div class="stat-tile-label">Забрал</div>
-        <div id="crashWinsStat" class="stat-tile-value text-emerald-400">0</div>
-      </div>
-      <div class="stat-tile">
-        <div class="stat-tile-label">Взрывов</div>
-        <div id="crashLossesStat" class="stat-tile-value text-rose-400">0</div>
-      </div>
-      <div class="stat-tile">
-        <div class="stat-tile-label">Лучший X</div>
-        <div id="crashBestMultStat" class="stat-tile-value text-amber-400">0.00×</div>
-      </div>
-      <div class="stat-tile">
-        <div class="stat-tile-label">Лучший выигрыш</div>
-        <div id="crashBestWinStat" class="stat-tile-value text-amber-300">0 ₽</div>
-      </div>
-      <div class="stat-tile">
-        <div class="stat-tile-label">Профит</div>
-        <div id="crashNetStat" class="stat-tile-value text-slate-300">0 ₽</div>
-      </div>
-    </div>
-
-    <!-- Лента последних раундов -->
-    <div class="w-full bg-slate-900/40 border border-slate-800/60 rounded-xl p-2.5">
-      <div class="flex items-center justify-between mb-2">
-        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Последние раунды</span>
-        <span class="text-[9px] text-slate-500">цвет = забрал / взрыв</span>
-      </div>
-      <div id="crashHistoryList" class="flex flex-wrap gap-1.5 text-xs"></div>
-    </div>
-
-    <!-- Честность -->
-    <div class="w-full bg-slate-900/40 border border-slate-800/60 rounded-xl p-2.5 text-[10px] text-slate-400 leading-relaxed">
-      🛡 <b>Честная математика.</b> Точка краша считается на твоём устройстве через
-      <span class="text-slate-300">crypto.getRandomValues</span> <b>до старта</b> полёта — подкрутить по ходу нельзя.
-      Распределение: P(долететь до X) = 0,95 / X, поэтому краш на низких иксах самый вероятный.
-      Возврат игры (RTP) — <b class="text-emerald-300">95%</b>, преимущество школы — 5%.
-      Множитель растёт по экспоненте от 1,00×.
     </div>
   </main>
 
@@ -1179,7 +1201,7 @@
     <div class="modal-card max-w-sm w-full">
       <div class="flex items-center justify-between pb-2 mb-3 border-b border-slate-800">
         <h3 class="font-cs text-sm font-bold uppercase text-white flex items-center space-x-1.5">
-          <span>🎮</span><span>Мини-игры</span>
+          <i data-icon="gamepad" data-icon-size="15" class="text-sky-300"></i><span>Мини-игры</span>
         </h3>
         <button onclick="closeGamesModal()" class="text-slate-400 hover:text-white text-lg leading-none">✕</button>
       </div>
@@ -2159,6 +2181,7 @@
   <script defer src="js/storage.js?v=4.0.0"></script>
   <script defer src="js/ui.js?v=4.0.0"></script>
   <script defer src="js/game.js?v=4.0.0"></script>
+  <script defer src="js/icons.js?v=4.1.0"></script>
   <script defer src="js/crash.js?v=4.1.0"></script>
   <script defer src="js/games.js?v=4.1.0"></script>
   <script defer src="js/netplay.js?v=4.0.0"></script>

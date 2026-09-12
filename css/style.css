@@ -994,3 +994,86 @@ body.no-motion .crash-boom { animation: none !important; }
   .crash-stage-boom { animation: none; }
   .crash-boom { animation: none; }
 }
+
+/* ==========================================================================
+   АДАПТИВНОСТЬ (mobile-first): оболочка приложения + мини-игры
+   ========================================================================== */
+
+/* Ширина «полотна» приложения: телефон — 28rem, планшет/ПК — шире.
+   Переменная используется и у body, и у нижнего меню, чтобы они всегда совпадали. */
+:root { --app-max: 28rem; }
+@media (min-width: 768px)  { :root { --app-max: 34rem; } }
+@media (min-width: 1280px) { :root { --app-max: 36rem; } }
+
+body.shkola-app {
+  max-width: var(--app-max);
+  width: 100%;
+  overflow-x: clip;          /* страховка от горизонтального скролла */
+}
+@supports not (overflow-x: clip) { body.shkola-app { overflow-x: hidden; } }
+
+.tabbar { max-width: var(--app-max); }
+
+/* Контент мини-игр: центрируем и не даём расползаться на широких мониторах */
+.crash-shell {
+  width: 100%;
+  max-width: 34rem;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: .75rem;
+  min-width: 0;
+}
+
+/* Поле полёта: резиновая высота, но не выше 40% экрана (актуально для ландшафта) */
+.crash-stage {
+  height: clamp(180px, 42vw, 220px);
+  max-height: 42vh;
+}
+@media (min-width: 768px) {
+  .crash-stage { height: clamp(240px, 26vw, 300px); max-height: 46vh; }
+}
+
+/* Множитель — крупно, но в меру на маленьких экранах */
+.crash-mult { font-size: clamp(1.85rem, 7.5vw, 2.5rem); }
+
+/* Панель ставки: на телефоне — колонка, на ПК — две колонки */
+.crash-panel-grid { display: grid; gap: .75rem; grid-template-columns: 1fr; min-width: 0; }
+@media (min-width: 768px) { .crash-panel-grid { grid-template-columns: 1fr 1fr; } }
+
+/* Удобные под палец цели: поля и кнопки не мельче 44–48 px */
+.crash-input {
+  min-height: 44px;
+  font-size: 16px !important;   /* iOS не зумит при фокусе */
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.crash-action-btn { min-height: 48px; touch-action: manipulation; }
+
+/* Кнопки быстрой ставки не должны вылезать за пределы панели */
+.crash-panel .filter-chip { flex: 0 0 auto; }
+
+/* Векторные иконки из js/icons.js */
+[data-icon] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  line-height: 0;
+}
+[data-icon] svg { display: block; }
+
+/* Плашка взрыва: иконка + текст в одну строку */
+.crash-boom { gap: .5rem; }
+
+/* Карточки мини-игр: текст не рвёт вёрстку */
+.mini-game-card { min-width: 0; }
+.mini-game-card b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mini-game-card small { overflow-wrap: anywhere; }
+
+/* Очень узкие экраны (до 360 px): чуть компактнее */
+@media (max-width: 360px) {
+  .crash-mult { font-size: 1.7rem; }
+  .crash-action-btn { min-height: 46px; font-size: 10px !important; }
+  .mini-game-icon { width: 2.2rem; height: 2.2rem; font-size: 1.1rem; }
+}

@@ -1,20 +1,28 @@
 /* ==========================================================================
    ШКОЛА ДРОП — js/crash.js
-   Мини-игра «Ракета» (Crash): ставка → ракета растёт по экспоненте → успей
+   Мини-игра «Ракета» (Crash): ставка → ракета набирает высоту → успей
    забрать выигрыш до взрыва.
 
    Как это встроено в проект:
      • математика (CRASH_CONFIG, crashPointFromRoll, crashMultiplierAt,
        crashPayout) лежит в js/config.js — чистая, без DOM, её гоняют тесты;
      • рандом — общий криптографический RNG.float() из js/ui.js (не Math.random);
-     • деньги — только через spendMoney()/addMoney() из ядра, статистика и
-       достижения — через state.stats / checkAchievements();
-     • звуки — методы SoundEngine (playRocketLaunch/playCrashBoom/playCashout);
-     • игра сама регистрируется в меню «Игры» реестром MINI_GAMES (js/config.js).
+     • деньги — только через spendMoney()/addMoney() из ядра; ставка списывается
+       в момент нажатия «Запустить» и проверяется трижды (лимиты, баланс,
+       финальный предохранитель), поэтому баланс не может уйти в минус;
+     • иконки — встроенные SVG из js/icons.js (никаких системных эмодзи:
+       на части ОС они не грузятся и выглядят пустыми квадратами);
+     • ракета рисуется вектором на <canvas> (не эмодзи!) — одинаково на всех
+       платформах, координаты считаются от текущего множителя;
+     • звуки — методы SoundEngine (playRocketLaunch/playCrashBoom/playCashout).
 
-   Фазы раунда: idle → flying → (cashed | crashed) → idle.
-   Все переключения фаз — только через setPhase(), ввод блокируется на время
-   полёта, повторный старт из flying невозможен (защита от двойного списания).
+   Тайминг раунда:
+     takeoffSec (1.2 c) — гарантированный разгон, множитель 1.00×, краш невозможен;
+     дальше              — рост exp(k1·τ + k2·τ²) до точки краша.
+
+   Фазы: idle → flying → (cashed | crashed) → idle.
+   Все переходы — через setPhase(); ввод и повторный старт на время полёта
+   заблокированы (защита от двойного списания).
    ========================================================================== */
 
 const CrashGame = {
@@ -24,7 +32,7 @@ const CrashGame = {
   autoX: 0,             // автовывод: 0 = выключен
   crashAt: 0,           // точка краша (определяется на старте, до полёта)
   mult: 1,              // текущий множитель
-  startWall: 0,         // время старта (Date.now — раунд честно идёт в фоне)
+  startWall: 0,         // время старта (Date.now — раунд честно идёт и в фоне)
   lastTickSound: 0,     // когда последний раз пищали (тик полёта)
   resetTimer: 0,        // таймаут возврата кнопок после раунда
 
@@ -32,11 +40,13 @@ const CrashGame = {
   canvas: null,
   ctx: null,
   dpr: 1,
+  w: 320,
+  h: 210,
   stars: [],
   particles: [],
   _raf: 0,
   _frame: null,
-  _resizeBound: false,
+  _bound: false,
 
   /* ======================================================================
      ИНИЦИАЛИЗАЦИЯ
@@ -44,32 +54,48 @@ const CrashGame = {
   init() {
     this.canvas = $('crashCanvas');
     if (!this.canvas) return;
-    this.ctx = this.canvas.getContext('2d');
-    this._frame = ts => this.frame(ts);
+    this.ctx = this.canvas.getContext && this.canvas.getContext('2d');
+    this._frame = () => this.frame();
 
     this.bindInputs();
     this.buildQuickButtons();
+    if (typeof Icons !== 'undefined') {
+      Icons.hydrate($('viewCrash'));      // наполняем <i data-icon="..."> вектором
+      Icons.hydrate($('gamesModal'));
+    }
     this.resize();
     this.renderStats();
     this.renderHistory();
     this.render();
     this.draw();
 
-    if (!this._resizeBound) {
-      this._resizeBound = true;
-      window.addEventListener('resize', () => {
-        if (this.isVisible()) { this.resize(); this.draw(); }
-      });
-      // Панель может появиться уже после инициализации — следим за её видимостью
-      if (typeof MutationObserver === 'function' && this.canvas.parentElement) {
+    if (!this._bound) {
+      this._bound = true;
+      const onResize = () => {
+        if (!this.isVisible()) return;
+        this.resize();
+        this.draw();
+      };
+      window.addEventListener('resize', onResize);
+      window.addEventListener('orientationchange', onResize);
+
+      // Размер поля меняется и при смене вкладки, и на резиновой вёрстке —
+      // следим за самим контейнером (ResizeObserver есть во всех современных браузерах)
+      try {
+        if (typeof ResizeObserver === 'function') {
+          new ResizeObserver(onResize).observe(this.canvas.parentElement || this.canvas);
+        }
+      } catch (e) {}
+
+      // Панель может появиться после инициализации — пересчитываем геометрию
+      if (typeof MutationObserver === 'function' && $('viewCrash')) {
         new MutationObserver(() => {
           if (this.isVisible()) { this.resize(); this.draw(); }
-        }).observe($('viewCrash') || this.canvas.parentElement, { attributes: true, attributeFilter: ['class'] });
+        }).observe($('viewCrash'), { attributes: true, attributeFilter: ['class'] });
       }
     }
   },
 
-  /** Панель ракеты сейчас на экране? */
   isVisible() {
     const v = $('viewCrash');
     return !!(v && !v.classList.contains('hidden'));
@@ -100,7 +126,8 @@ const CrashGame = {
     if (bets && CRASH_CONFIG.quickBets) {
       bets.innerHTML = CRASH_CONFIG.quickBets.map(v =>
         `<button type="button" data-bet="${v}" class="filter-chip">${shortMoney(v)} ₽</button>`
-      ).join('') + `<button type="button" data-bet="half" class="filter-chip">½</button>` +
+      ).join('') +
+        `<button type="button" data-bet="half" class="filter-chip">½</button>` +
         `<button type="button" data-bet="x2" class="filter-chip">×2</button>` +
         `<button type="button" data-bet="max" class="filter-chip">MAX</button>`;
       bets.querySelectorAll('[data-bet]').forEach(btn => {
@@ -119,14 +146,14 @@ const CrashGame = {
   },
 
   /* ======================================================================
-     ГЕОМЕТРИЯ КАНВАСА
+     ГЕОМЕТРИЯ КАНВАСА (резиновая: подстраивается под вёрстку и DPR)
      ====================================================================== */
   resize() {
     const cv = this.canvas;
     if (!cv) return;
     const rect = cv.getBoundingClientRect();
-    const w = Math.max(220, Math.round(rect.width || 320));
-    const h = Math.max(150, Math.round(rect.height || 200));
+    const w = Math.max(240, Math.round(rect.width || cv.clientWidth || 320));
+    const h = Math.max(150, Math.round(rect.height || cv.clientHeight || 210));
     this.dpr = Math.min(window.devicePixelRatio || 1, 2);
     cv.width = Math.round(w * this.dpr);
     cv.height = Math.round(h * this.dpr);
@@ -137,7 +164,7 @@ const CrashGame = {
   },
 
   makeStars() {
-    const n = typeof Quality !== 'undefined' && Quality.isLow() ? 22 : 48;
+    const n = (typeof Quality !== 'undefined' && Quality.isLow()) ? 22 : 48;
     this.stars = [];
     for (let i = 0; i < n; i++) {
       this.stars.push({
@@ -155,7 +182,7 @@ const CrashGame = {
     return h - pad - Math.min(1, norm) * (h - pad * 2);
   },
 
-  /** Время полёта → горизонталь (окно в 9 секунд, потом график «едет») */
+  /** Время полёта → горизонталь (окно 9 секунд, потом график «едет») */
   xFor(t, now, w, pad) {
     const win = 9;
     const from = Math.max(0, now - win);
@@ -173,13 +200,15 @@ const CrashGame = {
   applyQuickBet(kind) {
     const betEl = $('crashBetInput');
     if (!betEl) return;
-    const cur = this.parseNum(betEl) || 0;
+    const cur = Math.floor(this.parseNum(betEl)) || 0;
+    const balance = Math.floor(state.balance);
     let next = cur;
-    if (kind === 'max') next = Math.floor(state.balance);
-    else if (kind === 'half') next = Math.floor(cur > 0 ? cur / 2 : state.balance / 2);
-    else if (kind === 'x2') next = Math.floor(cur > 0 ? cur * 2 : CRASH_CONFIG.minBet);
-    else next = Number(kind) || 0;
-    next = Math.max(0, Math.min(next, Math.floor(state.balance), CRASH_CONFIG.maxBet));
+    if (kind === 'max') next = balance;
+    else if (kind === 'half') next = cur > 0 ? Math.floor(cur / 2) : Math.floor(balance / 2);
+    else if (kind === 'x2') next = cur > 0 ? cur * 2 : CRASH_CONFIG.minBet;
+    else next = Math.floor(Number(kind)) || 0;
+    // Быстрые кнопки никогда не предлагают сумму больше баланса и больше лимита
+    next = Math.max(0, Math.min(next, balance, CRASH_CONFIG.maxBet));
     betEl.value = next > 0 ? String(next) : '';
     audio.init(); audio.playTick();
     this.render();
@@ -193,21 +222,41 @@ const CrashGame = {
     this.render();
   },
 
-  /** Читает и проверяет поля. Ничего не списывает. */
+  /**
+   * Читает и проверяет поля ввода. Ничего не списывает.
+   * Порядок проверок важен: сначала «это вообще число», потом лимиты,
+   * потом — хватает ли денег. Любая ошибка → явное сообщение игроку.
+   */
   readInputs() {
-    const bet = Math.floor(this.parseNum($('crashBetInput')));
-    const auto = Number(this.parseNum($('crashAutoInput')));
+    const rawBet = this.parseNum($('crashBetInput'));
+    const rawAuto = this.parseNum($('crashAutoInput'));
+    const cfg = CRASH_CONFIG;
 
-    if (!isFinite(bet) || bet <= 0) return { ok: false, error: 'Введи ставку — сколько ставишь на ракету?' };
-    if (bet < CRASH_CONFIG.minBet) return { ok: false, error: `Минимальная ставка — ${fmt(CRASH_CONFIG.minBet)} ₽` };
-    if (bet > CRASH_CONFIG.maxBet) return { ok: false, error: `Максимальная ставка — ${shortMoney(CRASH_CONFIG.maxBet)} ₽` };
-    if (bet > state.balance) return { ok: false, error: `Не хватает денег: на балансе ${fmt(state.balance)} ₽` };
-
-    if (isFinite(auto) && auto > 0) {
-      if (auto < CRASH_CONFIG.minAutoCashout) return { ok: false, error: `Автовывод — минимум ${CRASH_CONFIG.minAutoCashout.toFixed(2)}×` };
-      if (auto > CRASH_CONFIG.maxAutoCashout) return { ok: false, error: 'Автовывод слишком большой — поставь меньше' };
+    if (!isFinite(rawBet) || rawBet <= 0) {
+      return { ok: false, error: 'Введи ставку — сколько ставишь на ракету?' };
     }
-    return { ok: true, bet, autoX: (isFinite(auto) && auto > 0) ? auto : 0 };
+    const bet = Math.floor(rawBet);
+    if (bet < cfg.minBet) {
+      return { ok: false, error: `Минимальная ставка — ${fmt(cfg.minBet)} ₽` };
+    }
+    if (bet > cfg.maxBet) {
+      return { ok: false, error: `Максимальная ставка — ${shortMoney(cfg.maxBet)} ₽` };
+    }
+    if (bet > state.balance) {
+      return { ok: false, error: `Не хватает денег: ставка ${fmt(bet)} ₽, а на балансе ${fmt(state.balance)} ₽` };
+    }
+
+    let autoX = 0;
+    if (isFinite(rawAuto) && rawAuto > 0) {
+      if (rawAuto < cfg.minAutoCashout) {
+        return { ok: false, error: `Автовывод — минимум ${cfg.minAutoCashout.toFixed(2)}×` };
+      }
+      if (rawAuto > cfg.maxAutoCashout) {
+        return { ok: false, error: 'Автовывод слишком большой — поставь меньше' };
+      }
+      autoX = rawAuto;
+    }
+    return { ok: true, bet, autoX };
   },
 
   /* ======================================================================
@@ -225,10 +274,18 @@ const CrashGame = {
       return;
     }
 
+    /* Финальный предохранитель: даже если что-то пошло не так выше —
+       списываем не больше остатка и никогда не уводим баланс в минус. */
+    const bet = Math.max(CRASH_CONFIG.minBet, Math.min(parsed.bet, CRASH_CONFIG.maxBet, Math.floor(state.balance)));
+    if (bet < parsed.bet || bet <= 0) {
+      Toast.error(`Нельзя поставить ${fmt(parsed.bet)} ₽ — на балансе ${fmt(state.balance)} ₽`);
+      return;
+    }
+
     audio.init();
 
     // 1. Фиксируем параметры раунда
-    this.bet = parsed.bet;
+    this.bet = bet;
     this.autoX = parsed.autoX;
     this.crashAt = crashPointFromRoll(RNG.float());      // точка краша — ДО старта
     this.mult = 1;
@@ -237,10 +294,11 @@ const CrashGame = {
     this.particles = [];
     clearTimeout(this.resetTimer);
 
-    // 2. Списание ставки — ровно один раз за раунд
-    spendMoney(this.bet);
+    // 2. Списание ставки — мгновенно, в момент нажатия, ровно один раз
+    spendMoney(bet);
+    if (state.balance < 0) state.balance = 0;           // баланс никогда не уходит в минус
     state.stats.crashRounds = (state.stats.crashRounds || 0) + 1;
-    state.stats.crashWagered = (state.stats.crashWagered || 0) + this.bet;
+    state.stats.crashWagered = (state.stats.crashWagered || 0) + bet;
     if (typeof addXp === 'function') addXp(XP_REWARDS.crashRound || 4, { silent: true });
 
     // 3. Полетели
@@ -255,8 +313,8 @@ const CrashGame = {
   cashout(auto = false) {
     if (this.phase !== 'flying') return;
 
-    // Автовывод срабатывает ровно на целевом множителе
-    const mult = this.autoX && auto ? this.autoX : this.mult;
+    // Автовывод забирает ровно на целевом множителе
+    const mult = (auto && this.autoX) ? this.autoX : this.mult;
     const payout = crashPayout(this.bet, mult);
     const profit = payout - this.bet;
 
@@ -275,7 +333,7 @@ const CrashGame = {
     if (mult >= 10) Fx.gold(180); else Fx.burst(70, ['#22c55e', '#a3e635', '#facc15']);
 
     Toast.success(
-      `🚀 Забрал на <b>${mult.toFixed(2)}×</b>: +${fmt(payout)} ₽` +
+      `Забрал на <b>${mult.toFixed(2)}×</b>: +${fmt(payout)} ₽` +
       `${profit > 0 ? ` (чистыми +${fmt(profit)} ₽)` : ''}${auto ? ' · автовывод' : ''}`, 4200
     );
     this.pushHistory(mult, true);
@@ -293,7 +351,7 @@ const CrashGame = {
     this.spawnParticles();
     Fx.thunder();
 
-    Toast.error(`💥 <b>ВЗРЫВ на ${this.crashAt.toFixed(2)}×</b> — ставка ${fmt(this.bet)} ₽ сгорела. Попробуй ещё раз!`, 4200);
+    Toast.error(`ВЗРЫВ на <b>${this.crashAt.toFixed(2)}×</b> — ставка ${fmt(this.bet)} ₽ сгорела. Попробуй ещё раз!`, 4200);
     this.pushHistory(this.crashAt, false);
     this.finishRound();
   },
@@ -306,7 +364,6 @@ const CrashGame = {
     this.render();
     persist(true);
 
-    // Небольшая пауза, чтобы игрок увидел результат, потом — новая ставка
     clearTimeout(this.resetTimer);
     this.resetTimer = setTimeout(() => {
       if (this.phase === 'flying') return;     // на всякий случай
@@ -333,6 +390,16 @@ const CrashGame = {
     state.stats.crashHistory = state.stats.crashHistory.slice(0, CRASH_CONFIG.historySize);
   },
 
+  /** Сколько секунд прошло с нажатия «Запустить» */
+  elapsed() {
+    return Math.max(0, (Date.now() - this.startWall) / 1000);
+  },
+
+  /** Идёт гарантированный разгон (краш в этой фазе невозможен) */
+  isTakeoff() {
+    return this.phase === 'flying' && this.elapsed() < CRASH_CONFIG.takeoffSec;
+  },
+
   /* ======================================================================
      ИГРОВОЙ ЦИКЛ
      ====================================================================== */
@@ -347,28 +414,32 @@ const CrashGame = {
   },
 
   frame() {
-    const now = (Date.now() - this.startWall) / 1000;   // реальное время: раунд честно идёт и в фоне
-
     if (this.phase === 'flying') {
-      const m = crashMultiplierAt(now);
+      const t = this.elapsed();                 // реальное время: раунд честно идёт и в фоне
+      const m = crashMultiplierAt(t);
 
-      // Автовывод срабатывает первым: он «забирает» на своём множителе
-      if (this.autoX && m >= this.autoX) {
+      // Во время разгона множитель держится 1.00× и краш проверять нельзя
+      if (t >= CRASH_CONFIG.takeoffSec) {
+        if (this.autoX && m >= this.autoX) {
+          this.mult = m;
+          this.updateHud();
+          this.draw();
+          this.cashout(true);
+          return;
+        }
+        if (m >= this.crashAt) {
+          this.explode();
+          return;
+        }
         this.mult = m;
-        this.draw();
-        this.cashout(true);
-        return;
+      } else {
+        this.mult = 1;
       }
-      if (m >= this.crashAt) {
-        this.explode();
-        return;
-      }
-      this.mult = m;
 
       // Тик высоты: раз в ~130 мс, чтобы не превращать полёт в трещотку
-      const t = Date.now();
-      if (t - this.lastTickSound > 130) {
-        this.lastTickSound = t;
+      const nowMs = Date.now();
+      if (!this.isTakeoff() && nowMs - this.lastTickSound > 130) {
+        this.lastTickSound = nowMs;
         audio.playCrashTick(this.mult);
       }
       this.updateHud();
@@ -389,11 +460,12 @@ const CrashGame = {
      ЧАСТИЦЫ ВЗРЫВА
      ====================================================================== */
   spawnParticles() {
+    if (document.body.classList.contains('no-motion')) return;
     const low = typeof Quality !== 'undefined' && Quality.isLow();
     const n = low ? 16 : 40;
-    if (document.body.classList.contains('no-motion')) return;
     const pad = 26;
-    const x = this.xFor(crashTimeToMultiplier(this.crashAt), crashTimeToMultiplier(this.crashAt), this.w, pad);
+    const tCrash = crashTimeToMultiplier(this.crashAt);
+    const x = this.xFor(tCrash, tCrash, this.w, pad);
     const y = this.yFor(this.crashAt, this.h, pad);
     for (let i = 0; i < n; i++) {
       const a = Math.random() * Math.PI * 2;
@@ -413,21 +485,92 @@ const CrashGame = {
     for (const p of this.particles) {
       p.x += p.vx * dt;
       p.y += p.vy * dt;
-      p.vy += 210 * dt;      // gravity
+      p.vy += 210 * dt;      // гравитация
       p.life -= dt * 1.15;
     }
     this.particles = this.particles.filter(p => p.life > 0);
   },
 
   /* ======================================================================
-     ОТРИСОВКА
+     РАКЕТА: вектор, а не эмодзи (эмодзи на части ОС не рисуются)
+     ====================================================================== */
+  drawRocket(x, y, opts = {}) {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const scale = opts.scale || 1;
+    const tilt = Math.max(-0.7, Math.min(0.7, opts.tilt || 0));
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(tilt);
+    ctx.scale(scale, scale);
+
+    // Пламя
+    if (opts.flame) {
+      const f = 9 + Math.random() * 9;
+      const grad = ctx.createLinearGradient(0, 6, 0, 6 + f);
+      grad.addColorStop(0, 'rgba(255,225,140,0.95)');
+      grad.addColorStop(0.45, 'rgba(255,138,20,0.75)');
+      grad.addColorStop(1, 'rgba(255,70,0,0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.moveTo(-3.6, 5.5);
+      ctx.quadraticCurveTo(0, 6 + f + 4, 3.6, 5.5);
+      ctx.quadraticCurveTo(0, 6 + f * 0.45, -3.6, 5.5);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Стабилизаторы
+    ctx.fillStyle = '#ef4444';
+    ctx.beginPath();
+    ctx.moveTo(-6.2, 1.2); ctx.lineTo(-11, 8.6); ctx.lineTo(-6.2, 6.6);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(6.2, 1.2); ctx.lineTo(11, 8.6); ctx.lineTo(6.2, 6.6);
+    ctx.closePath(); ctx.fill();
+
+    // Корпус
+    ctx.beginPath();
+    ctx.moveTo(0, -13.5);
+    ctx.quadraticCurveTo(6.8, -6.5, 6.8, 1.6);
+    ctx.lineTo(6.8, 6);
+    ctx.lineTo(-6.8, 6);
+    ctx.lineTo(-6.8, 1.6);
+    ctx.quadraticCurveTo(-6.8, -6.5, 0, -13.5);
+    ctx.closePath();
+    const body = ctx.createLinearGradient(-6.8, -13.5, 6.8, 6);
+    body.addColorStop(0, '#f8fafc');
+    body.addColorStop(1, '#8fa3bb');
+    ctx.fillStyle = body;
+    ctx.fill();
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(15,23,42,0.65)';
+    ctx.stroke();
+
+    // Иллюминатор
+    ctx.beginPath();
+    ctx.arc(0, -2.4, 3, 0, Math.PI * 2);
+    ctx.fillStyle = '#0ea5e9';
+    ctx.fill();
+    ctx.lineWidth = 1.2;
+    ctx.strokeStyle = 'rgba(248,250,252,0.92)';
+    ctx.stroke();
+
+    ctx.restore();
+  },
+
+  /* ======================================================================
+     ОТРИСОВКА ПОЛЯ ПОЛЁТА
      ====================================================================== */
   draw() {
     const ctx = this.ctx;
     if (!ctx) return;
-    const w = this.w || 300, h = this.h || 200, pad = 26;
+    const w = this.w || 320, h = this.h || 210, pad = 26;
     const crashed = this.phase === 'crashed';
     const won = this.phase === 'cashed';
+    const flying = this.phase === 'flying';
+    const takeoff = this.isTakeoff();
 
     ctx.clearRect(0, 0, w, h);
 
@@ -468,12 +611,13 @@ const CrashGame = {
     }
 
     /* Траектория полёта */
-    const tNow = Math.max(0, (Date.now() - this.startWall) / 1000);
-    const tEnd = this.phase === 'idle' ? 0 : (this.phase === 'flying' ? tNow : crashTimeToMultiplier(this.mult));
+    const tNow = this.elapsed();
+    const tEnd = this.phase === 'idle' ? 0 : (flying ? tNow : crashTimeToMultiplier(this.mult));
+    const curveColor = crashed ? '#ef4444' : (won ? '#22c55e' : '#38bdf8');
+
     if (this.phase !== 'idle' && tEnd > 0) {
       const steps = 64;
       const from = Math.max(0, tEnd - 9);
-      const color = crashed ? '#ef4444' : (won ? '#22c55e' : '#38bdf8');
 
       ctx.beginPath();
       for (let i = 0; i <= steps; i++) {
@@ -484,8 +628,8 @@ const CrashGame = {
         if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
       }
       ctx.lineWidth = 2.5;
-      ctx.strokeStyle = color;
-      ctx.shadowColor = color;
+      ctx.strokeStyle = curveColor;
+      ctx.shadowColor = curveColor;
       ctx.shadowBlur = 12;
       ctx.stroke();
       ctx.shadowBlur = 0;
@@ -501,29 +645,24 @@ const CrashGame = {
       ctx.fill();
     }
 
-    /* Ракета */
+    /* Ракета — векторная, с наклоном по направлению полёта */
     if (this.phase !== 'idle' && !crashed) {
       const px = this.xFor(tEnd, tEnd, w, pad);
       const py = this.yFor(this.mult, h, pad);
 
-      // Пламя
-      if (this.phase === 'flying') {
-        const flick = 6 + Math.random() * 8;
-        const fl = ctx.createLinearGradient(px, py + 10, px, py + 10 + flick);
-        fl.addColorStop(0, 'rgba(255,196,0,0.95)');
-        fl.addColorStop(1, 'rgba(255,80,0,0)');
-        ctx.fillStyle = fl;
-        ctx.beginPath();
-        ctx.moveTo(px - 5, py + 8);
-        ctx.lineTo(px, py + 10 + flick);
-        ctx.lineTo(px + 5, py + 8);
-        ctx.closePath();
-        ctx.fill();
+      let tilt = 0;
+      if (tEnd > 0.3) {
+        const tA = Math.max(0, tEnd - 0.35);
+        const dx = this.xFor(tEnd, tEnd, w, pad) - this.xFor(tA, tEnd, w, pad);
+        const dy = this.yFor(crashMultiplierAt(tEnd), h, pad) - this.yFor(crashMultiplierAt(tA), h, pad);
+        if (dx) tilt = Math.atan2(dy, dx) + Math.PI / 2;
       }
-      ctx.font = '22px serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('🚀', px, py);
+      // На разгоне ракета стоит ровно, дальше — по касательной
+      this.drawRocket(px, py, {
+        scale: Math.max(0.75, Math.min(1.15, w / 340)),
+        tilt: takeoff ? 0 : tilt,
+        flame: flying && !takeoff
+      });
     }
 
     /* Частицы взрыва */
@@ -536,7 +675,7 @@ const CrashGame = {
     }
     ctx.globalAlpha = 1;
 
-    /* Земля */
+    /* Стартовая площадка */
     ctx.strokeStyle = 'rgba(148,163,184,0.25)';
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -588,20 +727,24 @@ const CrashGame = {
     const status = $('crashStatusText');
     if (status) {
       if (this.phase === 'idle') {
-        status.textContent = this.autoXText()
-          ? `Готов к запуску · автовывод на ${this.autoXText()}`
-          : 'Готов к запуску';
+        const auto = this.autoXText();
+        status.textContent = auto
+          ? `Готов к запуску · автовывод на ${auto}× · мин. ${fmt(CRASH_CONFIG.minBet)} ₽`
+          : `Готов к запуску · мин. ${fmt(CRASH_CONFIG.minBet)} ₽`;
         status.className = 'text-[10px] text-slate-400';
-      } else if (this.phase === 'flying') {
+      } else if (this.isTakeoff()) {
+        status.textContent = 'Разгон: ракета на старте, краш невозможен';
+        status.className = 'text-[10px] text-amber-300';
+      } else if (flying) {
         status.textContent = this.autoX
           ? `Полетели! Заберу автоматически на ${this.autoX.toFixed(2)}×`
           : 'Полетели! Успей забрать до взрыва';
         status.className = 'text-[10px] text-sky-300';
       } else if (this.phase === 'cashed') {
-        status.textContent = `✅ Забрал на ${this.mult.toFixed(2)}× · +${fmt(crashPayout(this.bet, this.mult))} ₽`;
+        status.textContent = `Забрал на ${this.mult.toFixed(2)}× · +${fmt(crashPayout(this.bet, this.mult))} ₽`;
         status.className = 'text-[10px] text-emerald-300 font-bold';
       } else {
-        status.textContent = `💥 Взрыв на ${this.crashAt.toFixed(2)}× · ставка сгорела`;
+        status.textContent = `Взрыв на ${this.crashAt.toFixed(2)}× · ставка сгорела`;
         status.className = 'text-[10px] text-rose-300 font-bold';
       }
     }
@@ -640,7 +783,7 @@ const CrashGame = {
     if (!box) return;
     const list = state.stats.crashHistory || [];
     if (!list.length) {
-      box.innerHTML = '<span class="text-[10px] text-slate-500">История пуста — запусти первую ракету 🚀</span>';
+      box.innerHTML = '<span class="text-[10px] text-slate-500">История пуста — запусти первую ракету</span>';
       return;
     }
     box.innerHTML = list.map(h => {

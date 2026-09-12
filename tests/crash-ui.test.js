@@ -34,15 +34,21 @@ const t = (name, cond, extra = '') => {
 const noop = () => {};
 function stubCanvasContext() {
   const gradient = { addColorStop: noop };
-  return {
-    setTransform: noop, clearRect: noop, fillRect: noop, beginPath: noop, arc: noop,
-    fill: noop, stroke: noop, moveTo: noop, lineTo: noop, closePath: noop, fillText: noop,
-    save: noop, restore: noop, setLineDash: noop, translate: noop, rotate: noop, scale: noop,
+  const ctx = {
+    // базовое рисование
+    setTransform: noop, clearRect: noop, fillRect: noop, strokeRect: noop,
+    beginPath: noop, closePath: noop, moveTo: noop, lineTo: noop, arc: noop, ellipse: noop,
+    quadraticCurveTo: noop, bezierCurveTo: noop, rect: noop,
+    fill: noop, stroke: noop, fillText: noop, strokeText: noop, clip: noop,
+    save: noop, restore: noop, translate: noop, rotate: noop, scale: noop,
+    setLineDash: noop, drawImage: noop,
     createLinearGradient: () => gradient, createRadialGradient: () => gradient,
-    measureText: () => ({ width: 10 }),
-    globalAlpha: 1, fillStyle: '', strokeStyle: '', lineWidth: 1,
+    createPattern: () => null, measureText: () => ({ width: 10 }),
+    // свойства, которые код выставляет
+    globalAlpha: 1, fillStyle: '', strokeStyle: '', lineWidth: 1, lineCap: '', lineJoin: '',
     font: '', textAlign: '', textBaseline: '', shadowColor: '', shadowBlur: 0
   };
+  return ctx;
 }
 
 const dom = new JSDOM(html, {
@@ -83,10 +89,10 @@ function runScript(rel) {
 
 console.log('\n📦 ЗАГРУЗКА ПРОЕКТА');
 
-const scriptFiles = [
-  'js/preloader.js', 'js/config.js', 'js/storage.js', 'js/ui.js',
-  'js/game.js', 'js/crash.js', 'js/games.js', 'js/netplay.js', 'js/main.js'
-];
+// Порядок загрузки берём прямо из разметки — так тест не расходится с продакшеном
+// (и сразу подхватывает новые модули вроде js/icons.js)
+const scriptFiles = [...html.matchAll(/<script[^>]+src="(js\/[^"]+)"/g)].map(m => m[1].split('?')[0]);
+t('в разметке подключены все модули игры', scriptFiles.length >= 8, scriptFiles.join(', '));
 const loadErrors = scriptFiles.map(runScript).filter(Boolean);
 t('все скрипты проекта выполнились без исключений', loadErrors.length === 0, loadErrors.join(' | '));
 t('игра запустилась (initGame отработал)', typeof g('state') !== 'undefined' && g('state').balance >= 0);
@@ -235,6 +241,98 @@ const tick = () => new Promise(r => setTimeout(r, 30));
   t('корректная ставка запускает раунд', Crash.phase === 'flying' && st.balance === beforeBad - 500);
   Crash.cashout(false);
   t('ручной вывод работает', Crash.phase === 'cashed' && st.balance > beforeBad - 500);
+
+  console.log('\n⏱ РАЗГОН И ЗАЩИТА ОТ МГНОВЕННОГО КРАША');
+
+  const CFG = g('CRASH_CONFIG');
+  Crash.phase = 'idle';
+  Crash.mult = 1;
+  st.balance = 100000;
+  document.getElementById('crashBetInput').value = '1000';
+  document.getElementById('crashAutoInput').value = '';
+
+  const beforeTakeoff = st.balance;
+  g('crashStart')();
+  t('ставка списалась в ту же миллисекунду, что и нажатие', st.balance === beforeTakeoff - 1000,
+    `${beforeTakeoff} -> ${st.balance}`);
+
+  Crash.crashAt = 1.0;                       // худший из возможных раундов
+  Crash.startWall = Date.now() - 500;        // прошло 0.5 сек
+  Crash.frame();
+  t('на 0.5 сек ракета ещё летит (краша нет)', Crash.phase === 'flying', Crash.phase);
+  t('на разгоне множитель ровно 1.00×', Crash.mult === 1, String(Crash.mult));
+  t('функция разгона отвечает правду', Crash.isTakeoff() === true);
+
+  Crash.startWall = Date.now() - 1000;       // 1.0 сек — разгон ещё идёт
+  Crash.frame();
+  t('на 1.0 сек краша всё ещё нет', Crash.phase === 'flying' && Crash.mult === 1);
+
+  Crash.startWall = Date.now() - 1500;       // 1.5 сек — разгон кончился
+  Crash.frame();
+  t('после минимальной длительности полёта краш случается', Crash.phase === 'crashed', Crash.phase);
+  t('минимальная длительность полёта задана конфигом',
+    CFG.takeoffSec >= 1 && CFG.takeoffSec <= 1.5, String(CFG.takeoffSec));
+
+  console.log('\n🛡 ЛИМИТЫ И БАЛАНС');
+
+  Crash.phase = 'idle';
+  st.balance = 5000;
+  const setBet = v => { document.getElementById('crashBetInput').value = String(v); };
+
+  setBet(CFG.maxBet + 1);
+  g('crashStart')();
+  t('ставка выше максимального лимита блокируется', Crash.phase === 'idle' && st.balance === 5000);
+
+  setBet(CFG.maxBet);
+  g('crashStart')();
+  t('ставка выше баланса блокируется (было бы списание в минус)',
+    Crash.phase === 'idle' && st.balance === 5000);
+
+  setBet(-500);
+  g('crashStart')();
+  t('отрицательная ставка блокируется', Crash.phase === 'idle' && st.balance === 5000);
+
+  setBet(0);
+  g('crashStart')();
+  t('нулевая ставка блокируется', Crash.phase === 'idle' && st.balance === 5000);
+
+  setBet(CFG.minBet - 1);
+  g('crashStart')();
+  t('ставка ниже минимума блокируется', Crash.phase === 'idle' && st.balance === 5000);
+
+  // Проигрыш «в ноль»: баланс не должен уйти в минус
+  Crash.phase = 'idle';
+  st.balance = 150;
+  setBet(150);
+  g('crashStart')();
+  t('ставка на весь остаток запускается', Crash.phase === 'flying' && st.balance === 0, String(st.balance));
+  Crash.crashAt = 2;
+  Crash.startWall = Date.now() - 9000;
+  Crash.frame();
+  t('после проигрыша баланс = 0, но не отрицательный', st.balance === 0, String(st.balance));
+
+  // Быстрая кнопка MAX не предлагает больше баланса
+  Crash.phase = 'idle';
+  st.balance = 2500;
+  document.getElementById('crashBetInput').value = '';
+  Crash.applyQuickBet('max');
+  t('кнопка MAX ограничена балансом',
+    Number(document.getElementById('crashBetInput').value) === 2500,
+    document.getElementById('crashBetInput').value);
+
+  console.log('\n🎨 ИКОНКИ ВМЕСТО ЭМОДЗИ');
+
+  const crashIcons = [...document.querySelectorAll('#viewCrash [data-icon]')];
+  t('в панели ракеты есть места под иконки', crashIcons.length >= 6, String(crashIcons.length));
+  t('все иконки ракеты — встроенные SVG',
+    crashIcons.length > 0 && crashIcons.every(i => !!i.querySelector('svg')));
+  t('в меню игр иконки тоже векторные',
+    [...document.querySelectorAll('#gamesList .mini-game-icon')].every(i => !!i.querySelector('svg')));
+  const viewText = document.getElementById('viewCrash').textContent || '';
+  const hasEmoji = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/u.test(viewText);
+  t('в интерфейсе ракеты не осталось системных эмодзи', !hasEmoji);
+  t('ракета рисуется на canvas вектором, а не эмодзи',
+    /drawRocket/.test(String(Crash.drawRocket)) && !/fillText\(\s*['\"]🚀/.test(String(Crash.draw)));
 
   console.log('\n🧩 ЦЕЛОСТНОСТЬ');
 

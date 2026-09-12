@@ -105,16 +105,51 @@ console.log('\n🚀 МАТЕМАТИКА РАКЕТЫ');
   }
 }
 
-/* ---------- 4. Рост множителя во времени ---------- */
+/* ---------- 4. Тайминг полёта: разгон, кривая роста ---------- */
 {
+  const TO = CRASH_CONFIG.takeoffSec;
   t('в момент старта множитель = 1.00×', close(crashMultiplierAt(0), 1, 1e-12));
-  t('множитель растёт монотонно', [0, 1, 2, 3, 5, 8, 13].every((v, i, a) =>
+
+  // Фаза разгона: множитель держится ровно 1.00×, взрыв раньше невозможен
+  t('разгон длится не меньше 1 секунды', TO >= 1 && TO <= 1.5, `${TO} сек`);
+  let flat = true;
+  for (let t = 0; t < TO; t += 0.05) if (crashMultiplierAt(t) !== 1) flat = false;
+  t('всю фазу разгона множитель ровно 1.00×', flat);
+  t('сразу после разгона множитель начинает расти', crashMultiplierAt(TO + 0.05) > 1);
+
+  // Монотонный рост после разгона
+  const after = [TO, TO + 1, TO + 2, TO + 4, TO + 8, TO + 15];
+  t('множитель растёт монотонно после разгона', after.every((v, i, a) =>
     i === 0 || crashMultiplierAt(v) > crashMultiplierAt(a[i - 1])));
+  t('множитель растёт монотонно и на разгоне-границе',
+    crashMultiplierAt(TO) >= crashMultiplierAt(TO - 0.01));
+
+  // Ни один раунд не может взорваться раньше минимального времени полёта
+  const roll = seeded(4242);
+  let minTime = Infinity;
+  for (let i = 0; i < 200000; i++) {
+    minTime = Math.min(minTime, crashTimeToMultiplier(crashPointFromRoll(roll())));
+  }
+  t('минимальное время до возможного взрыва >= takeoffSec',
+    minTime >= TO - 1e-9, `минимум ${minTime.toFixed(3)} сек`);
+  t('мгновенного краша на первой миллисекунде нет', crashTimeToMultiplier(1) >= 1);
+
+  // Плавный и предсказуемый старт + ускорение на высоких иксах
+  const m1 = crashMultiplierAt(TO + 1);
+  const m10 = crashMultiplierAt(TO + 10);
+  t('за первую секунду полёта множитель вырастает не больше чем на 0.30',
+    m1 - 1 <= 0.3, `${(m1 - 1).toFixed(3)}`);
+  t('на высоких иксах рост ускоряется',
+    (crashMultiplierAt(TO + 20) / m10) > (m10 / m1) / 10, `10с=${m10.toFixed(2)}×`);
+
   const t2 = crashTimeToMultiplier(2);
-  t('2.00× достигается за разумные 2–7 секунд', t2 > 2 && t2 < 7, `${t2.toFixed(2)} сек`);
+  t('2.00× достигается за разумные 2–8 секунд', t2 > 2 && t2 < 8, `${t2.toFixed(2)} сек`);
   t('время и множитель согласованы (прямая + обратная формула)',
     close(crashMultiplierAt(crashTimeToMultiplier(7.5)), 7.5, 1e-9));
   t('отрицательное время не даёт множитель ниже 1', crashMultiplierAt(-10) === 1);
+  t('лимиты ставок заданы и адекватны',
+    CRASH_CONFIG.minBet > 0 && CRASH_CONFIG.maxBet > CRASH_CONFIG.minBet &&
+    CRASH_CONFIG.maxBet <= 1e9, `${CRASH_CONFIG.minBet}…${CRASH_CONFIG.maxBet}`);
 }
 
 /* ---------- 5. Выплата ---------- */

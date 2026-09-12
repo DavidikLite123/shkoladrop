@@ -61,10 +61,15 @@ const MiniGames = {
     }
     box.innerHTML = games.map(g => {
       const current = this.isCurrent(g);
+      // Встроенная SVG-иконка вместо системного эмодзи: на ОС без эмодзи-шрифтов
+      // эмодзи рисуются пустыми квадратами. Эмодзи остаётся запасным вариантом.
+      const icon = (typeof Icons !== 'undefined' && g.iconSvg && Icons.has(g.iconSvg))
+        ? Icons.svg(g.iconSvg, { size: 22 })
+        : escapeHtml(g.icon || '🎮');
       return `
         <button type="button" onclick="selectMiniGame('${escapeHtml(g.id)}')"
                 class="mini-game-card ${current ? 'mini-game-card-current' : ''}">
-          <span class="mini-game-icon">${escapeHtml(g.icon || '🎮')}</span>
+          <span class="mini-game-icon">${icon}</span>
           <span class="flex-1 min-w-0">
             <b>${escapeHtml(g.name || g.id)}</b>
             <small>${escapeHtml(g.desc || '')}</small>
