@@ -19,6 +19,7 @@
      SHKOLA_VAULT_TOKEN=github_pat_...                   (fine-grained, только Contents: R/W)
      SHKOLA_VAULT_PATH=shkola-db.json                    (необязательно)
      SHKOLA_VAULT_BRANCH=main                            (необязательно)
+     SHKOLA_VAULT_API=https://api.github.com             (необязательно; только для тестов)
    или:
      SHKOLA_VAULT=fs
      SHKOLA_VAULT_PATH=/mnt/disk/shkola-db.json       (обязателен)
@@ -133,7 +134,9 @@ const Vault = {
       'Accept': 'application/vnd.github+json',
       'X-GitHub-Api-Version': '2022-11-28'
     };
-    const api = `https://api.github.com/repos/${repo}/contents/${encodeURIComponent(file).replace(/%2F/g, '/')}`;
+    // SHKOLA_VAULT_API — только для автотестов (поддельный GitHub); по умолчанию настоящий API.
+    const apiBase = String(process.env.SHKOLA_VAULT_API || 'https://api.github.com').replace(/\/+$/, '');
+    const api = `${apiBase}/repos/${repo}/contents/${encodeURIComponent(file).replace(/%2F/g, '/')}`;
     return { api, branch, headers };
   },
 

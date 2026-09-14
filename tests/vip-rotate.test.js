@@ -35,7 +35,7 @@ const end = config.indexOf('\n];', start);
 const hashes = config.slice(start, end).match(/'[0-9a-f]{24}'/g).map(s => s.replace(/'/g, ''));
 
 /* Коды, которые лежали в публичном репозитории и раздавались сайтом */
-const LEAKED = ['VIP-RS77-J7Y6', 'VIP-FR5H-JDV7', 'VIP-38YK-ULK3', 'VIP-YU25-A3VN', 'VIP-ATBU-CYCG', 'VIP-NNKN-NLN3'];
+const LEAKED = ['VIP-RS77-J7Y6', 'VIP-FR5H-JDV7', 'VIP-38YK-ULK3', 'VIP-YU25-A3VN', 'VIP-NNKN-NLN3'];
 
 /* Настоящий код — это VIP-XXXX-XXXX без «заглушек» (в текстах встречается VIP-XXXX-XXXX) */
 const CODE_RX = /VIP-[A-Z0-9]{4}-[A-Z0-9]{4}/g;

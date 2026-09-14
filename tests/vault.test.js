@@ -183,6 +183,77 @@ let vaultPort = 0;
     }, 12000);
     t('копия базы уехала в файл-сейф', fsPushed);
     fsServer.kill('SIGTERM');
+
+    console.log('\n🐈 GitHub-режим (поддельный API): база переживает редеплой');
+    // Подделываем api.github.com: GET отдаёт файл, PUT сохраняет (как Contents API).
+    let ghFile = null;
+    const ghServer = http.createServer((req, res) => {
+      const send = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
+      if (req.method === 'GET') {
+        if (!ghFile) return send(404, { message: 'Not Found' });
+        return send(200, { sha: ghFile.sha, content: Buffer.from(ghFile.text, 'utf8').toString('base64'), encoding: 'base64' });
+      }
+      if (req.method === 'PUT') {
+        const chunks = [];
+        req.on('data', c => chunks.push(c));
+        req.on('end', () => {
+          try {
+            const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+            ghFile = { sha: 'sha-' + Date.now(), text: Buffer.from(body.content, 'base64').toString('utf8') };
+            send(201, { ok: true });
+          } catch (e) { send(400, { message: 'bad' }); }
+        });
+        return;
+      }
+      send(405, {});
+    });
+    await new Promise(r => ghServer.listen(0, '127.0.0.1', r));
+    const ghPort = ghServer.address().port;
+
+    const ghEnv = {
+      SHKOLA_VAULT: 'github',
+      SHKOLA_VAULT_REPO: 'DavidikLite123/shkoladrop-vault',
+      SHKOLA_VAULT_TOKEN: 'test-token',
+      SHKOLA_VAULT_API: `http://127.0.0.1:${ghPort}`,
+      SHKOLA_REGISTRY_FILE: path.join(tmpRoot, 'author-codes.json'),
+      SHKOLA_VAULT_MIN_SEC: '2'
+    };
+    const ghA = spawn(process.execPath, [path.join(__dirname, '..', 'server', 'index.js')], {
+      env: Object.assign({}, process.env, ghEnv, { PORT: String(PORT + 3), HOST: '127.0.0.1', SHKOLA_DATA_DIR: path.join(tmpRoot, 'gh-disk-A') }),
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+    ghA.stdout.on('data', () => {});
+    let ghAUp = false;
+    for (let i = 0; i < 50; i++) {
+      try { if ((await fetch(`http://127.0.0.1:${PORT + 3}/api/ping`)).ok) { ghAUp = true; break; } } catch (e) {}
+      await new Promise(r => setTimeout(r, 200));
+    }
+    t('сервер с GitHub-сейфом поднялся', ghAUp);
+    await fetch(`http://127.0.0.1:${PORT + 3}/api/save`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uid: uid + '-gh', nick, save })
+    });
+    t('база уехала в «GitHub»', await waitFor(() => !!ghFile, 12000));
+    ghA.kill('SIGKILL'); // редеплой без мягкого выхода
+    await new Promise(r => setTimeout(r, 400));
+
+    const ghB = spawn(process.execPath, [path.join(__dirname, '..', 'server', 'index.js')], {
+      env: Object.assign({}, process.env, ghEnv, { PORT: String(PORT + 4), HOST: '127.0.0.1', SHKOLA_DATA_DIR: path.join(tmpRoot, 'gh-disk-B') }),
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+    let ghLog = '';
+    ghB.stdout.on('data', d => { ghLog += d; });
+    let ghBUp = false;
+    for (let i = 0; i < 50; i++) {
+      try { if ((await fetch(`http://127.0.0.1:${PORT + 4}/api/ping`)).ok) { ghBUp = true; break; } } catch (e) {}
+      await new Promise(r => setTimeout(r, 200));
+    }
+    t('сервер после «редеплоя» поднялся', ghBUp);
+    const ghSave = await (await fetch(`http://127.0.0.1:${PORT + 4}/api/save?uid=${uid}-gh`)).json();
+    t('прогресс поднят из GitHub-сейфа', ghSave.ok === true && ghSave.save.balance === 777777, JSON.stringify(ghSave).slice(0, 100));
+    t('в логе отмечено восстановление из github', /база восстановлена из сейфа \(github/i.test(ghLog), (ghLog.match(/\[vault\][^\n]*/) || [''])[0]);
+    ghB.kill('SIGTERM');
+    ghServer.close();
   } finally {
     try { server.kill('SIGTERM'); } catch (e) {}
     vaultServer.close();
