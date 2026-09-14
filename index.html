@@ -104,7 +104,7 @@
       max-width: 28rem;
       z-index: 45;
       display: grid;
-      grid-template-columns: repeat(7, minmax(0, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 0.25rem;
       padding: 0.4rem 0.6rem calc(0.4rem + env(safe-area-inset-bottom, 0px));
       background: rgba(9, 12, 18, 0.96);
@@ -482,9 +482,11 @@
 
   <!-- ================= TAB 2: INVENTORY ================= -->
   <main id="viewInventory" class="view-panel w-full px-4 mt-2 hidden space-y-3">
+    <!-- Переключатель раздела «Рюкзак · Крафт · Коллекции» (рисует renderItemsSegNav) -->
+    <div class="seg-bar items-seg-nav"></div>
     <div class="flex items-center justify-between">
       <div>
-        <h2 class="font-cs text-sm font-bold uppercase tracking-wider text-slate-200">Школьный рюкзак</h2>
+        <h2 class="font-cs text-sm font-bold uppercase tracking-wider text-slate-200">🎒 Школьный рюкзак</h2>
         <p class="text-[11px] text-slate-400">Все твои залутанные вещи, дроп из кейсов и скины</p>
       </div>
       <button onclick="sellDuplicates()" class="px-2.5 py-1 text-[11px] font-bold bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-lg transition active:scale-95" title="Продать все дубликаты, оставив по одному предмету каждого вида">
@@ -909,6 +911,7 @@
 
   <!-- ================= TAB: CRAFT (4.0) ================= -->
   <main id="viewCraft" class="view-panel w-full px-4 mt-2 hidden space-y-3">
+    <div class="seg-bar items-seg-nav"></div>
     <div class="flex items-center justify-between">
       <div>
         <h2 class="font-cs text-sm font-bold uppercase tracking-wider text-slate-200">🔨 Крафт</h2>
@@ -944,6 +947,7 @@
 
   <!-- ================= TAB: COLLECTIONS (4.0) ================= -->
   <main id="viewCollections" class="view-panel w-full px-4 mt-2 hidden space-y-3">
+    <div class="seg-bar items-seg-nav"></div>
     <div>
       <h2 class="font-cs text-sm font-bold uppercase tracking-wider text-slate-200">📚 Коллекции</h2>
       <p class="text-[11px] text-slate-400">Собирай тематические наборы — получай бонусы к крафту, дропу и косметике</p>
@@ -1097,22 +1101,13 @@
     </div>
   </div>
 
-  <nav id="tabbar" class="tabbar" style="grid-template-columns: repeat(7, minmax(0, 1fr));">
-  
+  <nav id="tabbar" class="tabbar" style="grid-template-columns: repeat(4, minmax(0, 1fr));">
+
     <button onclick="openGamesModal()" id="tabGames" class="nav-tab nav-tab-active">
       <span>🎮</span><span>Игры</span>
     </button>
     <button onclick="switchTab('inventory')" id="tabInventory" class="nav-tab">
       <span>🎒</span><span>Рюкзак (<span id="invCountBadge">0</span>)</span>
-    </button>
-    <button onclick="switchTab('craft')" id="tabCraft" class="nav-tab">
-      <span>🔨</span><span>Крафт</span>
-    </button>
-    <button onclick="switchTab('collections')" id="tabCollections" class="nav-tab">
-      <span>📚</span><span>Коллекции</span>
-    </button>
-    <button onclick="switchTab('modes')" id="tabModes" class="nav-tab">
-      <span>🎮</span><span>Режимы</span>
     </button>
     <button onclick="switchTab('community')" id="tabCommunity" class="nav-tab relative">
       <span id="communityNewBadge" class="hidden absolute -top-1.5 right-1 text-[7px] font-black px-1 py-0.5 rounded-full bg-cyan-500 text-slate-950 uppercase tracking-wide shadow-lg shadow-cyan-500/50" style="animation: livePulse 1.4s ease-in-out infinite;">NEW</span>

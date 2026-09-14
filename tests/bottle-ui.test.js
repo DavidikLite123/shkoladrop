@@ -115,7 +115,7 @@ const tick = () => new Promise(r => setTimeout(r, 30));
   const games = g('MiniGames');
   const bottleEntry = games.find('bottle');
   t('бутылочка есть в реестре игр', !!bottleEntry && bottleEntry.tab === 'bottle' && bottleEntry.iconSvg === 'bottle');
-  t('в реестре четыре игры', games.list().length === 4, games.list().map(x => x.id).join(','));
+  t('в реестре пять карточек (4 игры + режимы)', games.list().length === 5, games.list().map(x => x.id).join(','));
 
   g('selectMiniGame')('bottle');
   t('панель бутылочки открылась', !document.getElementById('viewBottle').classList.contains('hidden'));

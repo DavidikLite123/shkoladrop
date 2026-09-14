@@ -108,29 +108,58 @@ const tick = () => new Promise(r => setTimeout(r, 30));
   const { document } = window;
   const games = g('MiniGames');
   t('реестр игр доступен в окне', !!games && typeof games.list === 'function');
-  t('в реестре четыре игры', games.list().length === 4, games.list().map(g => g.id).join(','));
+  t('в реестре пять карточек (4 игры + режимы)', games.list().length === 5, games.list().map(g => g.id).join(','));
 
-  // Навигация: одна кнопка «Игры» вместо разрозненных кнопок активностей,
-  // плюс разделы 4.0 (инвентарь, крафт, коллекции, режимы, сообщество, магазин)
+  // Навигация (сезон 4.1): в нижнем меню 4 крупные кнопки — Игры, Рюкзак,
+  // Сообщество, Лавка. Крафт/Коллекции переключаются внутри раздела «Рюкзак»,
+  // «Режимы» переехали карточкой в меню игр.
   const navButtons = document.querySelectorAll('#tabbar .nav-tab');
   const navIds = Array.from(navButtons).map(b => b.id);
-  const EXPECTED_NAV = ['tabGames', 'tabInventory', 'tabCraft', 'tabCollections', 'tabModes', 'tabCommunity', 'tabShop'];
-  t('в нижнем меню ожидаемый набор кнопок', navButtons.length === EXPECTED_NAV.length &&
+  const EXPECTED_NAV = ['tabGames', 'tabInventory', 'tabCommunity', 'tabShop'];
+  t('в нижнем меню 4 кнопки', navButtons.length === EXPECTED_NAV.length &&
     EXPECTED_NAV.every(id => navIds.includes(id)), `найдено: ${navIds.join(', ')}`);
+  t('отдельных кнопок Крафт/Коллекции/Режимы в меню больше нет',
+    !document.getElementById('tabCraft') && !document.getElementById('tabCollections') && !document.getElementById('tabModes'));
   t('кнопка «Игры» есть и она открывает меню', !!document.getElementById('tabGames') &&
     document.getElementById('tabGames').getAttribute('onclick').includes('openGamesModal'));
   t('старых кнопок «Апгрейд»/«Кейсы» в навигации больше нет',
     !document.getElementById('tabUpgrade') && !document.getElementById('tabCases') && !document.getElementById('tabInv'));
+
+  // Раздел «Рюкзак»: внутри — переключатель Рюкзак · Крафт · Коллекции
+  console.log('\n🎒 РАЗДЕЛ «РЮКЗАК» (переключатель внутри)');
+  g('switchTab')('inventory');
+  t('рюкзак открылся', !document.getElementById('viewInventory').classList.contains('hidden'));
+  t('подсвечена кнопка «Рюкзак»', document.getElementById('tabInventory').classList.contains('nav-tab-active'));
+  const segBtns = document.querySelectorAll('#viewInventory .items-seg-nav .seg-btn');
+  t('внутри три кнопки: Рюкзак, Крафт, Коллекции', segBtns.length === 3,
+    Array.from(segBtns).map(b => b.textContent.trim()).join(' | '));
+  t('активен пункт «Рюкзак»',
+    document.querySelector('#viewInventory .items-seg-nav .seg-btn-active').dataset.segTab === 'inventory');
+
+  g('switchTab')('craft');
+  t('переход в крафт открывает экран крафта', !document.getElementById('viewCraft').classList.contains('hidden'));
+  t('в крафте рюкзак скрыт', document.getElementById('viewInventory').classList.contains('hidden'));
+  t('кнопка «Рюкзак» остаётся подсвеченной', document.getElementById('tabInventory').classList.contains('nav-tab-active'));
+  t('переключатель показывает активным «Крафт»',
+    document.querySelector('#viewCraft .items-seg-nav .seg-btn-active').dataset.segTab === 'craft');
+
+  g('switchTab')('collections');
+  t('переход в коллекции работает', !document.getElementById('viewCollections').classList.contains('hidden'));
+  t('переключатель показывает активными «Коллекции»',
+    document.querySelector('#viewCollections .items-seg-nav .seg-btn-active').dataset.segTab === 'collections');
+  t('внутри крафта тот же переключатель (можно вернуться в рюкзак)',
+    document.querySelectorAll('#viewCraft .items-seg-nav .seg-btn').length === 3);
+  g('switchTab')('cases'); // возвращаем состояние, как до проверок раздела
 
   // Открытие меню
   g('openGamesModal')();
   const modal = document.getElementById('gamesModal');
   t('меню игр открывается', !modal.classList.contains('hidden'));
   const cards = document.querySelectorAll('#gamesList .mini-game-card');
-  t('в меню отрисованы карточки всех игр', cards.length === 4, `карточек: ${cards.length}`);
+  t('в меню отрисованы карточки всех игр', cards.length === 5, `карточек: ${cards.length}`);
   const cardText = document.getElementById('gamesList').textContent;
-  t('в меню есть «Кейсы», «Апгрейд», «Ракета» и «Бутылочка»',
-    cardText.includes('Кейсы') && cardText.includes('Апгрейд') && cardText.includes('Ракета') && cardText.includes('Бутылочка'));
+  t('в меню есть «Кейсы», «Апгрейд», «Ракета», «Бутылочка» и «Режимы»',
+    cardText.includes('Кейсы') && cardText.includes('Апгрейд') && cardText.includes('Ракета') && cardText.includes('Бутылочка') && cardText.includes('Режимы'));
 
   console.log('\n🧭 ПЕРЕКЛЮЧЕНИЕ ИГР');
 
@@ -480,7 +509,7 @@ const tick = () => new Promise(r => setTimeout(r, 30));
     g('ACHIEVEMENTS').some(a => a.id === 'crash_1'));
   t('меню игр можно расширить новым режимом',
     g('MiniGames').register({ id: 'test_game', tab: 'testGame', icon: '🎲', name: 'Тест', desc: 'Тестовая игра для проверки реестра' })
-    && g('MiniGames').list().length === 5);
+    && g('MiniGames').list().length === 6);
 
   const fatal = errors.filter(e => !/offline|Failed to fetch|network|fetch|CDN|tailwind/i.test(e));
   t('в консоли нет критических ошибок', fatal.length === 0, fatal.slice(0, 3).join(' | '));

@@ -3879,7 +3879,35 @@ function viewIdForTab(tab) {
 function navButtonForTab(tab) {
   const games = (typeof MINI_GAMES !== 'undefined' && Array.isArray(MINI_GAMES)) ? MINI_GAMES : [];
   if (games.some(g => g && (g.tab || g.id) === tab)) return $('tabGames');
-  return $({ inventory: 'tabInventory', craft: 'tabCraft', collections: 'tabCollections', modes: 'tabModes', community: 'tabCommunity', shop: 'tabShop' }[tab] || '');
+  // Рюкзак / Крафт / Коллекции — один раздел нижнего меню «Рюкзак»,
+  // переключаются кнопками внутри экрана (см. renderItemsSegNav).
+  return $({
+    inventory: 'tabInventory', craft: 'tabInventory', collections: 'tabInventory',
+    community: 'tabCommunity', shop: 'tabShop'
+  }[tab] || '');
+}
+
+/* --------------------------------------------------------------------------
+   РАЗДЕЛ «РЮКЗАК»: переключатель Рюкзак · Крафт · Коллекции внутри экрана
+   (сезон 4.1: в нижнем меню меньше кнопок — подписи перестали обрезаться)
+   -------------------------------------------------------------------------- */
+const ITEMS_TABS = [
+  { tab: 'inventory', label: '🎒 Рюкзак' },
+  { tab: 'craft', label: '🔨 Крафт' },
+  { tab: 'collections', label: '📚 Коллекции' }
+];
+
+function renderItemsSegNav(active) {
+  const boxes = document.querySelectorAll('.items-seg-nav');
+  if (!boxes.length) return;
+  const current = active || currentTab;
+  const html = ITEMS_TABS.map(t => {
+    const on = t.tab === current;
+    return `<button type="button" onclick="switchTab('${t.tab}')" data-seg-tab="${t.tab}"`
+      + ` class="seg-btn${on ? ' seg-btn-active' : ''}"`
+      + `${on ? ' aria-current="page"' : ''}>${t.label}</button>`;
+  }).join('');
+  boxes.forEach(box => { box.innerHTML = html; });
 }
 
 function switchTab(tab) {
@@ -3911,6 +3939,7 @@ function switchTab(tab) {
   if (tab === 'upgrade') renderUpgradeHud();
   if (tab === 'crash' && typeof CrashGame !== 'undefined') CrashGame.onShow();
   if (tab === 'bottle' && typeof BottleGame !== 'undefined') BottleGame.onShow();
+  renderItemsSegNav(tab);
 
   uiUpdate();
 }
