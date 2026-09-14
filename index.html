@@ -2020,7 +2020,7 @@
       <div class="text-4xl mb-2">🔐</div>
       <h3 class="font-cs text-sm font-bold uppercase text-white mb-1">Панель управления</h3>
       <p class="text-[11px] text-slate-400 mb-3">Закрытая зона. Введи код доступа — панель откроется с правами твоей роли (владелец или администрация).</p>
-      <input type="text" id="adminCodeInput" inputmode="numeric" maxlength="20" placeholder="Код"
+      <input type="text" id="adminCodeInput" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="40" placeholder="Код"
              onkeydown="if(event.key==='Enter') submitAdminCode()"
              class="w-full text-center bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-sm font-mono text-white tracking-widest focus:outline-none focus:border-emerald-500">
       <div id="adminCodeError" class="text-[11px] text-rose-400 mt-2 hidden">Неверный код. Попробуй ещё раз.</div>
