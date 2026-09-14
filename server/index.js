@@ -19,7 +19,16 @@
      чистит ВСЁ — игроков, e-mail аккаунты, сохранения, подарки, трейды, чат, баны.
 
    Запуск:  node server/index.js        (порт 3377, сменить: PORT=xxxx)
-   Секреты админки: ADMIN_SECRET=секрет-владельца STAFF_SECRET=секрет-админов node server/index.js
+
+   БЕЗОПАСНОСТЬ (сезон 4.1):
+   • В клиенте (js/) больше НЕТ ни кодов админки, ни серверных секретов.
+     Панель логинится на сервере: POST /api/admin/login {code} → токен роли (x-admin-token).
+   • Коды админки задаются ТОЛЬКО здесь, через env:
+       OWNER_ADMIN_CODE — код владельца, STAFF_ADMIN_CODE — код администрации.
+     Если они не заданы, сервер сгенерирует случайные и напечатает их в лог при старте.
+   • ADMIN_SECRET / STAFF_SECRET (статические секреты) по-прежнему работают, но
+     ТОЛЬКО если заданы через env — дефолтных «david-admin-1337» больше не существует.
+   • SESSION_SECRET — ключ подписи токенов (задай в env, иначе генерируется на старт).
    Роли: owner (владелец) — всё; admin (администрация) — модерация чата и просмотр игроков.
    ========================================================================== */
 'use strict';
@@ -28,12 +37,30 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const Vault = require('./vault'); // внешний «сейф» базы: переживает сон и редеплой Render
 
 /* --------------------------------- КОНФИГ -------------------------------- */
 const PORT = Number(process.env.PORT) || 3377;
 const HOST = process.env.HOST || '0.0.0.0';
-const ADMIN_SECRET = process.env.ADMIN_SECRET || 'david-admin-1337'; // секрет ВЛАДЕЛЬЦА (owner) — ПОМЕНЯЙ через env!
-const STAFF_SECRET = process.env.STAFF_SECRET || 'david-staff-7331'; // секрет АДМИНИСТРАЦИИ (admin) — урезанные права
+/* Статические секреты: ТОЛЬКО из env. Дефолтов нет — старые «david-admin-1337»
+   и «david-staff-7331» утекли в публичный репозиторий и аннулированы. */
+const ADMIN_SECRET = process.env.ADMIN_SECRET || ''; // секрет ВЛАДЕЛЬЦА (owner)
+const STAFF_SECRET = process.env.STAFF_SECRET || ''; // секрет АДМИНИСТРАЦИИ (admin)
+const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
+const ADMIN_TOKEN_TTL = 12 * 60 * 60 * 1000; // токен роли живёт 12 часов
+
+/* Коды входа в админ-панель. Если не заданы в env — генерируем случайные
+   на время работы процесса и печатаем в лог (Render → Logs). */
+const genAdminCode = () => {
+  const abc = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // без 0/O/1/I — чтобы не путать на глаз
+  let out = '';
+  for (let i = 0; i < 10; i++) out += abc[crypto.randomInt(abc.length)];
+  return out;
+};
+const OWNER_ADMIN_CODE = String(process.env.OWNER_ADMIN_CODE || '').trim().toUpperCase() || genAdminCode();
+const STAFF_ADMIN_CODE = String(process.env.STAFF_ADMIN_CODE || '').trim().toUpperCase() || genAdminCode();
+const OWNER_CODE_FROM_ENV = !!String(process.env.OWNER_ADMIN_CODE || '').trim();
+const STAFF_CODE_FROM_ENV = !!String(process.env.STAFF_ADMIN_CODE || '').trim();
 const ONLINE_WINDOW = 2 * 60 * 1000; // игрок считается «онлайн», если был активен последние 2 минуты
 const REPO_ROOT = path.resolve(__dirname, '..');
 const REGISTRY_FILE = process.env.SHKOLA_REGISTRY_FILE || path.join(REPO_ROOT, 'author-codes.json'); // список кодов авторов (в GitHub)
@@ -82,18 +109,26 @@ function dbLoad() {
   return false;
 }
 
+/* Немедленная запись на локальный диск (атомарная замена — база не побьётся) */
+function localWriteNow() {
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    const tmp = DB_FILE + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(db, null, 2));
+    fs.renameSync(tmp, DB_FILE);
+    return true;
+  } catch (e) {
+    console.error('[db] ошибка записи:', e.message);
+    return false;
+  }
+}
+
 function dbSave() {
+  if (!db.meta) db.meta = {};
+  db.meta.lastSavedAt = Date.now();
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    try {
-      if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-      const tmp = DB_FILE + '.tmp';
-      fs.writeFileSync(tmp, JSON.stringify(db, null, 2));
-      fs.renameSync(tmp, DB_FILE); // атомарная замена — база не побьётся на середине записи
-    } catch (e) {
-      console.error('[db] ошибка записи:', e.message);
-    }
-  }, 150);
+  saveTimer = setTimeout(localWriteNow, 150);
+  Vault.schedulePush(() => db); // если включён внешний сейф — база уезжает наружу
 }
 
 /* ------------------------- РЕЕСТР КОДОВ АВТОРОВ ---------------------------- */
@@ -188,7 +223,7 @@ function send(res, status, obj) {
     'Content-Type': 'application/json; charset=utf-8',
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, x-admin-secret',
+    'Access-Control-Allow-Headers': 'Content-Type, x-admin-secret, x-admin-token',
     'Cache-Control': 'no-store'
   });
   res.end(body);
@@ -217,11 +252,72 @@ function readBody(req) {
    admin — администрация (секрет STAFF_SECRET): модерация чата, список игроков,
            онлайн. НЕЛЬЗЯ: банить, удалять аккаунты, выдавать галочки, назначать
            админов, выдавать коды авторов. */
+/* ---------- ТОКЕНЫ АДМИНКИ (вместо секретов в клиенте) ----------
+   Клиент вводит код → сервер сверяет его с OWNER_ADMIN_CODE / STAFF_ADMIN_CODE
+   и выдаёт подписанный токен роли. В браузере больше нет ни секретов, ни хешей
+   кодов: украсть из клиента нечего, а токен живёт 12 часов. */
+function safeEqual(a, b) {
+  const ha = crypto.createHash('sha256').update(String(a)).digest();
+  const hb = crypto.createHash('sha256').update(String(b)).digest();
+  return crypto.timingSafeEqual(ha, hb);
+}
+function issueAdminToken(role) {
+  const exp = Date.now() + ADMIN_TOKEN_TTL;
+  const payload = `${role}.${exp}`;
+  const sig = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url');
+  return `${payload}.${sig}`;
+}
+function verifyAdminToken(token) {
+  const parts = String(token || '').split('.');
+  if (parts.length !== 3) return null;
+  const [role, expRaw, sig] = parts;
+  if (role !== 'owner' && role !== 'admin') return null;
+  const exp = Number(expRaw);
+  if (!Number.isFinite(exp) || exp < Date.now()) return null;
+  const expect = crypto.createHmac('sha256', SESSION_SECRET).update(`${role}.${exp}`).digest('base64url');
+  const a = Buffer.from(sig);
+  const b = Buffer.from(expect);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  return role;
+}
+/* Простейший антибрутфорс для входа в админку: 10 попыток на IP за 10 минут */
+const adminLoginTries = new Map();
+function adminLoginAllowed(req) {
+  const ip = clientIp(req) || 'no-ip';
+  const now = Date.now();
+  const rec = adminLoginTries.get(ip);
+  if (!rec || now - rec.at > 10 * 60 * 1000) { adminLoginTries.set(ip, { at: now, n: 1 }); return true; }
+  rec.n += 1;
+  rec.at = now;
+  if (adminLoginTries.size > 500) adminLoginTries.clear();
+  return rec.n <= 10;
+}
+function resolveAdminCode(raw) {
+  const code = String(raw || '').trim().toUpperCase().replace(/\s+/g, '');
+  if (!code) return null;
+  // удобные префиксы: SHKOLA/ADMIN/OWNER/STAFF/КОТ — срезаем, как раньше
+  const bare = code.replace(/^(SHKOLA|ADMIN|OWNER|STAFF|КОТ)/, '');
+  for (const c of [code, bare]) {
+    if (!c) continue;
+    if (safeEqual(c, OWNER_ADMIN_CODE)) return 'owner';
+  }
+  for (const c of [code, bare]) {
+    if (!c) continue;
+    if (safeEqual(c, STAFF_ADMIN_CODE)) return 'admin';
+  }
+  return null;
+}
+/* Роль запроса: подписанный токен (браузер) или статический секрет из env (скрипты). */
 function adminRole(req) {
-  const s = req.headers['x-admin-secret'];
+  const tok = req.headers['x-admin-token'];
+  if (tok) {
+    const role = verifyAdminToken(tok);
+    if (role) return role;
+  }
+  const s = String(req.headers['x-admin-secret'] || '');
   if (!s) return null;
-  if (s === ADMIN_SECRET) return 'owner';
-  if (s === STAFF_SECRET) return 'admin';
+  if (ADMIN_SECRET && safeEqual(s, ADMIN_SECRET)) return 'owner';
+  if (STAFF_SECRET && safeEqual(s, STAFF_SECRET)) return 'admin';
   return null;
 }
 function isAdmin(req) { return adminRole(req) !== null; }
@@ -609,6 +705,45 @@ const routes = {
     db.chat = db.chat.filter(m => m.id !== id);
     if (db.chat.length !== before) dbSave();
     send(res, 200, { ok: true, removed: before - db.chat.length });
+  },
+
+  /* ---- ВХОД В АДМИН-ПАНЕЛЬ: код → подписанный токен роли ----
+     В клиенте (js/) не хранится ни кодов, ни секретов: он отправляет введённый
+     код сюда, а дальше пользуется токеном 12 часов. */
+  'POST /api/admin/login': async (req, res, body) => {
+    if (!adminLoginAllowed(req)) {
+      return send(res, 429, { ok: false, error: 'Слишком много попыток входа — подожди 10 минут' });
+    }
+    const role = resolveAdminCode(body.code);
+    if (!role) return send(res, 403, { ok: false, error: 'Неверный код доступа' });
+    send(res, 200, { ok: true, role, token: issueAdminToken(role), exp: Date.now() + ADMIN_TOKEN_TTL });
+  },
+
+  /* ---- ПРОВЕРКА ТОКЕНА: пускает ли ещё панель ---- */
+  'GET /api/admin/me': (req, res) => {
+    const role = adminRole(req);
+    if (!role) return send(res, 401, { ok: false, error: 'нет доступа' });
+    send(res, 200, { ok: true, role });
+  },
+
+  /* ---- АДМИН: состояние внешнего сейфа (переживёт ли база рестарт Render) ---- */
+  'GET /api/admin/vault/status': (req, res) => {
+    if (!isOwner(req)) return send(res, 403, { ok: false, error: 'нет доступа (нужен секрет владельца)' });
+    send(res, 200, Object.assign({ ok: true }, Vault.status(), {
+      dbFile: DB_FILE,
+      players: Object.keys(db.players).length,
+      accounts: Object.keys(db.accounts || {}).length,
+      lastSavedAt: (db.meta && db.meta.lastSavedAt) || 0
+    }));
+  },
+
+  /* ---- ВЛАДЕЛЕЦ: сохранить базу в сейф прямо сейчас ---- */
+  'POST /api/admin/vault/flush': async (req, res) => {
+    if (!isOwner(req)) return send(res, 403, { ok: false, error: 'нет доступа (нужен секрет владельца)' });
+    if (!Vault.enabled) return send(res, 400, { ok: false, error: 'сейф не настроен (SHKOLA_VAULT)' });
+    localWriteNow();
+    const ok = await Vault.flush(() => db);
+    send(res, ok ? 200 : 502, Object.assign({ ok }, Vault.status()));
   },
 
   /* ---- АДМИН: список зарегистрированных игроков (с ID и галочками) ---- */
@@ -1240,7 +1375,24 @@ const MIME = {
   '.ico': 'image/x-icon', '.txt': 'text/plain; charset=utf-8', '.md': 'text/markdown; charset=utf-8'
 };
 
+/* ---------- РАЗДАЧА СТАТИКИ: ТОЛЬКО САМА ИГРА ----------
+   Раньше сервер отдавал ВЕСЬ корень репозитория, и через него можно было
+   скачать codes/admin-codes.md (коды владельца), codes/vip-codes.md (100 VIP-кодов),
+   author-codes.json и т.д. Теперь — белый список: игра и ничего больше. */
+const PUBLIC_FILES = new Set(['index.html', 'manifest.webmanifest']);
+const PUBLIC_DIRS = ['css/', 'js/', 'assets/'];
+function isPublicStaticPath(p) {
+  const rel = String(p || '').replace(/\\/g, '/').replace(/^\/+/, '');
+  if (!rel || rel.includes('..') || rel.includes('\0')) return false;
+  if (PUBLIC_FILES.has(rel)) return true;
+  return PUBLIC_DIRS.some(dir => rel.startsWith(dir)) && !rel.endsWith('/');
+}
+
 function serveStatic(req, res, pathname) {
+  if (!isPublicStaticPath(pathname)) {
+    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+    return res.end('404 — не найдено');
+  }
   let filePath = path.normalize(path.join(REPO_ROOT, pathname === '/' ? 'index.html' : pathname));
   if (!filePath.startsWith(REPO_ROOT)) { res.writeHead(403); return res.end(); } // защита от ../
   if (filePath.startsWith(DATA_DIR)) { res.writeHead(403); return res.end(); }   // база сервера не раздаётся
@@ -1252,7 +1404,26 @@ function serveStatic(req, res, pathname) {
 }
 
 /* -------------------------------- ЗАПУСК ---------------------------------- */
-dbLoad();
+const hadLocalDb = dbLoad();
+
+/* ---------- ВОССТАНОВЛЕНИЕ ИЗ ВНЕШНЕГО СЕЙФА ----------
+   Бесплатный Render стирает server/data/db.json при каждом спине/редеплое.
+   Если локальная база пустая (только что «переехали» или диск стёрли) —
+   забираем копию из сейфа (GitHub/HTTP), чтобы прогресс игроков не пропал. */
+async function restoreFromVaultIfNeeded() {
+  if (!Vault.enabled) return;
+  const hasLocal = Object.keys(db.players).length || Object.keys(db.saves).length ||
+    Object.keys(db.accounts || {}).length || (db.chat || []).length;
+  if (hasLocal) {
+    console.log('[vault] локальная база на месте — сейф не трогаю (он нужен только при потере данных)');
+    return;
+  }
+  const remote = await Vault.pull();
+  if (!remote) return;
+  db = Object.assign(dbEmpty(), remote);
+  localWriteNow();
+  console.log('[vault] восстановление после потери диска выполнено ✔');
+}
 
 /* ---------- СЕЗОН 3.5: ПОДАРОК-ИЗВИНЕНИЕ + ОБЯЗАТЕЛЬНЫЙ ОНЛАЙН ----------
    Сезон 3.9 был ПОЛНЫЙ вайп всех аккаунтов. В сезоне 3.5 вайпа НЕТ — только
@@ -1263,27 +1434,28 @@ dbLoad();
    Флаг meta.seasonWipe = '3.9' остаётся для истории вайпа.
    Флаг meta.seasonNotice = '3.5' — одноразовое уведомление о подарке.
    База НЕ чистится — только ставим метку сезона 3.5. */
-if (!db.meta) db.meta = {};
-if (db.meta.seasonWipe !== '3.9' && db.meta.seasonWipe !== '3.5') {
-  // Если кто-то запустил сервер 3.5 впервые без прохождения 3.9 — не вайпаем,
-  // а просто ставим метку 3.5. Вайп 3.9 уже был в проде, повторно не нужен.
-  const prev = db.meta.seasonWipe || 'нет';
-  if (prev === 'нет' || prev === '3.7') {
-    // В проде вайп уже был, но для локальных инстансов — считаем что вайп был
-    db.meta.seasonWipe = '3.9';
-    console.log(`[сезон 3.5] База помечена как после вайпа 3.9 (prev=${prev}), вайп не повторяем — только подарок-извинение`);
+function applySeasonFlags() {
+  if (!db.meta) db.meta = {};
+  if (db.meta.seasonWipe !== '3.9' && db.meta.seasonWipe !== '3.5') {
+    // Если кто-то запустил сервер 3.5 впервые без прохождения 3.9 — не вайпаем,
+    // а просто ставим метку 3.5. Вайп 3.9 уже был в проде, повторно не нужен.
+    const prev = db.meta.seasonWipe || 'нет';
+    if (prev === 'нет' || prev === '3.7') {
+      db.meta.seasonWipe = '3.9';
+      console.log(`[сезон 3.5] База помечена как после вайпа 3.9 (prev=${prev}), вайп не повторяем — только подарок-извинение`);
+    }
   }
-}
-if (db.meta.seasonNotice !== '3.5') {
-  db.meta.seasonNotice = '3.5';
-  db.meta.seasonApology = {
-    at: Date.now(),
-    giftId: 'gift_apology_35',
-    price: 1500000,
-    text: 'Подарок-извинение за полный сброс аккаунтов в 3.9 из-за технических неполадок. Теперь всё в норме ❤️'
-  };
-  dbSave();
-  console.log('[сезон 3.5] Активирован сезон подарка-извинения + обязательный онлайн. Каждое действие теперь сохраняется на сервере.');
+  if (db.meta.seasonNotice !== '3.5') {
+    db.meta.seasonNotice = '3.5';
+    db.meta.seasonApology = {
+      at: Date.now(),
+      giftId: 'gift_apology_35',
+      price: 1500000,
+      text: 'Подарок-извинение за полный сброс аккаунтов в 3.9 из-за технических неполадок. Теперь всё в норме ❤️'
+    };
+    dbSave();
+    console.log('[сезон 3.5] Активирован сезон подарка-извинения + обязательный онлайн. Каждое действие теперь сохраняется на сервере.');
+  }
 }
 
 const server = http.createServer(async (req, res) => {
@@ -1318,15 +1490,49 @@ const server = http.createServer(async (req, res) => {
   res.writeHead(405); res.end();
 });
 
-server.listen(PORT, HOST, () => {
+/* Запуск: сначала пробуем сейф (на случай стёртого диска), потом сезонные
+   метки, и только затем слушаем порт. */
+async function bootstrap() {
+  await restoreFromVaultIfNeeded();
+  applySeasonFlags();
+  server.listen(PORT, HOST, onListen);
+}
+
+/* Render выключает контейнер (сон/редеплой) — успеть дописать базу в сейф */
+async function shutdown(sig) {
+  console.log(`[server] ${sig}: сохраняю базу перед выключением...`);
+  try { await Vault.flush(() => db); } catch (e) {}
+  try { localWriteNow(); } catch (e) {}
+  process.exit(0);
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+
+bootstrap();
+
+function onListen() {
   console.log('==================================================');
   console.log('  🎒 ШКОЛА ДРОП — игровой сервер запущен!');
   console.log(`  Игра и API:   http://localhost:${PORT}`);
   console.log(`  Коды авторов: ${REGISTRY_FILE}`);
   console.log(`  База данных:  ${DB_FILE}`);
-  console.log(`  Секрет владельца: ${ADMIN_SECRET === 'david-admin-1337' ? 'ДЕФОЛТНЫЙ — поменяй через ADMIN_SECRET!' : 'установлен из переменной окружения ✔'}`);
-  console.log(`  Секрет администрации: ${STAFF_SECRET === 'david-staff-7331' ? 'ДЕФОЛТНЫЙ — поменяй через STAFF_SECRET!' : 'установлен из переменной окружения ✔'}`);
+  if (OWNER_CODE_FROM_ENV) {
+    console.log('  Код владельца: взят из OWNER_ADMIN_CODE ✔');
+  } else {
+    console.log(`  Код владельца: ${OWNER_ADMIN_CODE}  (сгенерирован на этот запуск)`);
+    console.log('     → вставь его в Render → Environment как OWNER_ADMIN_CODE, чтобы не менялся');
+  }
+  if (STAFF_CODE_FROM_ENV) {
+    console.log('  Код админки:   взят из STAFF_ADMIN_CODE ✔');
+  } else {
+    console.log(`  Код админки:   ${STAFF_ADMIN_CODE}  (сгенерирован на этот запуск)`);
+    console.log('     → или задай свой через STAFF_ADMIN_CODE');
+  }
+  console.log(`  Статические секреты (x-admin-secret): ${ADMIN_SECRET || STAFF_SECRET ? 'заданы из env ✔' : 'не заданы — панель работает только по токену'}`);
+  console.log('  Смена кодов в клиенте больше не нужна: секретов в js/ нет.');
+  console.log(`  Локальная база при старте: ${hadLocalDb ? 'была на месте' : 'отсутствовала (первый запуск)'}`);
+  console.log(`  Внешний сейф данных: ${Vault.enabled ? Vault.describe() + ` (не чаще 1 раза в ${Vault.minSec} с)` : 'выключен — на бесплатном Render данные пропадут при рестарте'}`);
   console.log('==================================================');
-});
+}
 
 module.exports = { server, db, loadRegistry };

@@ -110,9 +110,13 @@ const tick = () => new Promise(r => setTimeout(r, 30));
   t('реестр игр доступен в окне', !!games && typeof games.list === 'function');
   t('в реестре четыре игры', games.list().length === 4, games.list().map(g => g.id).join(','));
 
-  // Навигация: одна кнопка «Игры» вместо разрозненных кнопок активностей
+  // Навигация: одна кнопка «Игры» вместо разрозненных кнопок активностей,
+  // плюс разделы 4.0 (инвентарь, крафт, коллекции, режимы, сообщество, магазин)
   const navButtons = document.querySelectorAll('#tabbar .nav-tab');
-  t('в нижнем меню 4 кнопки (игры свёрнуты в одну)', navButtons.length === 4, `найдено: ${navButtons.length}`);
+  const navIds = Array.from(navButtons).map(b => b.id);
+  const EXPECTED_NAV = ['tabGames', 'tabInventory', 'tabCraft', 'tabCollections', 'tabModes', 'tabCommunity', 'tabShop'];
+  t('в нижнем меню ожидаемый набор кнопок', navButtons.length === EXPECTED_NAV.length &&
+    EXPECTED_NAV.every(id => navIds.includes(id)), `найдено: ${navIds.join(', ')}`);
   t('кнопка «Игры» есть и она открывает меню', !!document.getElementById('tabGames') &&
     document.getElementById('tabGames').getAttribute('onclick').includes('openGamesModal'));
   t('старых кнопок «Апгрейд»/«Кейсы» в навигации больше нет',

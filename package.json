@@ -14,7 +14,10 @@
     "test:unit": "node tests/crash-math.test.js",
     "test:ui": "node tests/crash-ui.test.js && node tests/rebirth-ui.test.js && node tests/bottle-ui.test.js",
     "test:lint": "node tests/static-check.test.js",
-    "test:all": "npm run test:lint && npm run test && npm run test:unit && npm run test:ui"
+    "test:security": "node tests/server-security.test.js && node tests/vip-rotate.test.js",
+    "test:vault": "node tests/vault.test.js",
+    "test:all": "npm run test:lint && npm run test && npm run test:unit && npm run test:ui && npm run test:security && npm run test:vault",
+    "rotate:vip": "node tools/rotate-vip-codes.js"
   },
   "devDependencies": {
     "jsdom": "^30.0.1"

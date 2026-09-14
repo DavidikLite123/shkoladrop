@@ -101,17 +101,45 @@ function onServerJustCameOnline() {
   });
 }
 
-/* Секрет админки для серверных запросов: подбирается под роль, с которой
-   открыта панель (owner → ADMIN_SECRET, admin → STAFF_SECRET на сервере) */
-function adminSecret() {
-  const role = (typeof state !== 'undefined' && state.adminRole) || null;
-  const fallback = role === 'admin'
-    ? (typeof ADMIN_SERVER_SECRET !== 'undefined' ? ADMIN_SERVER_SECRET : 'david-staff-7331')
-    : (typeof OWNER_SERVER_SECRET !== 'undefined' ? OWNER_SERVER_SECRET : 'david-admin-1337');
-  try { return localStorage.getItem('shkola_admin_secret') || fallback; }
-  catch (e) { return fallback; }
+/* ТОКЕН АДМИНКИ (сезон 4.1). В клиенте больше нет ни кодов, ни секретов:
+   код вводится в панели → уходит на сервер (POST /api/admin/login) → сервер
+   возвращает подписанный токен роли на 12 часов. Все админ-запросы идут
+   с заголовком x-admin-token. Украсть из браузера нечего: без сервера
+   этот токен ничего не значит, а без верного кода его не выдают. */
+const ADMIN_TOKEN_KEY = 'shkola_admin_token';
+function adminToken() {
+  try { return localStorage.getItem(ADMIN_TOKEN_KEY) || ''; } catch (e) { return ''; }
 }
-function adminHeaders() { return { 'x-admin-secret': adminSecret() }; }
+function adminHeaders() {
+  const t = adminToken();
+  return t ? { 'x-admin-token': t } : {};
+}
+
+const AdminAuth = {
+  /* Ввод кода: сервер сам определяет роль (владелец / администрация) */
+  async login(code) {
+    try {
+      const { status, data } = await ServerAPI.req('POST', '/api/admin/login', { code }, {}, 15000);
+      if (!data || !data.ok || !data.token) {
+        const msg = (data && data.error) || (status === 0 ? 'Сервер не отвечает — вход в панель требует интернет' : 'Неверный код доступа');
+        return { ok: false, error: msg };
+      }
+      try { localStorage.setItem(ADMIN_TOKEN_KEY, data.token); } catch (e) {}
+      return { ok: true, role: data.role, exp: data.exp };
+    } catch (e) {
+      return { ok: false, error: 'Сервер не отвечает — вход в панель требует интернет' };
+    }
+  },
+  /* Токен ещё действителен? (панель не просит код каждый раз) */
+  async me() {
+    if (!adminToken()) return null;
+    try {
+      const { data } = await ServerAPI.req('GET', '/api/admin/me', null, adminHeaders(), 10000);
+      return data && data.ok ? data.role : null;
+    } catch (e) { return null; }
+  },
+  logout() { try { localStorage.removeItem(ADMIN_TOKEN_KEY); } catch (e) {} }
+};
 
 /* Галочка верификации — единый вид по всей игре (чат, профиль, списки) */
 function verifiedBadgeHtml(title) {

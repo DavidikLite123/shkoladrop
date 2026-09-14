@@ -1,0 +1,20 @@
+# Файлы, которые НЕ должны попадать на сайт (Vercel раздаёт корень репозитория)
+
+# Коды, секреты и внутренние заметки владельца
+codes/
+private/
+vip_codes_funpay.txt
+
+# Сервер и его данные — это не статика игры
+server/
+docs/
+tests/
+tools/
+package.json
+package-lock.json
+README.md
+
+# Служебные файлы
+.gitignore
+.github/
+*.md
