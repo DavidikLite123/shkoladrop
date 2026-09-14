@@ -9,8 +9,8 @@
    (лёгкий server/index.js, Node без зависимостей). Если сервер не отвечает —
    жёлтая плашка с кнопкой «Включить сервер» и почтой ${SERVER_CONTACT_EMAIL}.
 
-   Реестр кодов авторов — файл author-codes.json в корне репозитория (GitHub):
-   сайт читает его напрямую, сервер тоже (и админка умеет в него дописывать).
+   Реестр кодов авторов — author-codes.json на сервере (в публичную раздачу
+   не попадает; клиент получает список через GET /api/author-codes).
    ========================================================================== */
 
 /* --------------------------------------------------------------------------
@@ -378,17 +378,21 @@ const NetIdentity = {
 };
 
 /* --------------------------------------------------------------------------
-   РЕЕСТР КОДОВ АВТОРОВ: читаем author-codes.json прямо с сайта (файл в GitHub)
+   РЕЕСТР КОДОВ АВТОРОВ (сезон 4.1): читаем список кодов у сервера
+   (GET /api/author-codes). Раньше файл author-codes.json лежал статикой
+   и был виден любому — теперь он не публикуется.
    -------------------------------------------------------------------------- */
 const AuthorRegistry = {
   _data: null,
 
   async load(force = false) {
     if (this._data && !force) return this._data;
+    // Реестр отдаёт сервер (сезон 4.1): файл author-codes.json больше не публикуется
+    // как статика, иначе его мог скачать любой желающий.
     try {
-      const res = await fetch('author-codes.json?v=' + Date.now(), { cache: 'no-store' });
-      if (res.ok) {
-        this._data = await res.json();
+      const { status, data } = await ServerAPI.req('GET', '/api/author-codes', null, {}, 6000);
+      if (status === 200 && data && data.ok && Array.isArray(data.codes)) {
+        this._data = { royaltyPercent: data.royaltyPercent, codes: data.codes };
         try { localStorage.setItem('shkola_author_codes_cache', JSON.stringify(this._data)); } catch (e) {}
         return this._data;
       }
@@ -1980,7 +1984,7 @@ async function adminIssueAuthorCode() {
   if (await ServerAPI.ping(true)) {
     const { status, data } = await ServerAPI.req('POST', '/api/admin/author-codes', { ownerUid, ownerName, code }, adminHeaders());
     if (!data.ok) { Toast.error(data.error || 'Сервер отклонил выдачу кода'); return; }
-    Toast.gold(`✅ Код автора <b class="font-mono">${escapeHtml(data.entry.code)}</b> выдан для ${escapeHtml(data.entry.ownerName)} и записан в author-codes.json на сервере!`, 8000);
+    Toast.gold(`✅ Код автора <b class="font-mono">${escapeHtml(data.entry.code)}</b> выдан для ${escapeHtml(data.entry.ownerName)} и сохранён в реестре сервера!`, 8000);
   } else {
     // Оффлайн-режим: отдаём строку для ручной вставки в файл на GitHub
     const finalCode = code || ownerName.replace(/[^A-Za-z0-9]/g, '').slice(0, 10).toUpperCase() || 'AUTHOR' + Math.floor(Math.random() * 900 + 100);
@@ -1991,7 +1995,7 @@ async function adminIssueAuthorCode() {
       area.value = snippet + ',';
       area.select();
     }
-    Toast.info('Сервер оффлайн — скопируй строку ниже и вставь её в массив "codes" файла author-codes.json на GitHub.', 9000);
+    Toast.info('Сервер оффлайн — скопируй строку ниже и передай её владельцу: он добавит код в реестр.', 9000);
   }
   $('adminCodeOwnerUid').value = '';
   $('adminCodeOwnerName').value = '';

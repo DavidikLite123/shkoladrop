@@ -4,6 +4,8 @@
 codes/
 private/
 vip_codes_funpay.txt
+author-codes.json
+node_modules/
 
 # Сервер и его данные — это не статика игры
 server/

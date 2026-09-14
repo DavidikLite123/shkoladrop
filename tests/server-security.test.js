@@ -143,6 +143,23 @@ const json = async (p, opts) => (await fetch(BASE + p, opts)).json();
       })).status;
     }
     t('после 10 неверных попыток сервер отвечает 429', last === 429, 'последний код ' + last);
+
+    console.log('\n🧼 В КЛИЕНТЕ НЕТ КОДОВ И СЕКРЕТОВ');
+    const clientFiles = ['js/config.js', 'js/netplay.js', 'js/game.js', 'index.html'];
+    const forbidden = [
+      ['хеш кода владельца (OWNER_CODE_HASH)', /OWNER_CODE_HASH/],
+      ['хеш кода админа (ADMIN_CODE_HASH)', /ADMIN_CODE_HASH/],
+      ['старый секрет владельца', /OWNER_SERVER_SECRET|david-admin/],
+      ['старый секрет администрации', /ADMIN_SERVER_SECRET|david-staff/],
+      ['функция betaCodeHash', /betaCodeHash/]
+    ];
+    for (const f of clientFiles) {
+      const text = fs.readFileSync(path.join(ROOT, f), 'utf8');
+      const hits = forbidden.filter(([, rx]) => rx.test(text)).map(([name]) => name);
+      t(`в ${f} нет секретов админки`, hits.length === 0, hits.join(', '));
+    }
+    const gameJs = fs.readFileSync(path.join(ROOT, 'js', 'game.js'), 'utf8');
+    t('панель ходит на сервер (AdminAuth.login), а не считает хеши сама', /AdminAuth\.login/.test(gameJs));
   } finally {
     server.kill('SIGTERM');
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e) {}

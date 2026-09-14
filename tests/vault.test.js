@@ -153,6 +153,36 @@ let vaultPort = 0;
     }
     noVault.kill('SIGTERM');
     t('сервер работает и без сейфа (обратная совместимость)', up);
+
+    console.log('\n📁 Режим «файл» (SHKOLA_VAULT=fs)');
+    const fsVaultPath = path.join(tmpRoot, 'vault-fs.json');
+    const fsServer = spawn(process.execPath, [path.join(__dirname, '..', 'server', 'index.js')], {
+      env: Object.assign({}, process.env, {
+        PORT: String(PORT + 2), HOST: '127.0.0.1',
+        SHKOLA_DATA_DIR: path.join(tmpRoot, 'disk-D'),
+        SHKOLA_REGISTRY_FILE: path.join(tmpRoot, 'author-codes.json'),
+        SHKOLA_VAULT: 'fs', SHKOLA_VAULT_PATH: fsVaultPath, SHKOLA_VAULT_MIN_SEC: '2'
+      }),
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+    let fsLog = '';
+    fsServer.stdout.on('data', d => { fsLog += d; });
+    let fsUp = false;
+    for (let i = 0; i < 50; i++) {
+      try { if ((await fetch(`http://127.0.0.1:${PORT + 2}/api/ping`)).ok) { fsUp = true; break; } } catch (e) {}
+      await new Promise(r => setTimeout(r, 200));
+    }
+    t('сервер с файловым сейфом поднялся', fsUp);
+    t('в логе режим «файл»', /внешний сейф данных: файл:/i.test(fsLog), (fsLog.match(/Внешний сейф[^\n]*/) || [''])[0]);
+    await fetch(`http://127.0.0.1:${PORT + 2}/api/save`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uid, nick, save })
+    });
+    const fsPushed = await waitFor(() => {
+      try { return !!JSON.parse(fs.readFileSync(fsVaultPath, 'utf8')).saves[uid]; } catch (e) { return false; }
+    }, 12000);
+    t('копия базы уехала в файл-сейф', fsPushed);
+    fsServer.kill('SIGTERM');
   } finally {
     try { server.kill('SIGTERM'); } catch (e) {}
     vaultServer.close();

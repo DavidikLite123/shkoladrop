@@ -186,8 +186,8 @@ js/netplay.js     — онлайн: AuthGate/Account, сообщество, ча
 js/ui.js, preloader.js, main.js, craft.js, modes.js, bottle.js
 server/index.js   — сервер сообщества (Node 18+, ноль зависимостей, JSON-база):
                     белый список статики, вход в админку по токену, внешний сейф данных
-server/vault.js   — «сейф» базы: приватный GitHub-репозиторий или HTTP-хранилище,
-                    чтобы данные переживали сон/редеплой бесплатного Render
+server/vault.js   — «сейф» базы: файл, приватный GitHub-репозиторий или
+                    HTTP-хранилище — данные переживают сон и редеплой Render
 server/selftest.js— 136 автопроверок сервера (API, аккаунты, сезоны)
 tools/rotate-vip-codes.js — выпуск новых VIP-кодов (старые аннулируются)
 author-codes.json — реестр кодов авторов (наружу не отдаётся)

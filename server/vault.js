@@ -8,7 +8,8 @@
 
    Решение: держим базу ещё и снаружи и восстанавливаем её при старте.
    Режимы (env SHKOLA_VAULT):
-     • fs      — по умолчанию, ничего не делаем (как раньше);
+     • не задан — сейф выключен, всё как раньше (данные только на диске);
+     • fs      — сейф = файл по пути SHKOLA_VAULT_PATH (например, на другом диске);
      • github  — сейф = файл в приватном GitHub-репозитории (рекомендуется);
      • http    — сейф = любой HTTP-сервис: GET отдаёт JSON, PUT сохраняет JSON.
 
@@ -18,6 +19,9 @@
      SHKOLA_VAULT_TOKEN=github_pat_...                   (fine-grained, только Contents: R/W)
      SHKOLA_VAULT_PATH=shkola-db.json                    (необязательно)
      SHKOLA_VAULT_BRANCH=main                            (необязательно)
+   или:
+     SHKOLA_VAULT=fs
+     SHKOLA_VAULT_PATH=/mnt/disk/shkola-db.json       (обязателен)
    или:
      SHKOLA_VAULT=http
      SHKOLA_VAULT_URL=https://example.com/bucket/shkola-db
@@ -29,8 +33,10 @@
    ========================================================================== */
 'use strict';
 
+const fs = require('fs');
 const http = require('http');
 const https = require('https');
+const path = require('path');
 const { URL } = require('url');
 
 function httpJson(urlStr, { method = 'GET', headers = {}, body = null, timeout = 20000 } = {}) {
@@ -90,10 +96,14 @@ function hasContent(db) {
 }
 
 const Vault = {
-  kind: String(process.env.SHKOLA_VAULT || 'fs').toLowerCase(),
+  kind: String(process.env.SHKOLA_VAULT || '').toLowerCase() || 'off',
   minSec: Math.max(2, Number(process.env.SHKOLA_VAULT_MIN_SEC) || 20),
 
-  get enabled() { return this.kind === 'github' || this.kind === 'http'; },
+  get enabled() {
+    if (this.kind === 'github' || this.kind === 'http') return true;
+    if (this.kind === 'fs') return !!String(process.env.SHKOLA_VAULT_PATH || '').trim();
+    return false;
+  },
 
   _lastPushAt: 0,
   _timer: null,
@@ -103,7 +113,8 @@ const Vault = {
   describe() {
     if (this.kind === 'github') return `github:${process.env.SHKOLA_VAULT_REPO || '(нет SHKOLA_VAULT_REPO)'}/${process.env.SHKOLA_VAULT_PATH || 'shkola-db.json'}`;
     if (this.kind === 'http') return `http:${process.env.SHKOLA_VAULT_URL ? 'настроен' : '(нет SHKOLA_VAULT_URL)'}`;
-    return 'выключен (fs)';
+    if (this.kind === 'fs') return `файл:${process.env.SHKOLA_VAULT_PATH || '(нет SHKOLA_VAULT_PATH)'}`;
+    return 'выключен (резервных копий базы нет)';
   },
 
   status() {
@@ -151,6 +162,27 @@ const Vault = {
     if (put.status !== 200 && put.status !== 201) throw new Error(`GitHub ${put.status}: ${put.text.slice(0, 140)}`);
   },
 
+  /* ---------------- FILESYSTEM ---------------- */
+  _fsPath() {
+    const p = String(process.env.SHKOLA_VAULT_PATH || '').trim();
+    if (!p) throw new Error('нужен SHKOLA_VAULT_PATH — путь к файлу-сейфу');
+    return p;
+  },
+
+  async _fsPull() {
+    const p = this._fsPath();
+    if (!fs.existsSync(p)) return null;
+    return parseStored(fs.readFileSync(p, 'utf8'));
+  },
+
+  async _fsPush(db) {
+    const p = this._fsPath();
+    const tmp = p + '.tmp';
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(tmp, JSON.stringify(db));
+    fs.renameSync(tmp, p); // атомарно: сейф никогда не бывает битым
+  },
+
   /* ---------------- HTTP ---------------- */
   _httpCfg() {
     const url = String(process.env.SHKOLA_VAULT_URL || '').trim();
@@ -181,7 +213,8 @@ const Vault = {
   async pull() {
     if (!this.enabled) return null;
     try {
-      const data = this.kind === 'github' ? await this._ghPull() : await this._httpPull();
+      const data = this.kind === 'github' ? await this._ghPull()
+        : (this.kind === 'fs' ? await this._fsPull() : await this._httpPull());
       this._stats.pulledAt = Date.now();
       if (data && hasContent(data)) {
         this._stats.restored = true;
@@ -203,7 +236,9 @@ const Vault = {
     this._pushing = true;
     try {
       const snapshot = JSON.parse(JSON.stringify(db));
-      if (this.kind === 'github') await this._ghPush(snapshot); else await this._httpPush(snapshot);
+      if (this.kind === 'github') await this._ghPush(snapshot);
+      else if (this.kind === 'fs') await this._fsPush(snapshot);
+      else await this._httpPush(snapshot);
       this._stats.pushes++;
       this._stats.lastPushAt = Date.now();
       this._lastPushAt = Date.now();
