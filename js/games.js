@@ -74,9 +74,9 @@ const MiniGames = {
             <b>${escapeHtml(g.name || g.id)}</b>
             <small>${escapeHtml(g.desc || '')}</small>
           </span>
-          ${current
-            ? '<span class="mini-game-tag mini-game-tag-live">▶ играешь</span>'
-            : (g.badge ? `<span class="mini-game-tag mini-game-tag-new">${escapeHtml(g.badge)}</span>` : '<span class="text-slate-500">›</span>')}
+          ${current && g.liveTag !== false
+            ? `<span class="mini-game-tag mini-game-tag-live">${escapeHtml(g.liveTag || '▶ играешь')}</span>`
+            : (g.badge && !current ? `<span class="mini-game-tag mini-game-tag-new">${escapeHtml(g.badge)}</span>` : '<span class="text-slate-500">›</span>')}
         </button>`;
     }).join('');
   },

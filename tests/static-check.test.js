@@ -76,6 +76,19 @@ t('модальное окно меню игр есть в разметке', id
 t('скрипты мини-игр подключены',
   /js\/crash\.js/.test(html) && /js\/games\.js/.test(html));
 
+/* ---------- 4b. Нижнее меню: 4 крупные кнопки + переключатели внутри ---------- */
+const navButtonsHtml = html.match(/<button[^>]*class="nav-tab[^"]*"[^>]*>/g) || [];
+t('в нижнем меню ровно 4 кнопки', navButtonsHtml.length === 4, `найдено: ${navButtonsHtml.length}`);
+t('кнопки меню: Игры, Рюкзак, Сообщество, Лавка',
+  ['tabGames', 'tabInventory', 'tabCommunity', 'tabShop'].every(id => navButtonsHtml.some(b => b.includes(`id="${id}"`))));
+t('старых кнопок Крафт/Коллекции/Режимы в меню нет',
+  !navButtonsHtml.some(b => /id="tab(Craft|Collections|Modes)"/.test(b)));
+const segBars = (html.match(/class="seg-bar items-seg-nav"/g) || []).length;
+t('переключатель разделов есть в рюкзаке, крафте и коллекциях', segBars === 3, `найдено: ${segBars}`);
+t('переключатель разделов рисуется из JS', /function renderItemsSegNav/.test(allJs));
+t('в нижнем меню осталась сетка на 4 колонки',
+  /repeat\(4,\s*minmax\(0,\s*1fr\)\)/.test(html));
+
 /* ---------- 5. Реестр игр согласован с разметкой ---------- */
 const configSrc = fs.readFileSync(path.join(ROOT, 'js', 'config.js'), 'utf8');
 const ctx = { console };

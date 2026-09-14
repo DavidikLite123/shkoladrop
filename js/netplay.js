@@ -9,8 +9,8 @@
    (лёгкий server/index.js, Node без зависимостей). Если сервер не отвечает —
    жёлтая плашка с кнопкой «Включить сервер» и почтой ${SERVER_CONTACT_EMAIL}.
 
-   Реестр кодов авторов — файл author-codes.json в корне репозитория (GitHub):
-   сайт читает его напрямую, сервер тоже (и админка умеет в него дописывать).
+   Реестр кодов авторов — author-codes.json на сервере (в публичную раздачу
+   не попадает; клиент получает список через GET /api/author-codes).
    ========================================================================== */
 
 /* --------------------------------------------------------------------------
@@ -101,17 +101,45 @@ function onServerJustCameOnline() {
   });
 }
 
-/* Секрет админки для серверных запросов: подбирается под роль, с которой
-   открыта панель (owner → ADMIN_SECRET, admin → STAFF_SECRET на сервере) */
-function adminSecret() {
-  const role = (typeof state !== 'undefined' && state.adminRole) || null;
-  const fallback = role === 'admin'
-    ? (typeof ADMIN_SERVER_SECRET !== 'undefined' ? ADMIN_SERVER_SECRET : 'david-staff-7331')
-    : (typeof OWNER_SERVER_SECRET !== 'undefined' ? OWNER_SERVER_SECRET : 'david-admin-1337');
-  try { return localStorage.getItem('shkola_admin_secret') || fallback; }
-  catch (e) { return fallback; }
+/* ТОКЕН АДМИНКИ (сезон 4.1). В клиенте больше нет ни кодов, ни секретов:
+   код вводится в панели → уходит на сервер (POST /api/admin/login) → сервер
+   возвращает подписанный токен роли на 12 часов. Все админ-запросы идут
+   с заголовком x-admin-token. Украсть из браузера нечего: без сервера
+   этот токен ничего не значит, а без верного кода его не выдают. */
+const ADMIN_TOKEN_KEY = 'shkola_admin_token';
+function adminToken() {
+  try { return localStorage.getItem(ADMIN_TOKEN_KEY) || ''; } catch (e) { return ''; }
 }
-function adminHeaders() { return { 'x-admin-secret': adminSecret() }; }
+function adminHeaders() {
+  const t = adminToken();
+  return t ? { 'x-admin-token': t } : {};
+}
+
+const AdminAuth = {
+  /* Ввод кода: сервер сам определяет роль (владелец / администрация) */
+  async login(code) {
+    try {
+      const { status, data } = await ServerAPI.req('POST', '/api/admin/login', { code }, {}, 15000);
+      if (!data || !data.ok || !data.token) {
+        const msg = (data && data.error) || (status === 0 ? 'Сервер не отвечает — вход в панель требует интернет' : 'Неверный код доступа');
+        return { ok: false, error: msg };
+      }
+      try { localStorage.setItem(ADMIN_TOKEN_KEY, data.token); } catch (e) {}
+      return { ok: true, role: data.role, exp: data.exp };
+    } catch (e) {
+      return { ok: false, error: 'Сервер не отвечает — вход в панель требует интернет' };
+    }
+  },
+  /* Токен ещё действителен? (панель не просит код каждый раз) */
+  async me() {
+    if (!adminToken()) return null;
+    try {
+      const { data } = await ServerAPI.req('GET', '/api/admin/me', null, adminHeaders(), 10000);
+      return data && data.ok ? data.role : null;
+    } catch (e) { return null; }
+  },
+  logout() { try { localStorage.removeItem(ADMIN_TOKEN_KEY); } catch (e) {} }
+};
 
 /* Галочка верификации — единый вид по всей игре (чат, профиль, списки) */
 function verifiedBadgeHtml(title) {
@@ -350,17 +378,21 @@ const NetIdentity = {
 };
 
 /* --------------------------------------------------------------------------
-   РЕЕСТР КОДОВ АВТОРОВ: читаем author-codes.json прямо с сайта (файл в GitHub)
+   РЕЕСТР КОДОВ АВТОРОВ (сезон 4.1): читаем список кодов у сервера
+   (GET /api/author-codes). Раньше файл author-codes.json лежал статикой
+   и был виден любому — теперь он не публикуется.
    -------------------------------------------------------------------------- */
 const AuthorRegistry = {
   _data: null,
 
   async load(force = false) {
     if (this._data && !force) return this._data;
+    // Реестр отдаёт сервер (сезон 4.1): файл author-codes.json больше не публикуется
+    // как статика, иначе его мог скачать любой желающий.
     try {
-      const res = await fetch('author-codes.json?v=' + Date.now(), { cache: 'no-store' });
-      if (res.ok) {
-        this._data = await res.json();
+      const { status, data } = await ServerAPI.req('GET', '/api/author-codes', null, {}, 6000);
+      if (status === 200 && data && data.ok && Array.isArray(data.codes)) {
+        this._data = { royaltyPercent: data.royaltyPercent, codes: data.codes };
         try { localStorage.setItem('shkola_author_codes_cache', JSON.stringify(this._data)); } catch (e) {}
         return this._data;
       }
@@ -1952,7 +1984,7 @@ async function adminIssueAuthorCode() {
   if (await ServerAPI.ping(true)) {
     const { status, data } = await ServerAPI.req('POST', '/api/admin/author-codes', { ownerUid, ownerName, code }, adminHeaders());
     if (!data.ok) { Toast.error(data.error || 'Сервер отклонил выдачу кода'); return; }
-    Toast.gold(`✅ Код автора <b class="font-mono">${escapeHtml(data.entry.code)}</b> выдан для ${escapeHtml(data.entry.ownerName)} и записан в author-codes.json на сервере!`, 8000);
+    Toast.gold(`✅ Код автора <b class="font-mono">${escapeHtml(data.entry.code)}</b> выдан для ${escapeHtml(data.entry.ownerName)} и сохранён в реестре сервера!`, 8000);
   } else {
     // Оффлайн-режим: отдаём строку для ручной вставки в файл на GitHub
     const finalCode = code || ownerName.replace(/[^A-Za-z0-9]/g, '').slice(0, 10).toUpperCase() || 'AUTHOR' + Math.floor(Math.random() * 900 + 100);
@@ -1963,7 +1995,7 @@ async function adminIssueAuthorCode() {
       area.value = snippet + ',';
       area.select();
     }
-    Toast.info('Сервер оффлайн — скопируй строку ниже и вставь её в массив "codes" файла author-codes.json на GitHub.', 9000);
+    Toast.info('Сервер оффлайн — скопируй строку ниже и передай её владельцу: он добавит код в реестр.', 9000);
   }
   $('adminCodeOwnerUid').value = '';
   $('adminCodeOwnerName').value = '';

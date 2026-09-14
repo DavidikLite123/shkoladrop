@@ -2490,10 +2490,12 @@ async function redeemPromo() {
     ? c
     : (Object.keys(PROMO_CODES).find(k => k.replace(/-/g, '') === c.replace(/-/g, '')) || null);
 
-  // Вход в админку через промокод: ADMIN<код> (роль определяется по хешу кода)
-  if (code.startsWith('ADMIN') && resolveAdminRole(code.slice(5))) {
+  // Вход в админку через промокод: ADMIN<код> — код проверяет сервер
+  if (code.startsWith('ADMIN') && code.length > 5) {
+    const res = await AdminAuth.login(code.slice(5));
     input.value = '';
-    grantAdminRole(resolveAdminRole(code.slice(5)));
+    if (res.ok) { grantAdminRole(res.role); return; }
+    Toast.error(res.error || 'Неверный код доступа');
     return;
   }
 
@@ -3690,24 +3692,8 @@ function closeAdminCodeModal() {
   Modal.close('adminCodeModal');
 }
 
-/* Определяем роль по введённому коду (сравниваем хеши, коды в открытом виде не храним) */
-function resolveAdminRole(raw) {
-  const code = String(raw || '').trim().toUpperCase();
-  if (!code) return null;
-  // убираем удобные префиксы: SHKOLA1337 / ADMIN1337 / КОТ1337 → 1337
-  const bare = code.replace(/^(SHKOLA|ADMIN|КОТ|OWNER|STAFF)/, '');
-  const candidates = [code, bare];
-  for (const c of candidates) {
-    const h = betaCodeHash(c);
-    if (h === OWNER_CODE_HASH) return 'owner';
-  }
-  for (const c of candidates) {
-    const h = betaCodeHash(c);
-    if (h === ADMIN_CODE_HASH) return 'admin';
-  }
-  return null;
-}
-
+/* Админ-панель (сезон 4.1): коды и секреты живут ТОЛЬКО на сервере.
+   Здесь мы просто отправляем введённый код на проверку и получаем роль + токен. */
 function adminHas(perm) {
   const role = state.adminRole;
   if (!role) return false;
@@ -3717,8 +3703,7 @@ function adminHas(perm) {
 function grantAdminRole(role) {
   state.adminRole = role;
   state.rigReady = true;
-  // секрет для серверных запросов подбирается под роль
-  try { localStorage.setItem('shkola_admin_secret', role === 'owner' ? OWNER_SERVER_SECRET : ADMIN_SERVER_SECRET); } catch (e) {}
+  // токен уже сохранён в localStorage внутри AdminAuth.login()
   closeAdminCodeModal();
   openAdminModal();
   audio.playLevelUp();
@@ -3728,18 +3713,42 @@ function grantAdminRole(role) {
     : 'Панель АДМИНИСТРАЦИИ открыта — доступны функции модерации 🛡');
 }
 
-function submitAdminCode() {
+/* Вход в панель: код проверяет сервер, в клиенте кодов больше нет */
+async function submitAdminCode() {
   const input = $('adminCodeInput');
   const error = $('adminCodeError');
   const code = ((input && input.value) || '').trim();
-  const role = resolveAdminRole(code);
-  if (role) {
-    grantAdminRole(role);
-  } else {
-    if (error) error.classList.remove('hidden');
+  const showError = msg => {
+    if (error) {
+      error.textContent = msg || 'Неверный код доступа';
+      error.classList.remove('hidden');
+    }
     audio.playLoss();
     if (input) input.select();
+  };
+  if (!code) return showError('Введи код доступа');
+  if (typeof AdminAuth === 'undefined') return showError('Онлайн-модуль не загрузился — обнови страницу');
+  if (input) input.disabled = true;
+  try {
+    const res = await AdminAuth.login(code);
+    if (res.ok) { if (input) input.value = ''; grantAdminRole(res.role); }
+    else showError(res.error);
+  } finally {
+    if (input) input.disabled = false;
   }
+}
+
+/* Тихая проверка сохранённого токена при загрузке: панель остаётся доступной,
+   пока токен (12 часов) не истёк и сервер отвечает. */
+function restoreAdminSession() {
+  if (typeof AdminAuth === 'undefined' || !adminToken()) return;
+  AdminAuth.me().then(role => {
+    if (!role) return;
+    state.adminRole = role;
+    state.rigReady = true;
+    applyAdminPermissions();
+    updateAdminUI();
+  }).catch(() => {});
 }
 
 function openAdminModal() {
@@ -3793,7 +3802,8 @@ function adminLogout() {
   state.adminRole = null;
   state.rigReady = false;
   state.rigMode = 'fair';
-  try { localStorage.removeItem('shkola_admin_secret'); } catch (e) {}
+  if (typeof AdminAuth !== 'undefined') AdminAuth.logout();
+  try { localStorage.removeItem('shkola_admin_secret'); } catch (e) {} // старый ключ от прошлых версий
   closeAdminModal();
   Toast.info('Вышел из админ-панели');
 }
@@ -3869,7 +3879,35 @@ function viewIdForTab(tab) {
 function navButtonForTab(tab) {
   const games = (typeof MINI_GAMES !== 'undefined' && Array.isArray(MINI_GAMES)) ? MINI_GAMES : [];
   if (games.some(g => g && (g.tab || g.id) === tab)) return $('tabGames');
-  return $({ inventory: 'tabInventory', craft: 'tabCraft', collections: 'tabCollections', modes: 'tabModes', community: 'tabCommunity', shop: 'tabShop' }[tab] || '');
+  // Рюкзак / Крафт / Коллекции — один раздел нижнего меню «Рюкзак»,
+  // переключаются кнопками внутри экрана (см. renderItemsSegNav).
+  return $({
+    inventory: 'tabInventory', craft: 'tabInventory', collections: 'tabInventory',
+    community: 'tabCommunity', shop: 'tabShop'
+  }[tab] || '');
+}
+
+/* --------------------------------------------------------------------------
+   РАЗДЕЛ «РЮКЗАК»: переключатель Рюкзак · Крафт · Коллекции внутри экрана
+   (сезон 4.1: в нижнем меню меньше кнопок — подписи перестали обрезаться)
+   -------------------------------------------------------------------------- */
+const ITEMS_TABS = [
+  { tab: 'inventory', label: '🎒 Рюкзак' },
+  { tab: 'craft', label: '🔨 Крафт' },
+  { tab: 'collections', label: '📚 Коллекции' }
+];
+
+function renderItemsSegNav(active) {
+  const boxes = document.querySelectorAll('.items-seg-nav');
+  if (!boxes.length) return;
+  const current = active || currentTab;
+  const html = ITEMS_TABS.map(t => {
+    const on = t.tab === current;
+    return `<button type="button" onclick="switchTab('${t.tab}')" data-seg-tab="${t.tab}"`
+      + ` class="seg-btn${on ? ' seg-btn-active' : ''}"`
+      + `${on ? ' aria-current="page"' : ''}>${t.label}</button>`;
+  }).join('');
+  boxes.forEach(box => { box.innerHTML = html; });
 }
 
 function switchTab(tab) {
@@ -3901,6 +3939,7 @@ function switchTab(tab) {
   if (tab === 'upgrade') renderUpgradeHud();
   if (tab === 'crash' && typeof CrashGame !== 'undefined') CrashGame.onShow();
   if (tab === 'bottle' && typeof BottleGame !== 'undefined') BottleGame.onShow();
+  renderItemsSegNav(tab);
 
   uiUpdate();
 }
@@ -4547,6 +4586,9 @@ function initGame() {
 
   // Ревизия VIP (аннулированные утёкшие коды) — асинхронно, после старта
   auditVip();
+
+  // Админка: если токен (12 ч) ещё жив — возвращаем роль без повторного ввода кода
+  restoreAdminSession();
 
   // Сезон 3.5 — обязательный онлайн: если сервер не подключен через 1.5 сек после загрузки — показываем модал
   setTimeout(() => {

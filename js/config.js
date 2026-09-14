@@ -894,6 +894,14 @@ const MINI_GAMES = [
     id: 'bottle', tab: 'bottle', icon: '🍾', iconSvg: 'bottle', name: 'Бутылочка', badge: 'NEW',
     desc: 'Выложи скины на стол и крути бутылочку — укажет на скин дороже ставки, забираешь выигрыш',
     enabled: () => true
+  },
+  {
+    /* Не мини-игра, а настройка игр: раньше висела отдельной кнопкой в нижнем меню,
+       теперь живёт здесь — меню осталось на 4 понятные кнопки (сезон 4.1). */
+    id: 'modes', tab: 'modes', icon: '🎮', iconSvg: 'gamepad', name: 'Режимы',
+    desc: 'Хардкор, песочница и другие режимы игры — у каждого свой прогресс и свои сохранения',
+    liveTag: false, // это экран выбора, а не игра: плашку «играешь» не показываем
+    enabled: () => true
   }
 ];
 
@@ -986,28 +994,21 @@ const PROMO_CODES = {
 };
 
 /* ---------- Админка: два уровня доступа (5 кликов по логотипу + код) ----------
-   Коды НЕ хранятся в открытом виде — только djb2-хеши (см. betaCodeHash ниже).
-   Введённый код хешируется и сравнивается: если совпал с OWNER — открываются
-   ВСЕ функции (владелец), если с ADMIN — только функции администрации
-   (модерация чата, онлайн, деньги себе). Остальные блоки просто не показываются.
-   Сменить код: посчитай betaCodeHash('новый код') в консоли и подставь сюда. */
-const OWNER_CODE_HASH = 2088291795;   // код владельца — знает только David Lite
-const ADMIN_CODE_HASH = 2088507411;   // код администрации — выдаётся модераторам
-/* Секреты для серверных запросов должны совпадать с ADMIN_SECRET / STAFF_SECRET на сервере */
-const OWNER_SERVER_SECRET = 'david-admin-1337';
-const ADMIN_SERVER_SECRET = 'david-staff-7331';
+   СЕЗОН 4.1 (безопасность): в клиенте НЕТ ни кодов админки, ни серверных секретов.
+   Панель логинится на сервере: POST /api/admin/login {code} → подписанный токен
+   роли на 12 часов (заголовок x-admin-token). Коды задаются на сервере:
+   OWNER_ADMIN_CODE / STAFF_ADMIN_CODE (env). Если они не заданы — сервер
+   печатает сгенерированные коды в лог при старте (Render → Logs).
+   Здесь остались только права ролей — это НЕ секрет, это список того, какие
+   блоки панели показывать. */
 /* Права ролей — что показывать в панели (data-admin-perm="...") */
 const ADMIN_PERMS = {
   owner: ['rig', 'money', 'cat', 'maxlevel', 'players', 'detail', 'dm', 'verify', 'ban', 'role', 'status', 'delete', 'chat', 'server', 'authorcodes', 'online', 'emails'],
   admin: ['money', 'players', 'detail', 'dm', 'ban', 'chat', 'online']
 };
 
-/* djb2-хеш: используется для кодов админки (коды в открытом виде не хранятся) */
-function betaCodeHash(str) {
-  let h = 5381;
-  for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) >>> 0;
-  return h;
-}
+/* (хеш-функция кодов админки и сами хеши удалены: коды проверяет сервер,
+   в клиенте их больше нет — см. js/netplay.js → AdminAuth.) */
 
 /* ---------- VIP-коды (покупка за 150 ₽ через почту) ----------
    Схема работы:
@@ -1016,165 +1017,118 @@ function betaCodeHash(str) {
       УНИКАЛЬНЫЙ код из СВОЕГО списка vip_codes_funpay.txt (один код = один покупатель).
    3. Игрок вводит код в разделе «Промокоды» — активируется вечный VIP.
 
-   ВАЖНО (исправление утечки): раньше сами коды лежали здесь в открытом виде, а репозиторий
-   публичный — любой мог взять код с GitHub и «автоматически» получить VIP. Теперь в клиенте
-   хранятся ТОЛЬКО SHA-256-хеши (первые 24 hex-символа от 'shkoladrop-vip:' + код).
-   Все старые коды (VIP-J5PA-BUPF и т.д.) АННУЛИРОВАНЫ: VIP, активированный ими, снимается
-   при входе (см. auditVip в game.js). Настоящим покупателям выдай код из нового списка.
-   Файл vip_codes_funpay.txt с открытыми кодами НЕ КОММИТЬ — он в .gitignore. */
+   ВАЖНО (исправление утечки, дважды): сначала коды лежали здесь открытым текстом, а потом
+   список из 100 кодов лежал в файле codes/vip-codes.md — и сайт раздавал его публично.
+   Теперь в клиенте хранятся ТОЛЬКО SHA-256-хеши (первые 24 hex-символа от 'shkoladrop-vip:' + код),
+   сам список открытых кодов живёт в vip_codes_funpay.txt и в git НЕ попадает (он в .gitignore),
+   а файлы codes/ больше не публикуются (см. .vercelignore и белый список статики в server/index.js).
+   Все ранее опубликованные коды АННУЛИРОВАНЫ: VIP, активированный ими, снимается при входе
+   (см. auditVip в game.js). Ротация новых кодов: `node tools/rotate-vip-codes.js`. */
 const VIP_PRICE_RUB = 150;
 const VIP_CODE_HASHES = [
-  'd1baad0fce17fdeae0697348',
-  '09ff6dd6b1eb6863afa867c0',
-  'cbd61b73b97b9d63f6354a01',
-  'b60ae22235766bc374584e05',
-  'f5c16318209f7ce8dcddafdd',
-  'a69566de97112c3062714bb7',
-  'a7243cc51ac4345038aae494',
-  '7ce494fe26ac2295cab69b74',
-  '1c8e422f807836c9d481f287',
-  '802dd5324998768194c171eb',
-  '7d5be1349079c27fe4a3ab3f',
-  'e1803307a5004bc146de91cd',
-  '7720c07191c86873c7fc50ba',
-  'ebeecc2a7aaeb8b6c956e544',
-  '61ce0a281617fcaebb0d8543',
-  '424a33c9ffbe5cd2f5034f37',
-  '04e97c185f512fdff81ad8b8',
-  '982a77d6272c0fdbebc47450',
-  '615d9b6685eb1db08a5a493e',
-  '66be805e789a74445ff9fb6a',
-  '0e1b94b0942106417c73a700',
-  '9e1412852fe35382623dcd26',
-  'f506ef8cce78a57fdce444ab',
-  '31c934d79588dea15aead020',
-  'f4c56dfb174be48d3928cad0',
-  '28ba6b386bee4409a94997aa',
-  '615bce027f8898bcdcf0c049',
-  '335ffa4581e68b82a462e39b',
-  '772081d5cf1d60b8f0f69eee',
-  '51e9e63a56ef3ee06e9e2efb',
-  'f5c6d8f7da019a597057bcce',
-  '760bc6b4fb07b9b0a621f5b3',
-  '8d911eeee317acee7b45d850',
-  'f2856c050e7075b66bbd05dd',
-  'be51f841f1cbf7b60f2eb02d',
-  'f743a2135ea062e667f91493',
-  '608b0dfda6a949924d57cc5b',
-  '0282208a1924a30e59d75f2a',
-  '23324d57d243bd81aa8b5e43',
-  'ab4889d5e79af7cd0137b62a',
-  '514f46e7cb5f9132763ac76c',
-  '2fa3c37767944be77747bcce',
-  '213275c6b285cf502e351f14',
-  '007eaf502f1ffc2b963d5485',
-  'a61c458dc54bd443be9ba9a7',
-  'ba69f3d63682adec1af00c00',
-  '254ae5f03fa33aa52dd0eda1',
-  'b69dd4decd76364dcbc5e387',
-  '3d8187bc5abd8c98c7ac9f01',
-  '478b0eb7258f16204f46101a',
-  'd489afbdc71fc40878d28e2f',
-  'a20884e8035c752f9b7303ef',
-  '232df7fd6b3bd9d9053675c9',
-  'bceda107755b0663a0c0d1ca',
-  '7f439dcc253cda896e55c071',
-  '52ba40b3bb78c7fa467d9621',
-  '99cc8c3034cd6ec26e3b74f6',
-  '121e44485055b5a11efd8c99',
-  'b84f2036b4555afd794b1c93',
-  'b6a47742d4986bd8e68bf1e0',
-  'c29020cc5703134310444fb4',
-  'de247bf0516cf8237c72f241',
-  'f6f53c4af349cc2b10379d19',
-  'd9a1cafd926c8d1f81108262',
-  '51ee4dec1f4ea29ae28e5804',
-  'fa13a29873c7e300cd1ee244',
-  '20840c4413237a0da1bd767c',
-  '2eceb5d1f0a4e038a948b066',
-  'd62d2973f3abd34fa8cd7470',
-  'b4ec19e6f91e7626b8252c19',
-  'edb0a628a32ed1803427117e',
-  'b726ecbb5c8edc81d07a0c54',
-  '41dd54514a83572dcc76527c',
-  '3b7cc79bdde88eb04ac481a5',
-  '1b118d09539b4246d3aaa917',
-  '39a4ea93d90116adaebc6a1a',
-  '4c3dbd677fa607e88cc4ddf0',
-  '5e4a961b4fd66f831655c31c',
-  '1a95a3c334a9a7c876475385',
-  '800b0b0e2232c4a7f08a432e',
-  '84ba28f93ba1ebff909d5245',
-  '5b24ec467fe3418e7210057e',
-  '5d404e0f50579ee9fbc8e986',
-  '565b8357ceac674859439e28',
-  'daa81fcb244c872b5825604e',
-  'c16ba74b4d231672024778b3',
-  '9a945e7cacdb5909c3bad164',
-  '36e4d5a8d6f180ebbb442031',
-  'f7caa339ca6083b0796dfed1',
-  '38e74763d2665aaf08f070b2',
-  'f1e6330b1213f568a806562f',
-  '1005232d85fde1d1cea780fb',
-  '3c40f676c61f7009bd132101',
-  'fcadb4975af5d75e776e8efd',
-  '8d60dac247d5eaf98bd65085',
-  'e497290beae506c2b627edf8',
-  '74982ee81cf2fd2e0dd7195b',
-  'c2a5633c81aed751cd7a0006',
-  '7f93ecd00cd89d1349c6245a',
-  '5b94d01020fe47c532f686ed',
-  /* Новая сотня кодов (генерация 2026-09-12) — открытые коды: codes/vip-codes.md */
-  '9fe76d744c9e1a4beef09e78', '831bd6138df2a26a586f85a5',
-  '7bd6ba3667c7c582cff08b09', 'a5c12a29324a617ff8456269',
-  '5c52deb83f56656bc8bb1c58', '1f1d1e3f4177c345b3023909',
-  'fc6793e13f649ff6b2bc2942', '721a90a35a786ca0b2d92d05',
-  '13e36a200281c31956c4ba98', 'd995d5efc8ba6b7a3d6ff47c',
-  '55ca3c2ff17a43288c034ba5', 'd0daef0738e5abe1d3f7817a',
-  '98ebd688f30140b4a14e3dbe', '25c13cf49057e4d93713a7c6',
-  '3562601cfb62762b7b3dad2c', '1e43e9361caeee2034f0b26f',
-  '4a28f5f2e16ae4e5a3293c04', '2f36e3d9179634e60b1aa125',
-  'd75f522a4d9ad6ef9166fbad', '38af1c65b820152e1ca48f6f',
-  'f7c9b9442fbd57f82f440d4c', 'fdb9bdfda4f5fedbeb928063',
-  'e7b7616e4c063efc7cc41887', 'c895b8eef9b196deb73f477a',
-  '62dcb4c5e9314b5f8e98194a', '7d59cfd863be64748be78a0c',
-  '04a6e1a64a59ea80d9055859', 'b45fb179f3771df33d6bd25e',
-  'd893d535238acbafb9c74f28', '56fd7c2683701f30c45450c8',
-  '17b5108e6f11911fe4191cfa', '7368165b0ae63b6316f1084d',
-  '354dca3c4013ffb529ce0ac9', '96a8890c4e8df725a3d6a831',
-  '425fc92bc5b4e5b28798428f', 'ec1ec529b909fb4fd65ccbd0',
-  '8de1f1356463b67ad498d968', 'ee234c69ece72fb9d5c66949',
-  'c5e6c98009e4391a54c0ff23', 'dd7c7e4ea4b6c5b8549562cd',
-  '6ca04e7a2be95d2fadab618a', '174516cc293c2c858bcbef44',
-  '4840953597bda78cb4028829', 'f1f1b02ba22e6c2b3999d93c',
-  'd1eed9288ff05740ddcf0e1b', 'f53d001bc71fab90eb0604dc',
-  '13599f46a0a76ea6fb9beeef', 'd024f4a02bea7afa015241f0',
-  '49009b521ed2d844a8a65329', '63d55d078c50d3374e852abd',
-  'bc1bcaa8a5e095c28bb0da70', '59e5bfcf09e0278c6a0031f3',
-  '54499b7c00b8211d2855c0cd', 'b72f293f8a81b80aeb45b150',
-  'efae1af1fde6379fb6c242b3', '00af02bf1e3f8ac1296b8fc6',
-  'c324f813cd9a940bba1d8cf7', 'ca9a0c33044ec07fe725df8f',
-  '14ff4154a9fb21a72ac96ef4', '86f3c3d9412056ff83960b7b',
-  'f49e5806535e9657bbd19e24', 'cc4946de5e3a11db9e984edc',
-  'cfa2c3f9f86cc3a69357d8aa', '400f39aea0f6b9bc9118ea33',
-  '881959f291eb81a02ec1739f', '6a7098defb76fd7f7cce980b',
-  '03091cc16165af5cec29b35c', '29440894da848ecab144a38c',
-  '3c998a7ef0c5b3be5bd8d665', 'de77d0214740cbad156e1ce0',
-  'a627d74188cd7c1dd577593d', 'ec87ef3d69312e42eb6e19e9',
-  'eace5642109b3dfa22365a0d', 'ea5243725c36be8e0b763e37',
-  '63dbdb63f118945df71a944f', '438deda5301231665b5fae09',
-  '6b63f1add0bd206dd88a7beb', '80bfe43c551c9b179913a58a',
-  '43449ee1d52a1b1cb1d35cff', '2cb8db475c98cf5d62d2711e',
-  'f6420aea59d3175eadbce034', '3c063f1c59f0edbd1ea86dfb',
-  '8500cedfb3784efe045f9ceb', '2839437062d6eb3b7ffdae30',
-  '404db12b1ca3932ae52eb1dc', 'fea7d7ffbb1188aa61b2e59b',
-  '08cfc913b338980d0817d353', 'bd28a0a8836e1167a785c877',
-  '73fdc40cce309b865864a58d', 'da6964eea668a5c698fc4545',
-  '70525427a9e9138ea2fedf85', 'e58fdb948c5b8ad318593841',
-  '5b295c17e608c10be51fb7ba', 'd37e5cc162b11751a9185dfa',
-  'da0ad40885a7c882167d5844', '7570673ac79ebb6103875a0e',
-  '80e840e9659e0ab256b8f13a', '562b917b68ce77389db3e7ae',
-  '4a7ea6e0d30f2e6103c0cd4d', '1ba1171869bbda281239a7e9'
+  '219aa6f8bdccded761070d69',
+  'c66d87a1e326334be71f6dac',
+  'b3953d4211995f47a3a9a74a',
+  'c44639455928f745f59a86f1',
+  '7a430a7d278da780a0306b03',
+  '5a5f0ae676d16532dc61f4fc',
+  'd256242eebae50b15fef34e8',
+  '93463f3c8b5e9af7ab5f8cf8',
+  'ea80de450c8b08edf12e5c9d',
+  '4e5874e2d6980e2cc46cdfc8',
+  'dfc7208e16aa9f1a33759352',
+  '8a6cd4bcce2c1a0da56c442f',
+  '79b6a1bbfa9098a859429bae',
+  '384df0359276ba213db4cc41',
+  'ae24146b43720b4f0af65d3e',
+  'cac676b1c60cf0e0e43d576d',
+  '792ca51b1d9f78ae9036bdc8',
+  'b606634a805fe8bd9b751195',
+  '2b2e008ceefc83f50296498b',
+  '0daac259c208ac00335c2f42',
+  '27e9e6d256186f5662f5e502',
+  '857f218a879b2c9a4c88de3d',
+  'b718e65a592f685996eeb769',
+  '2b0e0b40e37114f792b8c8ee',
+  'a920dfa3dfb4e5a5c491cf1c',
+  '63e60b9b69d5b64cb9ff7a8f',
+  '7d4d293d4da3f4b8491295ff',
+  '14bbeeefea44ba3d05e5fbd4',
+  '089c56f36a8bcc057f12feef',
+  '9fb6dad13b733922c97a94ed',
+  '0cba98800de08cbcbd64d0ef',
+  'e19dc8f0abe612308776897e',
+  'c2ce0962b6b055284e0b5460',
+  '31768a84a31b8d0a78eaa3de',
+  'a914391b282d11285353142f',
+  '41d8a1f6fa842afa1019237a',
+  '75e6895443f4b56c17c84b4e',
+  '512744a4cb39f5fe9454e85d',
+  'a28de1728165d2f457b3e3ef',
+  '8aa5adca0956d6f5adae47c7',
+  '6c222892a9b1f395f0d734b8',
+  'da7a5b8284cdbb3bbac5c733',
+  '3053182055996a9b43f6c3b4',
+  'e997c7b3f73d27a36fa2ee22',
+  '622e5a6cc38a707dc3371ac4',
+  '3975d441b0133e076982563f',
+  '2857d29497941d82ec94113a',
+  'c525968b56880f3ff098097d',
+  '1f8ec089da0a8c2d638f765c',
+  '4eab5f0098149ace5f478ae4',
+  '09d243fcd2080aa9e3b355d1',
+  '9f81342e34fbfd3b28d835b5',
+  'cac513313a2443be1ab7cde2',
+  '2d0a6b05536afbe481869143',
+  '3c9486d1cbf2410e442d2551',
+  '13e7845c0231ce16a20bfde7',
+  'ba632478abc7d4233836aa1f',
+  '3c41b0e4a69aa2dc992b096c',
+  '1a4ae49bc0f0a96bb491f235',
+  '0cfa45c6167cad5b695a0ace',
+  '7e326790d75a28cddb71e06d',
+  'c992d225bc8281bec69fff2c',
+  '759998c873d706f8e58a0793',
+  '28444b987cf34717ca0c7a4c',
+  'd6ca9a96d7953634a1902a9f',
+  '911fd912b52e6177c9351c83',
+  'c3fe4690a6cc6ed5c22c8ed1',
+  '246b291e953cf9f9ea12ef40',
+  '6b214117e7e5f4da33116632',
+  '45d10d8f222c90e796322430',
+  'fa2eb2e9f307eea2572992d4',
+  'e092e86c05a2415474cdf619',
+  '480ed4251cef5750c9b227be',
+  'b4af407d7ffaafa72e381a4f',
+  '598aa3cb2a7829b9de711562',
+  '1316671a5b41dd24ab8918b1',
+  '1af28430f5dd62f55e536ab1',
+  '0ede11ec5a43ce2a4477437f',
+  '298be7fda19575875e1c705a',
+  '1940f622a7d7bbc2cb9e8d3e',
+  '944827777dc51cf935ad5de1',
+  '3ecf88e1712aabd73409ad2b',
+  '17c1494b504809e6d6e00f0e',
+  '590320fefbff258576c1bfa6',
+  '832aeef5a69f450bc17ab64e',
+  'ab5ea90528f1381c7effabd7',
+  '17c5df62a1a6f5af03a4bf29',
+  '49970fcfb976b3ff73420877',
+  '67b647d5b733f294b2b927b8',
+  '9f0e5cd933e22ee937dd633f',
+  '234c2ab26ed34f3830f3082b',
+  '4795083dc5ed7f142d800cf7',
+  'e9d25d6ac953d8df63077152',
+  'baa36977d54389f98e4289af',
+  'e214ccf779f64d4e8e0be556',
+  '188170c33f5bcf019767d2d8',
+  '1090347f45f84f8f154867cf',
+  '109f16c3c11d466759e83ec8',
+  '7b7eb505805d9a564af40e75',
+  '610b97c7138532614fae68a9'
+  /* Ротация от 2026-09-14: 100 новых кодов. Старый список утёк публично и аннулирован.
+     Открытые коды — в vip_codes_funpay.txt (в .gitignore, в git не попадает). */
+
 ];
 const VIP_CODES = [];  // устарело: открытых кодов в клиенте больше нет
 
