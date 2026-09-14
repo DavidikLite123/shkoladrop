@@ -12,7 +12,7 @@
     "selftest": "node server/selftest.js",
     "test": "node server/selftest.js",
     "test:unit": "node tests/crash-math.test.js",
-    "test:ui": "node tests/crash-ui.test.js",
+    "test:ui": "node tests/crash-ui.test.js && node tests/rebirth-ui.test.js && node tests/bottle-ui.test.js",
     "test:lint": "node tests/static-check.test.js",
     "test:all": "npm run test:lint && npm run test && npm run test:unit && npm run test:ui"
   },
