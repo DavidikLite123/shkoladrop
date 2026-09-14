@@ -245,6 +245,13 @@ const NetIdentity = {
 
   async sync(force = false) {
     if (!state.user || this._syncing) return null;
+    try {
+      if (typeof ModeManager !== 'undefined' && !ModeManager.isSyncEnabled()) return null;
+      if (typeof getCurrentModeId !== 'undefined') {
+        const curMode = getCurrentModeId();
+        if (curMode && curMode !== 'normal') return null;
+      }
+    } catch (e) {}
     this._syncing = true;
     if (force) { this._retryN = 0; this._gaveUp = false; }
     try {
@@ -540,6 +547,19 @@ const Community = {
   _found: null,
 
   open() {
+    try {
+      if (typeof ModeManager !== 'undefined' && !ModeManager.isChatEnabled()) {
+        Toast.info('💬 Чат доступен только в режиме Обычный — переключись в настройках режимов 🌐');
+        return;
+      }
+      if (typeof getCurrentModeId !== 'undefined') {
+        const curMode = getCurrentModeId();
+        if (curMode && curMode !== 'normal') {
+          Toast.info('💬 Чат доступен только в режиме Обычный — переключись в настройках режимов 🌐');
+          return;
+        }
+      }
+    } catch (e) {}
     if (!state.user) {
       Toast.info('Сначала создай профиль — сервер выдаст тебе уникальный ID, и можно общаться!');
       if (typeof openProfileModal === 'function') openProfileModal();
@@ -794,9 +814,17 @@ const CloudSave = {
     } catch (e) {}
   },
 
-  /* Залить прогресс на сервер — каждое действие сохраняется на сервере + в vault */
+  /* Залить прогресс на сервер — каждое действие сохраняется на сервере + в vault
+     4.0 — только в режиме Обычный (normal) */
   async push(toast = false) {
     if (!state.user) return false;
+    try {
+      if (typeof ModeManager !== 'undefined' && !ModeManager.isSyncEnabled()) return false;
+      if (typeof getCurrentModeId !== 'undefined') {
+        const curMode = getCurrentModeId();
+        if (curMode && curMode !== 'normal') return false;
+      }
+    } catch (e) {}
     // всегда дублируем в vault, даже если сервер оффлайн
     try {
       if (typeof IdentityVault !== 'undefined' && typeof snapshot === 'function') {
@@ -857,12 +885,26 @@ const CloudSave = {
   },
 
   /* Подтянуть прогресс с сервера и восстановить.
-     manual=true — из настроек, с подсказками; false — тихое автовосстановление на входе. */
+     manual=true — из настроек, с подсказками; false — тихое автовосстановление на входе.
+     4.0 — только в режиме Обычный */
   async pullAndRestore(manual = false) {
     if (!state.user) {
       if (manual) Toast.error('Сначала создай профиль — сервер узнает тебя по аккаунту');
       return false;
     }
+    try {
+      if (typeof ModeManager !== 'undefined' && !ModeManager.isSyncEnabled()) {
+        if (manual) Toast.info('Облачное сохранение работает только в режиме Обычный 🌐');
+        return false;
+      }
+      if (typeof getCurrentModeId !== 'undefined') {
+        const curMode = getCurrentModeId();
+        if (curMode && curMode !== 'normal') {
+          if (manual) Toast.info('Облачное сохранение работает только в режиме Обычный 🌐');
+          return false;
+        }
+      }
+    } catch (e) {}
     if (!(await ServerAPI.ping(manual))) {
       if (manual) Toast.error('Сервер оффлайн — облачное восстановление сейчас недоступно');
       return false;

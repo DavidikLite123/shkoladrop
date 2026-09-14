@@ -104,7 +104,7 @@
       max-width: 28rem;
       z-index: 45;
       display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
+      grid-template-columns: repeat(7, minmax(0, 1fr));
       gap: 0.25rem;
       padding: 0.4rem 0.6rem calc(0.4rem + env(safe-area-inset-bottom, 0px));
       background: rgba(9, 12, 18, 0.96);
@@ -220,6 +220,7 @@
         <div class="flex items-center space-x-1.5 min-w-0">
           <h1 class="text-xs font-black uppercase tracking-wider text-orange-400 font-cs truncate">ШКОЛА ДРОП</h1>
           <span id="versionBadge" class="text-[8px] bg-orange-500/20 text-orange-300 font-bold px-1.5 py-0.5 rounded border border-orange-500/40 font-cs flex-shrink-0">v4.0 Season 3.5</span>
+          <span id="gameModeBadge" onclick="openGameModeSelectorModal()" title="Сменить режим" class="cursor-pointer text-[8px] bg-cyan-500/20 text-cyan-300 font-bold px-1.5 py-0.5 rounded border border-cyan-500/40 font-cs flex-shrink-0">Обычный</span>
           <span id="serverHeaderDot" title="Подключение к серверу..." class="w-2 h-2 rounded-full bg-amber-400 animate-pulse border border-amber-500/50 flex-shrink-0"></span>
         </div>
         <!-- Клик по автору открывает карточку создателя -->
@@ -906,6 +907,74 @@
     </div>
   </main>
 
+  <!-- ================= TAB: CRAFT (4.0) ================= -->
+  <main id="viewCraft" class="view-panel w-full px-4 mt-2 hidden space-y-3">
+    <div class="flex items-center justify-between">
+      <div>
+        <h2 class="font-cs text-sm font-bold uppercase tracking-wider text-slate-200">🔨 Крафт</h2>
+        <p class="text-[11px] text-slate-400">10 предметов одной редкости → 1 предмет той же редкости. Коллекция — пропорционально входу</p>
+      </div>
+      <button onclick="clearCraftSelection()" class="px-2.5 py-1 text-[10px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg transition">Очистить</button>
+    </div>
+    <div id="craftInfo" class="text-[11px] text-slate-400 bg-slate-900/60 border border-slate-800 rounded-xl p-2.5 leading-relaxed"></div>
+    <div id="craftBonusInfo" class="text-[10px] text-slate-500"></div>
+    <div class="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+      <button onclick="setCraftRarityFilter('all')" class="filter-chip filter-chip-active">Все редкости</button>
+      <button onclick="setCraftRarityFilter('common')" class="filter-chip">Обычный</button>
+      <button onclick="setCraftRarityFilter('uncommon')" class="filter-chip">Необычный</button>
+      <button onclick="setCraftRarityFilter('rare')" class="filter-chip">Редкий</button>
+      <button onclick="setCraftRarityFilter('epic')" class="filter-chip">Эпический</button>
+      <button onclick="setCraftRarityFilter('legendary')" class="filter-chip">Легендарный</button>
+      <button onclick="setCraftRarityFilter('mythical')" class="filter-chip">Мифический</button>
+      <button onclick="setCraftRarityFilter('secret')" class="filter-chip">Секретный</button>
+    </div>
+    <div id="craftRarityFilter" class="hidden"></div>
+    <div class="grid grid-cols-2 gap-2">
+      <div class="space-y-2">
+        <div class="text-[10px] font-bold text-slate-400 uppercase">Рюкзак</div>
+        <div id="craftInventoryGrid" class="grid grid-cols-2 gap-2 max-h-[360px] overflow-y-auto pr-1"></div>
+      </div>
+      <div class="space-y-2">
+        <div class="text-[10px] font-bold text-slate-400 uppercase">Выбрано (10)</div>
+        <div id="craftSelectedList" class="space-y-1.5 min-h-[120px] bg-slate-950/50 border border-slate-800 rounded-xl p-2"></div>
+        <button id="btnDoCraft" onclick="doCraft()" disabled class="w-full py-3 rounded-xl bg-slate-800 text-slate-500 font-bold text-xs uppercase cursor-not-allowed">Скрафтить (10 → 1)</button>
+      </div>
+    </div>
+  </main>
+
+  <!-- ================= TAB: COLLECTIONS (4.0) ================= -->
+  <main id="viewCollections" class="view-panel w-full px-4 mt-2 hidden space-y-3">
+    <div>
+      <h2 class="font-cs text-sm font-bold uppercase tracking-wider text-slate-200">📚 Коллекции</h2>
+      <p class="text-[11px] text-slate-400">Собирай тематические наборы — получай бонусы к крафту, дропу и косметике</p>
+    </div>
+    <div class="flex gap-1.5 overflow-x-auto pb-1 text-xs">
+      <button onclick="setCollectionFilter('all')" class="filter-chip filter-chip-active">Все</button>
+      <button onclick="setCollectionFilter('school')" class="filter-chip">Школа</button>
+      <button onclick="setCollectionFilter('school_drop')" class="filter-chip">Школа Drop</button>
+      <button onclick="setCollectionFilter('minecraft')" class="filter-chip">Minecraft</button>
+      <button onclick="setCollectionFilter('rust')" class="filter-chip">Rust</button>
+      <button onclick="setCollectionFilter('dota')" class="filter-chip">Dota</button>
+      <button onclick="setCollectionFilter('other')" class="filter-chip">Другие</button>
+    </div>
+    <div id="collectionsGlobalBonus" class="bg-slate-900/60 border border-slate-800 rounded-xl p-2.5"></div>
+    <div id="collectionsGrid" class="grid grid-cols-1 gap-2.5"></div>
+  </main>
+
+  <!-- ================= TAB: MODES (4.0) ================= -->
+  <main id="viewModes" class="view-panel w-full px-4 mt-2 hidden space-y-3">
+    <div>
+      <h2 class="font-cs text-sm font-bold uppercase tracking-wider text-slate-200">🎮 Игровые режимы</h2>
+      <p class="text-[11px] text-slate-400">Выбери режим при старте, переключайся в любой момент. Прогресс не переносится</p>
+    </div>
+    <div id="currentGameModeInfo" class="bg-slate-900/70 border border-slate-800 rounded-xl p-3"></div>
+    <div id="gameModeList" class="space-y-2"></div>
+    <div class="bg-slate-950/60 border border-slate-800 rounded-xl p-2.5 space-y-1.5">
+      <div class="text-[10px] font-bold text-slate-300 uppercase">Сохранения по режимам</div>
+      <div id="gameModeSavesList" class="space-y-1"></div>
+    </div>
+  </main>
+
   <!-- ================= TAB 4: SCHOOL SHOP ================= -->
   <main id="viewShop" class="view-panel w-full px-4 mt-2 hidden space-y-3">
     <div>
@@ -1028,14 +1097,22 @@
     </div>
   </div>
 
-  <nav id="tabbar" class="tabbar">
+  <nav id="tabbar" class="tabbar" style="grid-template-columns: repeat(7, minmax(0, 1fr));">
   
-    <!-- Единая кнопка мини-игр: открывает меню со списком игр (js/games.js) -->
     <button onclick="openGamesModal()" id="tabGames" class="nav-tab nav-tab-active">
       <span>🎮</span><span>Игры</span>
     </button>
     <button onclick="switchTab('inventory')" id="tabInventory" class="nav-tab">
       <span>🎒</span><span>Рюкзак (<span id="invCountBadge">0</span>)</span>
+    </button>
+    <button onclick="switchTab('craft')" id="tabCraft" class="nav-tab">
+      <span>🔨</span><span>Крафт</span>
+    </button>
+    <button onclick="switchTab('collections')" id="tabCollections" class="nav-tab">
+      <span>📚</span><span>Коллекции</span>
+    </button>
+    <button onclick="switchTab('modes')" id="tabModes" class="nav-tab">
+      <span>🎮</span><span>Режимы</span>
     </button>
     <button onclick="switchTab('community')" id="tabCommunity" class="nav-tab relative">
       <span id="communityNewBadge" class="hidden absolute -top-1.5 right-1 text-[7px] font-black px-1 py-0.5 rounded-full bg-cyan-500 text-slate-950 uppercase tracking-wide shadow-lg shadow-cyan-500/50" style="animation: livePulse 1.4s ease-in-out infinite;">NEW</span>
@@ -2189,6 +2266,57 @@
     </div>
   </div>
 
+
+  <!-- ================= MODAL: CRAFT RESULT (4.0) ================= -->
+  <div id="craftResultModal" class="app-modal hidden">
+    <div class="modal-card max-w-sm w-full text-center border border-amber-500/40">
+      <div class="text-4xl mb-2" id="craftResultIcon">🔨</div>
+      <h3 class="font-cs text-sm font-bold uppercase text-white mb-1">Крафт завершён!</h3>
+      <div id="craftResultName" class="text-[13px] font-bold text-amber-300 mb-1">—</div>
+      <div id="craftResultMeta" class="text-[10px] text-slate-400 mb-2">—</div>
+      <div id="craftResultCollections" class="text-[10px] text-slate-500 mb-3"></div>
+      <button onclick="closeCraftResultModal()" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-black font-bold text-[11px] uppercase">Забрать</button>
+    </div>
+  </div>
+
+  <!-- ================= MODAL: GAME MODE INFO (4.0) ================= -->
+  <div id="gameModeModal" class="app-modal hidden">
+    <div class="modal-card max-w-sm w-full">
+      <div class="flex items-center justify-between pb-2 mb-3 border-b border-slate-800">
+        <h3 class="font-cs text-sm font-bold uppercase text-white">Игровой режим</h3>
+        <button onclick="closeGameModeModal()" class="text-slate-400 hover:text-white text-lg leading-none">✕</button>
+      </div>
+      <div id="gameModeModalBody" class="space-y-2 text-[11px] text-slate-300"></div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL: GAME MODE SELECTOR (4.0) ================= -->
+  <div id="gameModeSelectorModal" class="app-modal hidden" style="z-index: 96">
+    <div class="modal-card max-w-sm w-full border border-cyan-500/40">
+      <div class="text-center mb-3">
+        <div class="text-4xl mb-1">🎮</div>
+        <h3 class="font-cs text-sm font-bold uppercase text-white">Выбери режим игры</h3>
+        <p class="text-[10px] text-slate-400 mt-1">Прогресс не переносится между режимами. Только Обычный синхронизируется с сервером</p>
+      </div>
+      <div id="gameModeSelectorList" class="space-y-2"></div>
+      <div class="text-[9px] text-slate-500 text-center mt-2">Можно сменить в любой момент через меню режимов</div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL: HARDCORE DEATH (4.0) ================= -->
+  <div id="hardcoreDeathModal" class="app-modal hidden" style="z-index: 99">
+    <div class="modal-card max-w-sm w-full border border-rose-600/60 text-center">
+      <div class="text-5xl mb-2">💀</div>
+      <h3 class="font-cs text-lg font-bold uppercase text-rose-300 mb-1">Банкротство!</h3>
+      <p class="text-[11px] text-slate-300 leading-relaxed mb-3">В хардкорном режиме ты потерял всё. Баланс 0 и рюкзак пуст более минуты — игра окончена. Ты можешь начать заново в другом режиме или попросить кредитку с шансом отказа.</p>
+      <div class="grid grid-cols-2 gap-2">
+        <button onclick="resetHardcoreProgress()" class="py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-[11px]">Сбросить хардкор</button>
+        <button onclick="tryHardcoreLoan()" class="py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-black font-bold text-[11px]">Кредитка (шанс)</button>
+      </div>
+      <button onclick="switchTab('modes')" class="mt-2 w-full py-2 rounded-xl bg-slate-900 text-slate-400 font-bold text-[10px]">Выбрать другой режим</button>
+    </div>
+  </div>
+
   <!-- ================= RESULT OVERLAY ================= -->
   <div id="resultOverlay" class="fixed inset-0 bg-black/85 backdrop-blur-md z-[70] flex items-center justify-center px-4 hidden opacity-0 transition-all duration-200 pointer-events-none">
     <div id="resultGlow" class="absolute w-72 h-72 rounded-full blur-3xl opacity-40 pointer-events-none"></div>
@@ -2282,6 +2410,8 @@
   <script defer src="js/preloader.js?v=4.0.0"></script>
   <script defer src="js/config.js?v=4.2.0"></script>
   <script defer src="js/storage.js?v=4.0.0"></script>
+  <script defer src="js/craft.js?v=4.0.0"></script>
+  <script defer src="js/modes.js?v=4.0.0"></script>
   <script defer src="js/ui.js?v=4.0.0"></script>
   <script defer src="js/game.js?v=4.0.0"></script>
   <script defer src="js/icons.js?v=4.2.0"></script>

@@ -13,14 +13,12 @@ const CASE_CARD_WIDTH = 88;
    СОСТОЯНИЕ
    -------------------------------------------------------------------------- */
 const state = {
-  // Сохраняемые данные
   balance: 2000,
   inventory: [],
   user: null,
   stats: freshStats(),
   settings: Object.assign({}, DEFAULT_SETTINGS),
 
-  // Рантайм (не сохраняется)
   selectedDeposit: null,
   selectedTarget: null,
   rollDirection: 'under',
@@ -40,8 +38,7 @@ const state = {
   dropHistory: [],
   profileTab: 'profile',
   rigReady: false,
-  adminRole: null, // 'owner' | 'admin' | null — роль, с которой открыта админка
-  // Вход по e-mail (AuthGate): сервер выдал uid/ID — забирает их регистрация
+  adminRole: null,
   pendingAuthUid: null,
   pendingAuthEmail: null,
   pendingAuthTag: null,
@@ -49,25 +46,32 @@ const state = {
   seasonWipeToast: false,
   accountResetToast: false,
   accountResetOldUser: null,
-  apologyGiftPending: false // сезон 3.5 — подарок-извинение нужно выдать
+  apologyGiftPending: false,
+  // 4.0 — новые системы
+  selectedCraftItems: [], // uids выбранных для крафта
+  craftFilterRarity: 'all',
+  collectionFilter: 'all',
+  gameMode: 'normal',
+  gameModeSelectorShown: false,
+  craftResult: null
 };
 
 /* --------------------------------------------------------------------------
    ЗАГРУЗКА / СОХРАНЕНИЕ
    -------------------------------------------------------------------------- */
 function loadGame() {
-  const { data, migrated, fresh, wiped, carriedUser, hadOldSave, oldUser } = SaveManager.load();
+  const { data, migrated, fresh, wiped, carriedUser, hadOldSave, oldUser, mode } = SaveManager.load();
 
   state.balance = data.balance;
   state.inventory = data.inventory;
   state.user = data.user;
   state.stats = data.stats;
   state.settings = Object.assign({}, DEFAULT_SETTINGS, data.settings || {});
+  state.gameMode = data.stats.gameMode || mode || getCurrentModeId() || 'normal';
 
   const cookieSettings = SettingsStore.fromCookie();
   if (cookieSettings) state.settings = cookieSettings;
 
-  // Первый запуск: выдаём стартовый набор школьника
   if (fresh && !state.inventory.length) {
     state.inventory = START_ITEMS.map(id => ({
       ...(ITEMS_BY_ID[id] || {}),
@@ -77,9 +81,17 @@ function loadGame() {
 
   if (!state.stats.createdAt) state.stats.createdAt = Date.now();
   state.stats.sessions = (state.stats.sessions || 0) + 1;
-  state.prevLastSeen = state.stats.lastSeen || 0;   // до перезаписи — для оффлайн-дохода
+  state.prevLastSeen = state.stats.lastSeen || 0;
   state.stats.lastSeen = Date.now();
   state.stats.balanceMax = Math.max(state.stats.balanceMax || 0, state.balance);
+
+  // 4.0 — инициализация режима
+  try {
+    if (typeof ModeManager !== 'undefined') {
+      ModeManager.current = state.gameMode;
+      setCurrentModeId(state.gameMode);
+    }
+  } catch (e) {}
 
   auditInventory();
 
@@ -88,17 +100,13 @@ function loadGame() {
   state.selectedTarget = ITEMS_BY_ID['cs_usp_torque'] || CS2_CATALOG[1];
 
   audio.applySettings(state.settings);
-
   MetaStore.bumpSession();
 
   if (migrated) {
-    Toast.success('Старый прогресс из версии 1.0 перенесён — привет в Сезоне 2! 🎒', 5000);
+    Toast.success('Старый прогресс перенесён — привет в Сезоне 4.0! 🎒', 5000);
   }
-  // v13 — ПОЛНЫЙ вайп аккаунтов 3.9: показываем одноразовое уведомление «прости, твой аккаунт был сброшен»
-  // v14 — сезон 3.5: извинительный подарок за вайп
   const metaForWipe = MetaStore.read();
   if (wiped && (carriedUser || hadOldSave)) {
-    // показываем только если ещё не показывали для этой версии сохранения
     if (metaForWipe.resetNoticeSeen !== SAVE_VERSION) {
       state.accountResetToast = true;
       state.accountResetOldUser = oldUser || null;
@@ -108,18 +116,20 @@ function loadGame() {
     state.seasonWipeToast = true;
   }
 
-  // Сезон 3.5 — подарок-извинение: каждый, кто был сброшен, получает дорогой предмет бесплатно
-  // Выдаётся один раз на сезон (флаг apologyGiftSeen), даже если fresh
   try {
     const metaApology = MetaStore.read();
     const alreadyGotGift = metaApology.apologyGiftSeen === SAVE_VERSION || state.stats.apologyGiftClaimed;
     const shouldGetGift = !alreadyGotGift && (hadOldSave || carriedUser || wiped || metaForWipe.resetNoticeSeen === 13 || fresh);
-    // В сезоне 3.5 даём подарок ВСЕМ при первом входе в 3.5, но особенно тем, кто был сброшен
     if (shouldGetGift || (!alreadyGotGift && !state.stats.apologyGiftClaimed)) {
       state.apologyGiftPending = true;
     }
   } catch (e) {
     state.apologyGiftPending = true;
+  }
+
+  // 4.0 — если игрок в хардкоре и мёртв — показываем экран смерти
+  if (state.gameMode === 'hardcore' && state.stats.hardcoreDead) {
+    setTimeout(() => showHardcoreDeathModal(), 600);
   }
 
   return data;
@@ -659,6 +669,9 @@ function renderAll() {
   if (viewVisible('viewInventory')) renderInventory();
   if (viewVisible('viewShop')) renderShop();
   if (viewVisible('viewCommunity')) renderCommunityTab();
+  if (viewVisible('viewCraft')) renderCraftUI();
+  if (viewVisible('viewCollections')) renderCollectionsUI();
+  if (viewVisible('viewModes')) renderGameModeModal();
   // 🚀 Ракета: подсказка баланса и статистика (только когда панель на экране)
   if (viewVisible('viewCrash') && typeof CrashGame !== 'undefined') {
     const hint = $('crashBalanceHint');
@@ -669,6 +682,7 @@ function renderAll() {
   if (viewVisible('viewBottle') && typeof BottleGame !== 'undefined') {
     BottleGame.renderStats();
   }
+  renderGameModeBadge();
 
   if (Modal.isOpen('profileModal')) renderProfile();
 
@@ -910,6 +924,7 @@ function autoPickDeposit() {
    АПГРЕЙДЕР: ЗАПУСК
    -------------------------------------------------------------------------- */
 function startUpgradeRoll() {
+  if (isHardcoreDeadLocked()) { showHardcoreDeathModal(); return; }
   if (state.isRolling) return;
   if (typeof ServerAPI !== 'undefined' && !ServerAPI.isOnline() && !window.__shkoladropServerOnline) {
     if (showServerRequiredModalIfNeeded()) {
@@ -1027,6 +1042,7 @@ function finishRoll(isWin, wagered, target, nominalChance, missPercent = 0) {
     state.lastResultItem = wonItem;
     state.lastResultIsWin = true;
     state.stats.upgradesWon = (state.stats.upgradesWon || 0) + 1;
+    try { trackModeStat('games', 1); } catch(e) {}
     if (nominalChance < 5) state.stats.riskyWins = (state.stats.riskyWins || 0) + 1;
     state.stats.bestWinChance = Math.max(state.stats.bestWinChance || 0, target.price / Math.max(1, wagered.price));
     trackBiggestDrop(wonItem);
@@ -1058,6 +1074,30 @@ function trackBiggestDrop(item) {
     state.stats.biggestDrop = item.price;
     state.stats.biggestDropName = item.name;
   }
+  try {
+    const modeId = state.gameMode || 'normal';
+    if (state.stats.modeStats && state.stats.modeStats[modeId]) {
+      const ms = state.stats.modeStats[modeId];
+      if (item && item.price) {
+        if (!ms.bestDrop || item.price > (ms.bestDrop || 0)) {
+          ms.bestDrop = item.price;
+          ms.bestDropName = item.name;
+        }
+      }
+    }
+  } catch (e) {}
+}
+function trackModeStat(key, amount = 1) {
+  try {
+    const modeId = state.gameMode || 'normal';
+    if (!state.stats.modeStats) state.stats.modeStats = {};
+    if (!state.stats.modeStats[modeId]) state.stats.modeStats[modeId] = { games: 0, cases: 0, crafts: 0, bestDrop: 0, deaths: 0 };
+    if (key === 'bestDrop') {
+      // handled elsewhere
+    } else {
+      state.stats.modeStats[modeId][key] = (state.stats.modeStats[modeId][key] || 0) + amount;
+    }
+  } catch (e) {}
 }
 
 /* --------------------------------------------------------------------------
@@ -1178,7 +1218,21 @@ function addFeedItem(isWin, depositItem, targetItem) {
    -------------------------------------------------------------------------- */
 function casePrice(caseObj) {
   if (!caseObj) return 0;
-  return state.balance >= HARD_MODE_THRESHOLD ? Math.ceil(caseObj.price * HARD_MODE_CASE_DISCOUNT) : caseObj.price;
+  let base = state.balance >= HARD_MODE_THRESHOLD ? Math.ceil(caseObj.price * HARD_MODE_CASE_DISCOUNT) : caseObj.price;
+  try {
+    if (typeof ModeManager !== 'undefined') base = ModeManager.getPrice(base);
+    else if (typeof getModePrice !== 'undefined') base = getModePrice(base, state.gameMode || 'normal');
+  } catch (e) {}
+  return base;
+}
+function shopItemPrice(proto) {
+  if (!proto) return 0;
+  let p = proto.price;
+  try {
+    if (typeof ModeManager !== 'undefined') p = ModeManager.getPrice(p);
+    else if (typeof getModePrice !== 'undefined') p = getModePrice(p, state.gameMode || 'normal');
+  } catch (e) {}
+  return p;
 }
 
 function checkHardModeNotice() {
@@ -1461,6 +1515,7 @@ function currentCaseWinner() {
 }
 
 function openSelectedCase() {
+  if (isHardcoreDeadLocked()) { showHardcoreDeathModal(); return; }
   if (state.isOpeningCase) return;
   // Сезон 3.5 — обязательный онлайн: без сервера не открываем кейсы, чтобы аккаунт отобразился
   if (typeof ServerAPI !== 'undefined' && !ServerAPI.isOnline() && !window.__shkoladropServerOnline) {
@@ -1496,6 +1551,7 @@ function openSelectedCase() {
   if (typeof NetAuthor !== 'undefined') NetAuthor.trackCaseSpend(price, caseObj.id);
   state.stats.casesOpened = (state.stats.casesOpened || 0) + 1;
   if (isSecret) state.stats.secretCases = (state.stats.secretCases || 0) + 1;
+  try { trackModeStat('cases', 1); } catch(e) {}
   addXp(XP_REWARDS.caseOpen, { silent: true });
 
   if (isSecret) FXcaseAura(true);
@@ -1529,6 +1585,7 @@ function openSelectedCase() {
 }
 
 function openSelectedCaseMulti(count = 5) {
+  if (isHardcoreDeadLocked()) { showHardcoreDeathModal(); return; }
   if (state.isOpeningCase) return;
   if (typeof ServerAPI !== 'undefined' && !ServerAPI.isOnline() && !window.__shkoladropServerOnline) {
     if (showServerRequiredModalIfNeeded()) {
@@ -1558,6 +1615,7 @@ function openSelectedCaseMulti(count = 5) {
   // Спонсорство: 10% от стоимости открытия — автору кода
   if (typeof NetAuthor !== 'undefined') NetAuthor.trackCaseSpend(cost, caseObj.id);
   state.stats.casesOpened = (state.stats.casesOpened || 0) + count;
+  try { trackModeStat('cases', count); } catch(e) {}
   addXp(XP_REWARDS.caseOpen * count, { silent: true });
 
   const pool = casePool(caseObj);
@@ -2060,7 +2118,18 @@ function renderShop() {
 }
 
 function tapMoneyValue() {
-  return 150 + (state.stats.level - 1) * 60;
+  let base = 150 + (state.stats.level - 1) * 60;
+  try {
+    const mode = (typeof ModeManager !== 'undefined') ? ModeManager.getCurrent() : getGameMode(state.gameMode || 'normal');
+    if (mode && mode.tapMoneyValue) base = Math.floor(base * mode.tapMoneyValue);
+    else if (mode && mode.priceMult) {
+      // easy -> more tap money, hard -> less: inverse
+      if (mode.id === 'easy') base = Math.floor(base * 1.5);
+      else if (mode.id === 'hard') base = Math.floor(base * 0.6);
+      else if (mode.id === 'hardcore') base = Math.floor(base * 0.4);
+    }
+  } catch (e) {}
+  return base;
 }
 
 function handleShopClick(event) {
@@ -2076,23 +2145,25 @@ function buySchoolItem(id) {
   }
   const proto = shopCatalog().find(i => i.id === id);
   if (!proto) return;
-  const pay = tryPayWithCredit(proto.price);
+  const price = shopItemPrice(proto);
+  const pay = tryPayWithCredit(price);
   if (!pay.ok) {
-    Toast.error(`Не хватает: нужно ${fmt(proto.price)} ₽`);
+    Toast.error(`Не хватает: нужно ${fmt(price)} ₽`);
     return;
   }
   audio.init();
   audio.playCoin();
-  const newItem = Object.assign({}, proto, { uid: RNG.uid('shop') });
+  const newItem = Object.assign({}, proto, { uid: RNG.uid('shop'), price: proto.price });
   state.inventory.unshift(newItem);
   if (!state.selectedDeposit) state.selectedDeposit = newItem;
   if (pay.usedCredit > 0) Toast.success(`Куплено в кредит 💳: ${escapeHtml(proto.name)} — ${fmt(pay.usedBalance)} ₽ баланс + ${fmt(pay.usedCredit)} ₽ кредит`);
-  else Toast.success(`Куплено: ${escapeHtml(proto.name)} за ${fmt(proto.price)} ₽`);
+  else Toast.success(`Куплено: ${escapeHtml(proto.name)} за ${fmt(price)} ₽`);
   uiUpdate();
   persist();
 }
 
 function tapForMoney(event) {
+  if (isHardcoreDeadLocked()) { showHardcoreDeathModal(); return; }
   if (state.stats.tapLimitClosed || state.balance >= 100000) {
     state.stats.tapLimitClosed = true;
     persist(true);
@@ -2152,7 +2223,9 @@ function renderCommunityTab() {
       const current = state.stats.idle.level || 0;
       const owned = current >= cfg.level;
       const available = current + 1 === cfg.level;
-      const canAfford = state.balance >= cfg.cost;
+      let costMode = cfg.cost;
+      try { if (typeof ModeManager !== 'undefined') costMode = ModeManager.getPrice(cfg.cost); else if (typeof getModePrice !== 'undefined') costMode = getModePrice(cfg.cost, state.gameMode || 'normal'); } catch(e) {}
+      const canAfford = state.balance >= costMode;
       const name = IDLE_NAMES[Math.min(cfg.level - 1, IDLE_NAMES.length - 1)];
       return `
         <div class="flex items-center justify-between gap-2 bg-slate-950/70 border border-slate-800 rounded-xl p-2 ${owned ? 'opacity-75' : ''}">
@@ -2164,7 +2237,7 @@ function renderCommunityTab() {
             owned ? 'bg-slate-800 text-emerald-400 cursor-default'
               : (!available ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
                 : (canAfford ? 'bg-emerald-500 text-black hover:brightness-110 active:scale-95' : 'bg-slate-800 text-slate-500 cursor-not-allowed'))
-          }">${owned ? '✓ есть' : (!available ? '🔒 заблокировано' : `Купить · ${shortMoney(cfg.cost)}`)}</button>
+          }">${owned ? '✓ есть' : (!available ? '🔒 заблокировано' : `Купить · ${shortMoney(costMode)}`)}</button>
         </div>
       `;
     }).join('');
@@ -2184,14 +2257,16 @@ function buyIdleLevel(level) {
   const cfg = IDLE_LEVELS.find(l => l.level === level);
   if (!cfg) return;
   if ((state.stats.idle.level || 0) + 1 !== level) return;
-  if (state.balance < cfg.cost) {
-    Toast.error(`Нужно ${fmt(cfg.cost)} ₽ для повышения дежурства`);
+  let costMode = cfg.cost;
+  try { if (typeof ModeManager !== 'undefined') costMode = ModeManager.getPrice(cfg.cost); else if (typeof getModePrice !== 'undefined') costMode = getModePrice(cfg.cost, state.gameMode || 'normal'); } catch(e) {}
+  if (state.balance < costMode) {
+    Toast.error(`Нужно ${fmt(costMode)} ₽ для повышения дежурства`);
     return;
   }
   audio.init();
   audio.playCoin();
   accrueIdle();                 // старая ставка досчитывается до этого момента
-  spendMoney(cfg.cost);
+  spendMoney(costMode);
   state.stats.idle.level = level;
   state.stats.idle.lastTick = Date.now();
   if (!state.stats.idle.lastCollect) state.stats.idle.lastCollect = Date.now();
@@ -3794,7 +3869,7 @@ function viewIdForTab(tab) {
 function navButtonForTab(tab) {
   const games = (typeof MINI_GAMES !== 'undefined' && Array.isArray(MINI_GAMES)) ? MINI_GAMES : [];
   if (games.some(g => g && (g.tab || g.id) === tab)) return $('tabGames');
-  return $({ inventory: 'tabInventory', community: 'tabCommunity', shop: 'tabShop' }[tab] || '');
+  return $({ inventory: 'tabInventory', craft: 'tabCraft', collections: 'tabCollections', modes: 'tabModes', community: 'tabCommunity', shop: 'tabShop' }[tab] || '');
 }
 
 function switchTab(tab) {
@@ -3818,6 +3893,9 @@ function switchTab(tab) {
   // Рендер панели
   if (tab === 'cases') { renderCasesUI(); setupCaseTape(); }
   if (tab === 'inventory') renderInventory();
+  if (tab === 'craft') renderCraftUI();
+  if (tab === 'collections') renderCollectionsUI();
+  if (tab === 'modes') renderGameModeModal();
   if (tab === 'shop') renderShop();
   if (tab === 'community') { renderCommunityTab(); dismissCommunityHint(false); }
   if (tab === 'upgrade') renderUpgradeHud();
@@ -3830,6 +3908,9 @@ function switchTab(tab) {
 /* --------------------------------------------------------------------------
    ПРИВЯЗКА СОБЫТИЙ
    -------------------------------------------------------------------------- */
+function isHardcoreDeadLocked() {
+  return state.gameMode === 'hardcore' && !!state.stats.hardcoreDead;
+}
 function bindGlobalEvents() {
   const invGrid = $('inventoryGrid');
   if (invGrid) invGrid.addEventListener('click', handleInventoryClick);
@@ -3872,6 +3953,535 @@ function bindGlobalEvents() {
       if (e.target === modal) Modal.close(modal.id);
     });
   });
+}
+
+/* ==========================================================================
+   4.0 — НОВЫЕ СИСТЕМЫ: КРАФТ, КОЛЛЕКЦИИ, РЕЖИМЫ
+   ========================================================================== */
+
+/* ---------- Крафт ---------- */
+function getCraftSelectedItems() {
+  return state.selectedCraftItems.map(uid => state.inventory.find(it => it.uid === uid)).filter(Boolean);
+}
+function toggleCraftItem(uid) {
+  const idx = state.selectedCraftItems.indexOf(uid);
+  if (idx >= 0) {
+    state.selectedCraftItems.splice(idx, 1);
+  } else {
+    if (state.selectedCraftItems.length >= CRAFT_CONFIG.requiredCount) {
+      Toast.info(`Можно выбрать только ${CRAFT_CONFIG.requiredCount} предметов`);
+      return;
+    }
+    state.selectedCraftItems.push(uid);
+  }
+  renderCraftUI();
+  audio.playTick();
+}
+function clearCraftSelection() {
+  state.selectedCraftItems = [];
+  state.craftResult = null;
+  renderCraftUI();
+}
+function setCraftRarityFilter(rarity) {
+  state.craftFilterRarity = rarity;
+  renderCraftUI();
+}
+function doCraft() {
+  const items = getCraftSelectedItems();
+  const validation = (typeof CraftManager !== 'undefined') ? CraftManager.validate(items) : { ok: items.length === 10, rarity: items[0]?.rarity, reason: 'CraftManager не загружен' };
+  if (!validation.ok) {
+    Toast.error(validation.reason || 'Нельзя скрафтить');
+    return;
+  }
+  const result = CraftManager.craft(items, state);
+  if (!result.ok) {
+    Toast.error(result.reason || 'Ошибка крафта');
+    return;
+  }
+  // Удаляем входные предметы
+  const uids = new Set(state.selectedCraftItems);
+  state.inventory = state.inventory.filter(it => !uids.has(it.uid));
+  // Добавляем результат
+  state.inventory.unshift(result.result);
+  state.craftResult = result;
+  state.selectedCraftItems = [];
+  trackBiggestDrop(result.result);
+  try { trackModeStat('crafts', 1); } catch(e) {}
+  addXp(50);
+  Fx.burst(100, [result.result ? rarityOf(result.result).color : '#ff7a00', '#10b981']);
+  audio.init(); audio.playWin();
+  Toast.gold(`🔨 Крафт успешен! Получено: <b>${escapeHtml(result.result.name)}</b> [${COLLECTIONS[result.collection]?.label || result.collection}] · редкость ${RARITIES[result.rarity]?.name || result.rarity}`, 6000);
+  checkAchievements();
+  uiUpdate();
+  persist(true);
+  renderCraftUI();
+  // Показываем результат в модалке
+  showCraftResultModal(result);
+}
+function showCraftResultModal(result) {
+  const modal = $('craftResultModal');
+  if (!modal) return;
+  const item = result.result;
+  const rarity = rarityOf(item);
+  const col = COLLECTIONS[result.collection] || COLLECTIONS.other;
+  $('craftResultIcon').innerHTML = renderItemMedia(item, 'w-16 h-16 text-4xl');
+  $('craftResultName').textContent = item.name;
+  $('craftResultMeta').innerHTML = `<span style="color:${rarity.color}">${rarity.name}</span> · <span style="color:${col.color}">${col.label}</span> · ${fmt(item.price)} ₽`;
+  $('craftResultCollections').innerHTML = Object.entries(result.counts).map(([cId, cnt]) => {
+    const cc = COLLECTIONS[cId] || { label: cId, color: '#fff' };
+    return `<span class="text-[10px] px-2 py-0.5 rounded-full border" style="border-color:${cc.color}66;color:${cc.color};background:${cc.bg || 'rgba(255,255,255,0.05)'}">${cc.label}: ${cnt} (${Math.round(cnt/10*100)}%)</span>`;
+  }).join(' ');
+  Modal.open('craftResultModal');
+}
+function closeCraftResultModal() { Modal.close('craftResultModal'); }
+
+function renderCraftUI() {
+  const grid = $('craftInventoryGrid');
+  const selectedBox = $('craftSelectedList');
+  const btn = $('btnDoCraft');
+  const info = $('craftInfo');
+  const rarityFilter = $('craftRarityFilter');
+  if (!grid) return;
+
+  const selectedItems = getCraftSelectedItems();
+  const counts = {};
+  selectedItems.forEach(it => {
+    const r = normalizeRarity(it.rarity);
+    counts[r] = (counts[r]||0)+1;
+  });
+
+  // Фильтр по редкости
+  let pool = state.inventory.slice();
+  if (state.craftFilterRarity !== 'all') {
+    pool = pool.filter(it => normalizeRarity(it.rarity) === state.craftFilterRarity);
+  }
+  // Сортировка по редкости
+  pool.sort((a,b) => (rarityOf(b).order - rarityOf(a).order) || (b.price - a.price));
+
+  grid.innerHTML = pool.map(item => {
+    const rarity = rarityOf(item);
+    const isSelected = state.selectedCraftItems.includes(item.uid);
+    return `
+      <div class="craft-item ${isSelected ? 'craft-item-selected' : ''}" data-craft-uid="${item.uid}" onclick="toggleCraftItem('${item.uid}')" style="border-color:${rarity.color}55">
+        <div class="flex justify-center">${renderItemMedia(item, 'w-10 h-10 text-xl')}</div>
+        <div class="text-[9px] font-bold text-white line-clamp-1 mt-1">${escapeHtml(item.name)}</div>
+        <div class="text-[9px] font-mono" style="color:${rarity.color}">${rarity.short}</div>
+        ${isSelected ? '<div class="craft-check">✓</div>' : ''}
+      </div>
+    `;
+  }).join('');
+
+  if (selectedBox) {
+    if (!selectedItems.length) {
+      selectedBox.innerHTML = `<div class="text-[11px] text-slate-500 py-4 text-center">Выбери 10 предметов одной редкости<br>Коллекция результата = пропорция входа</div>`;
+    } else {
+      selectedBox.innerHTML = selectedItems.map(item => {
+        const rarity = rarityOf(item);
+        const col = COLLECTIONS[item.collection || 'other'] || COLLECTIONS.other;
+        return `<div class="flex items-center gap-2 bg-slate-950/70 border border-slate-800 rounded-lg p-1.5">
+          <div class="w-8 h-8 flex items-center justify-center">${renderItemMedia(item, 'w-8 h-8 text-lg')}</div>
+          <div class="flex-1 min-w-0">
+            <div class="text-[10px] font-bold text-white truncate">${escapeHtml(item.name)}</div>
+            <div class="text-[9px]" style="color:${rarity.color}">${rarity.short} · <span style="color:${col.color}">${col.short}</span></div>
+          </div>
+          <button onclick="toggleCraftItem('${item.uid}')" class="text-rose-400 hover:text-rose-300 text-[14px] px-1">✕</button>
+        </div>`;
+      }).join('');
+    }
+  }
+
+  // Инфо о пропорции коллекций
+  if (info) {
+    if (selectedItems.length === 0) {
+      info.innerHTML = `Выбери <b>10 предметов</b> одной редкости. Коллекция результата определяется пропорционально: 5+5 = 50/50, 8+2 = 80/20.`;
+    } else {
+      const raritySet = new Set(selectedItems.map(it => normalizeRarity(it.rarity)));
+      const collectionCounts = {};
+      selectedItems.forEach(it => {
+        const col = it.collection || 'other';
+        collectionCounts[col] = (collectionCounts[col]||0)+1;
+      });
+      const rarityOk = raritySet.size === 1;
+      const colText = Object.entries(collectionCounts).map(([cId,cnt]) => {
+        const cc = COLLECTIONS[cId] || { label: cId };
+        return `${cc.label}: ${cnt} (${Math.round(cnt/selectedItems.length*100)}%)`;
+      }).join(' + ');
+      info.innerHTML = `
+        <div class="text-[11px] ${rarityOk ? 'text-emerald-300' : 'text-rose-300'}">${rarityOk ? '✅ Редкость одинаковая: ' + (RARITIES[[...raritySet][0]]?.name || '') : '❌ Редкости разные — нужно одинаковые!'}</div>
+        <div class="text-[10px] text-slate-400 mt-1">Коллекции: ${colText || '—'}</div>
+        <div class="text-[10px] text-slate-500 mt-1">Выбрано: ${selectedItems.length} / ${CRAFT_CONFIG.requiredCount}</div>
+      `;
+    }
+  }
+
+  if (btn) {
+    const valid = selectedItems.length === CRAFT_CONFIG.requiredCount && (new Set(selectedItems.map(it => normalizeRarity(it.rarity))).size === 1);
+    btn.disabled = !valid;
+    btn.className = valid
+      ? 'w-full py-3 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-black font-black text-xs uppercase tracking-wider active:scale-95 transition'
+      : 'w-full py-3 rounded-xl bg-slate-800 text-slate-500 font-bold text-xs uppercase cursor-not-allowed';
+  }
+
+  // Бонус крафта
+  const bonusEl = $('craftBonusInfo');
+  if (bonusEl) {
+    try {
+      const bonus = (typeof CraftManager !== 'undefined') ? CraftManager.getCraftBonus(state) : 0;
+      if (bonus > 0) bonusEl.innerHTML = `🎁 Бонус коллекций к крафту: <b class="text-emerald-300">+${Math.round(bonus*100)}%</b>`;
+      else bonusEl.textContent = 'Собирай коллекции для бонусов к крафту';
+    } catch (e) { bonusEl.textContent = ''; }
+  }
+}
+
+/* ---------- Коллекции ---------- */
+function setCollectionFilter(col) {
+  state.collectionFilter = col;
+  renderCollectionsUI();
+}
+function renderCollectionsUI() {
+  const grid = $('collectionsGrid');
+  if (!grid) return;
+  const inv = state.inventory;
+  const allProgress = (typeof CollectionManager !== 'undefined') ? CollectionManager.getAllProgress(inv) : {};
+
+  const filter = state.collectionFilter;
+  const collectionsToShow = filter === 'all' ? Object.keys(COLLECTIONS) : [filter];
+
+  grid.innerHTML = collectionsToShow.map(colId => {
+    const col = COLLECTIONS[colId];
+    if (!col) return '';
+    const prog = allProgress[colId] || getCollectionProgress(inv, colId);
+    const bonus = getCollectionBonus(prog.percent);
+    const items = ALL_MASTER_ITEMS.filter(it => it.collection === colId);
+    const ownedIds = new Set(inv.map(it => it.id));
+    const owned = items.filter(it => ownedIds.has(it.id));
+    const percent = prog.percent || 0;
+    const isComplete = percent >= 100;
+
+    return `
+      <div class="collection-card ${isComplete ? 'collection-complete' : ''}" style="border-color:${col.color}55">
+        <div class="flex items-center justify-between gap-2 mb-2">
+          <div class="flex items-center gap-2">
+            <span class="text-xl">${col.icon}</span>
+            <span class="text-[12px] font-black text-white">${escapeHtml(col.label)}</span>
+            ${isComplete ? '<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">✓ Собрано</span>' : ''}
+          </div>
+          <span class="text-[11px] font-mono font-bold" style="color:${col.color}">${Math.round(percent)}% (${owned.length}/${items.length})</span>
+        </div>
+        <div class="w-full h-2 bg-slate-900 rounded-full overflow-hidden mb-2">
+          <div class="h-full transition-all" style="width:${percent}%;background:${col.color}"></div>
+        </div>
+        <div class="text-[10px] text-slate-400 mb-2 line-clamp-2">${escapeHtml(col.desc)}</div>
+        <div class="flex flex-wrap gap-1 mb-2">
+          ${COLLECTION_BONUSES.thresholds.map(th => {
+            const reached = percent >= th.percent;
+            return `<span class="text-[8px] px-1.5 py-0.5 rounded-full border ${reached ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300' : 'bg-slate-900 border-slate-800 text-slate-500'}">${th.percent}% ${th.label}</span>`;
+          }).join('')}
+        </div>
+        ${bonus.craftChance || bonus.dropBonus ? `<div class="text-[10px] text-emerald-300">🎁 Бонус: ${bonus.craftChance ? `крафт +${Math.round(bonus.craftChance*100)}%` : ''} ${bonus.dropBonus ? `дроп +${Math.round(bonus.dropBonus*100)}%` : ''}</div>` : ''}
+        <div class="mt-2 grid grid-cols-4 gap-1">
+          ${items.slice(0, 8).map(it => {
+            const isOwned = ownedIds.has(it.id);
+            const rarity = RARITIES[normalizeRarity(it.rarity)] || RARITIES.common;
+            return `<div class="w-full aspect-square rounded-lg border flex items-center justify-center text-[10px] ${isOwned ? 'bg-slate-800 border-slate-700' : 'bg-slate-950 border-slate-800 opacity-50'}" title="${escapeHtml(it.name)}" style="${isOwned ? `border-color:${rarity.color}55` : ''}">${it.icon || '❓'}</div>`;
+          }).join('')}
+          ${items.length > 8 ? `<div class="text-[9px] text-slate-500 col-span-4 text-center mt-1">+${items.length - 8} ещё</div>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // Глобальные бонусы
+  const globalEl = $('collectionsGlobalBonus');
+  if (globalEl) {
+    const completed = (typeof CollectionManager !== 'undefined') ? CollectionManager.getCompleted(inv).length : 0;
+    globalEl.innerHTML = `
+      <div class="text-[11px] font-bold text-white">Глобальный прогресс: ${completed} коллекций закрыто</div>
+      <div class="flex flex-wrap gap-1 mt-1">
+        ${COLLECTION_BONUSES.global.map(g => {
+          const reached = completed >= g.collections;
+          return `<span class="text-[9px] px-2 py-0.5 rounded-full border ${reached ? 'bg-amber-950/40 border-amber-500/40 text-amber-300' : 'bg-slate-900 border-slate-800 text-slate-500'}">${g.collections} коллекций: ${g.label} ${reached ? '✓' : ''}</span>`;
+        }).join('')}
+      </div>
+    `;
+  }
+}
+
+/* ---------- Игровые режимы ---------- */
+function openGameModeModal() {
+  renderGameModeModal();
+  Modal.open('gameModeModal');
+}
+function closeGameModeModal() { Modal.close('gameModeModal'); }
+
+function renderGameModeModal() {
+  const list = $('gameModeList');
+  const currentInfo = $('currentGameModeInfo');
+  if (!list) return;
+  const currentId = (typeof ModeManager !== 'undefined') ? ModeManager.getCurrentId() : state.gameMode;
+
+  if (currentInfo) {
+    const cur = getGameMode(currentId);
+    currentInfo.innerHTML = `
+      <div class="flex items-center gap-2">
+        <span class="text-2xl">${cur.icon}</span>
+        <div>
+          <div class="text-[13px] font-black text-white">${escapeHtml(cur.label)}</div>
+          <div class="text-[10px] text-slate-400">${cur.sync ? '🌐 Синхронизируется' : '📴 Локально'} · ${cur.chat ? '💬 Чат' : '🔇 Без чата'}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  list.innerHTML = Object.values(GAME_MODES).map(m => {
+    const isCurrent = m.id === currentId;
+    const save = SaveManager.loadMode(m.id);
+    return `
+      <div class="game-mode-card ${isCurrent ? 'game-mode-current' : ''}" style="border-color:${m.color}66" onclick="selectGameMode('${m.id}')">
+        <div class="flex items-start justify-between gap-2">
+          <div class="flex items-center gap-2">
+            <span class="text-2xl">${m.icon}</span>
+            <div>
+              <div class="text-[12px] font-black ${isCurrent ? 'text-white' : 'text-slate-200'}">${escapeHtml(m.label)} ${isCurrent ? '<span class=\"text-[9px] px-1 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 ml-1\">ТЕКУЩИЙ</span>' : ''}</div>
+              <div class="text-[10px] text-slate-400">${escapeHtml(m.desc.slice(0, 120))}...</div>
+            </div>
+          </div>
+          <div class="text-right">
+            ${save ? `<div class="text-[10px] text-slate-300">${fmt(save.balance)} ₽ · ${save.stats.level} ур.</div>` : '<div class="text-[10px] text-slate-500">Нет сохранения</div>'}
+            ${m.sync ? '<div class="text-[9px] text-emerald-400">🌐 Синхрон</div>' : '<div class="text-[9px] text-slate-500">📴 Локально</div>'}
+          </div>
+        </div>
+        <div class="flex flex-wrap gap-1 mt-2">
+          ${m.features.map(f => `<span class="text-[8px] px-1.5 py-0.5 rounded-full bg-slate-900 border border-slate-800 text-slate-400">${escapeHtml(f)}</span>`).join('')}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // Список сейвов
+  const savesEl = $('gameModeSavesList');
+  if (savesEl) {
+    const allSaves = SaveManager.listModes();
+    if (!allSaves.length) savesEl.innerHTML = '<div class="text-[10px] text-slate-500">Нет сохранений</div>';
+    else savesEl.innerHTML = allSaves.map(s => {
+      const mm = getGameMode(s.mode);
+      return `<div class="flex items-center justify-between text-[10px] bg-slate-950/60 border border-slate-800 rounded-lg p-2">
+        <span>${mm.icon} ${mm.label}: ${fmt(s.balance)} ₽, ${s.level} ур.</span>
+        <button onclick="deleteModeSave('${s.mode}')" class="text-rose-400 hover:text-rose-300 text-[10px]">Удалить</button>
+      </div>`;
+    }).join('');
+  }
+}
+
+async function selectGameMode(modeId) {
+  if (!GAME_MODES[modeId]) return;
+  const currentId = (typeof ModeManager !== 'undefined') ? ModeManager.getCurrentId() : state.gameMode;
+  if (modeId === currentId) {
+    closeGameModeModal();
+    return;
+  }
+  const target = GAME_MODES[modeId];
+  const ok = await ConfirmDialog.ask({
+    icon: target.icon,
+    title: `Переключиться на ${target.label}?`,
+    text: `Прогресс между режимами <b>не переносится</b>! Текущий режим <b>${GAME_MODES[currentId]?.label || currentId}</b> сохранится, а ты перейдёшь в <b>${target.label}</b>.<br><br>${escapeHtml(target.desc)}<br><br>${target.sync ? '🌐 Этот режим синхронизируется с сервером.' : '📴 Этот режим только локальный, без чата и без синхронизации.'}${target.hardcore ? '<br><br>💀 <b class="text-rose-300">Хардкор: одна жизнь!</b>' : ''}`,
+    okText: `Перейти в ${target.short}`
+  });
+  if (!ok) return;
+
+  // Сохраняем текущий state и переключаем
+  const prevData = snapshot();
+  const result = (typeof ModeManager !== 'undefined') ? ModeManager.switchMode(modeId, prevData) : SaveManager.switchMode(modeId, prevData);
+
+  if (result && result.data) {
+    state.balance = result.data.balance;
+    state.inventory = result.data.inventory;
+    state.stats = result.data.stats;
+    state.settings = Object.assign({}, DEFAULT_SETTINGS, result.data.settings || {}, state.settings);
+    state.gameMode = modeId;
+    state.selectedCraftItems = [];
+    state.craftResult = null;
+    // Обновляем депозит
+    state.selectedDeposit = state.inventory[0] || null;
+  }
+
+  closeGameModeModal();
+  Toast.success(`Переключено в ${target.label} ${target.icon}`, 4000);
+  // Перерендер всего
+  renderAll();
+  renderGameModeBadge();
+  persist(true);
+  // Если новый режим — normal, пушим на сервер, иначе стопаем чат
+  if (modeId === 'normal') {
+    if (typeof CloudSave !== 'undefined') CloudSave.push(false);
+    if (typeof ServerAPI !== 'undefined') ServerAPI.ping(true);
+  } else {
+    // Для локальных режимов — отключаем чат
+    if (typeof Community !== 'undefined' && Community.stop) Community.stop();
+  }
+  // Проверка хардкора
+  if (modeId === 'hardcore' && state.stats.hardcoreDead) {
+    setTimeout(() => showHardcoreDeathModal(), 400);
+  }
+}
+
+function deleteModeSave(modeId) {
+  if (!GAME_MODES[modeId]) return;
+  ConfirmDialog.ask({
+    icon: '🗑️',
+    title: `Удалить сохранение ${GAME_MODES[modeId].label}?`,
+    text: `Прогресс режима <b>${GAME_MODES[modeId].label}</b> будет удалён безвозвратно!`,
+    okText: 'Удалить',
+    danger: true
+  }).then(ok => {
+    if (!ok) return;
+    SaveManager.clearMode(modeId);
+    Toast.success(`Сохранение ${GAME_MODES[modeId].label} удалено`);
+    renderGameModeModal();
+  });
+}
+
+function renderGameModeBadge() {
+  const badge = $('gameModeBadge');
+  if (!badge) return;
+  const mode = getGameMode(state.gameMode || 'normal');
+  badge.innerHTML = `${mode.icon} ${mode.short}`;
+  badge.style.borderColor = mode.color + '66';
+  badge.style.color = mode.color;
+  badge.style.background = mode.bg ? '' : (mode.color + '22');
+  badge.title = mode.label + ': ' + mode.desc;
+}
+
+function openGameModeSelector() {
+  openGameModeModal();
+}
+function openGameModeSelectorModal() {
+  if ($('gameModeSelectorList')) {
+    const list = $('gameModeSelectorList');
+    if (list) {
+      list.innerHTML = Object.values(GAME_MODES).map(m => `
+      <div class="game-mode-card cursor-pointer hover:border-orange-500/50" style="border-color:${m.color}55" onclick="chooseInitialGameMode('${m.id}')">
+        <div class="flex items-center gap-3">
+          <span class="text-3xl">${m.icon}</span>
+          <div class="flex-1">
+            <div class="text-[13px] font-black text-white">${escapeHtml(m.label)}</div>
+            <div class="text-[10px] text-slate-400 leading-tight">${escapeHtml(m.desc)}</div>
+          </div>
+        </div>
+      </div>
+    `).join('');
+    }
+  }
+  Modal.open('gameModeSelectorModal');
+}
+
+function showHardcoreDeathModal() {
+  const modal = $('hardcoreDeathModal');
+  if (!modal) {
+    Toast.error('💀 Ты погиб в хардкорном режиме! Баланс 0 — игра окончена. Начни заново в другом режиме.', 8000);
+    return;
+  }
+  Modal.open('hardcoreDeathModal');
+}
+function closeHardcoreDeathModal() { Modal.close('hardcoreDeathModal'); }
+function restartHardcore() {
+  ConfirmDialog.ask({
+    icon: '💀',
+    title: 'Начать хардкор заново?',
+    text: 'Весь прогресс хардкорного режима будет сброшен!',
+    okText: 'Начать заново',
+    danger: true
+  }).then(ok => {
+    if (!ok) return;
+    SaveManager.clearMode('hardcore');
+    const fresh = SaveManager.defaultData();
+    fresh.stats.gameMode = 'hardcore';
+    fresh.stats.modeStats.hardcore.games = 1;
+    state.balance = fresh.balance;
+    state.inventory = fresh.inventory;
+    state.stats = fresh.stats;
+    state.gameMode = 'hardcore';
+    state.selectedDeposit = state.inventory[0] || null;
+    closeHardcoreDeathModal();
+    Toast.info('Хардкорный режим перезапущен — удачи! 💀');
+    renderAll();
+    persist(true);
+  });
+}
+function resetHardcoreProgress() {
+  closeHardcoreDeathModal();
+  restartHardcore();
+}
+function tryHardcoreLoan() {
+  const chance = (typeof GAME_MODES !== 'undefined' && GAME_MODES.hardcore) ? GAME_MODES.hardcore.creditChance : 0.6;
+  const roll = Math.random();
+  if (roll < chance) {
+    const amount = 5000;
+    state.balance += amount;
+    state.stats.creditDebt = (state.stats.creditDebt || 0) + amount;
+    state.stats.creditBorrowAt = Date.now();
+    state.stats.hardcoreDead = false;
+    closeHardcoreDeathModal();
+    Toast.success(`💳 Кредит одобрен: +${fmt(amount)} ₽! Шанс был ${Math.round(chance*100)}% — повезло! Верни долг за час`, 6000);
+    uiUpdate();
+    persist(true);
+  } else {
+    Toast.error(`💀 Кредит отклонён! Шанс был ${Math.round(chance*100)}% — банк отказал. Твоя игра окончена.`, 5000);
+  }
+}
+
+/* ---------- Модалка выбора режима при старте ---------- */
+function showGameModeSelectorIfNeeded() {
+  const meta = MetaStore.read();
+  if (meta.gameModeSelectorSeen === SAVE_VERSION) return false;
+  if (state.stats.gameModeNotified) return false;
+  const modal = $('gameModeSelectorModal');
+  if (!modal) return false;
+  // Рендерим выбор
+  const list = $('gameModeSelectorList');
+  if (list) {
+    list.innerHTML = Object.values(GAME_MODES).map(m => `
+      <div class="game-mode-card cursor-pointer hover:border-orange-500/50" style="border-color:${m.color}55" onclick="chooseInitialGameMode('${m.id}')">
+        <div class="flex items-center gap-3">
+          <span class="text-3xl">${m.icon}</span>
+          <div class="flex-1">
+            <div class="text-[13px] font-black text-white">${escapeHtml(m.label)}</div>
+            <div class="text-[10px] text-slate-400 leading-tight">${escapeHtml(m.desc)}</div>
+            <div class="flex flex-wrap gap-1 mt-1">
+              ${m.features.slice(0,3).map(f => `<span class="text-[8px] px-1 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-500">${escapeHtml(f)}</span>`).join('')}
+            </div>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  }
+  Modal.open('gameModeSelectorModal');
+  return true;
+}
+function chooseInitialGameMode(modeId) {
+  if (!GAME_MODES[modeId]) return;
+  const prev = snapshot();
+  const result = (typeof ModeManager !== 'undefined') ? ModeManager.switchMode(modeId, prev) : SaveManager.switchMode(modeId, prev);
+  if (result && result.data) {
+    state.balance = result.data.balance;
+    state.inventory = result.data.inventory;
+    state.stats = result.data.stats;
+    state.settings = Object.assign({}, DEFAULT_SETTINGS, result.data.settings || {}, state.settings);
+  }
+  state.gameMode = modeId;
+  state.stats.gameMode = modeId;
+  state.stats.gameModeNotified = true;
+  MetaStore.write(Object.assign(MetaStore.read(), { gameModeSelectorSeen: SAVE_VERSION }));
+  Modal.close('gameModeSelectorModal');
+  Toast.success(`Выбран ${GAME_MODES[modeId].label} ${GAME_MODES[modeId].icon}`, 4000);
+  renderAll();
+  renderGameModeBadge();
+  persist(true);
+}
+function closeGameModeSelectorModal() {
+  MetaStore.write(Object.assign(MetaStore.read(), { gameModeSelectorSeen: SAVE_VERSION }));
+  state.stats.gameModeNotified = true;
+  Modal.close('gameModeSelectorModal');
 }
 
 /* --------------------------------------------------------------------------
@@ -3970,6 +4580,20 @@ function initGame() {
     setTimeout(() => showAccountResetNoticeIfNeeded(), 600);
   }
 
+  // 4.0 — новые системы
+  try {
+    renderGameModeBadge();
+    renderCraftUI();
+    renderCollectionsUI();
+  } catch (e) { console.warn('new systems render', e); }
+
+  // 4.0 — выбор режима при первом запуске
+  setTimeout(() => {
+    try {
+      if (!state.stats.gameModeNotified) showGameModeSelectorIfNeeded();
+    } catch (e) {}
+  }, 1200);
+
   // 4.1 кредит — проверка просрочки каждую минуту + обновление таймера в профиле
   setInterval(() => {
     try {
@@ -3978,6 +4602,18 @@ function initGame() {
       if (hadDebt || (state.stats.creditDebt||0)>0) {
         if (Modal.isOpen('profileModal')) renderProfile();
         if (Modal.isOpen('rebirthModal')) openRebirthModal();
+      }
+      // 4.0 — проверка хардкор смерти
+      if (typeof ModeManager !== 'undefined' && ModeManager.isHardcore() && state.balance <= 0 && !state.stats.hardcoreDead) {
+        const res = ModeManager.handleBankruptcy(state);
+        if (res.dead) {
+          showHardcoreDeathModal();
+          persist(true);
+        } else if (res.loan) {
+          Toast.info(`💳 Кредит выдан: ${fmt(res.amount)} ₽ (шанс ${Math.round((GAME_MODES.hardcore.creditChance||0.6)*100)}%)`, 5000);
+          uiUpdate();
+          persist(true);
+        }
       }
     } catch(e) {}
   }, 30000);

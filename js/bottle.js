@@ -237,6 +237,10 @@ const BottleGame = {
      ВРАЩЕНИЕ
      ====================================================================== */
   spin() {
+    if (typeof state !== 'undefined' && state.gameMode === 'hardcore' && state.stats && state.stats.hardcoreDead) {
+      if (typeof showHardcoreDeathModal === 'function') showHardcoreDeathModal();
+      return;
+    }
     if (this.spinning) return;                          // уже крутим — игнорим двойной тап
     if (this.phase !== 'idle') return;
     if (typeof state === 'undefined' || !state.stats) return;
@@ -290,7 +294,14 @@ const BottleGame = {
     const bet = this.betItem();
     const landed = this.landed || this.table[this.landedIndex] || null;
     const won = !!(landed && bet && landed.price > bet.price);
-    this.bonus = won ? (landed.price - bet.price) : 0;
+    let baseBonus = won ? (landed.price - bet.price) : 0;
+    try {
+      const mode = (typeof ModeManager !== 'undefined') ? ModeManager.getCurrent() : null;
+      if (mode && mode.priceMult && mode.id === 'easy') baseBonus = Math.floor(baseBonus * 1.2);
+      else if (mode && mode.priceMult && mode.id === 'hard') baseBonus = Math.floor(baseBonus * 0.8);
+      else if (mode && mode.priceMult && mode.id === 'hardcore') baseBonus = Math.floor(baseBonus * 0.6);
+    } catch (e) {}
+    this.bonus = baseBonus;
     this.phase = won ? 'won' : 'lost';
     this.angle = BOTTLE_CONFIG.fullSpins * 360 + this.landedAngle;
     this._applyAngle();

@@ -10,10 +10,30 @@
 /* --------------------------------------------------------------------------
    1. СХЕМА СОХРАНЕНИЯ
    -------------------------------------------------------------------------- */
-const SAVE_KEY = 'shkola_drop_save_v14';
-const LEGACY_KEYS = ['shkola_drop_save_v10', 'shkola_drop_save_v9', 'shkola_drop_save_v8', 'shkola_drop_save_v7', 'shkola_drop_save_v6'];
+const SAVE_KEY = 'shkola_drop_save_v15';
+const SAVE_KEY_BASE = 'shkola_drop_save_v15';
+const GAME_MODE_SAVE_PREFIX = 'shkola_drop_save_v15_mode_';
+const CURRENT_MODE_KEY = 'shkola_current_mode_v1';
+const LEGACY_KEYS = ['shkola_drop_save_v14', 'shkola_drop_save_v10', 'shkola_drop_save_v9', 'shkola_drop_save_v8', 'shkola_drop_save_v7', 'shkola_drop_save_v6'];
 /* Все ключи предыдущих версий — из них вайп 3.9/3.5 пытается вытащить ник/ID, но теперь вайп ПОЛНЫЙ: прогресс всё равно сбрасывается */
-const OLD_SAVE_KEYS = ['shkola_drop_save_v13', 'shkola_drop_save_v12', 'shkola_drop_save_v11'].concat(LEGACY_KEYS);
+const OLD_SAVE_KEYS = ['shkola_drop_save_v14', 'shkola_drop_save_v13', 'shkola_drop_save_v12', 'shkola_drop_save_v11'].concat(LEGACY_KEYS);
+
+function getSaveKeyForMode(mode) {
+  const m = (mode && typeof GAME_MODES !== 'undefined' && GAME_MODES[mode]) ? mode : 'normal';
+  return GAME_MODE_SAVE_PREFIX + m;
+}
+function getCurrentModeId() {
+  try {
+    const v = localStorage.getItem(CURRENT_MODE_KEY);
+    if (v && typeof GAME_MODES !== 'undefined' && GAME_MODES[v]) return v;
+  } catch (e) {}
+  return (typeof DEFAULT_GAME_MODE !== 'undefined' ? DEFAULT_GAME_MODE : 'normal');
+}
+function setCurrentModeId(mode) {
+  const m = (mode && typeof GAME_MODES !== 'undefined' && GAME_MODES[mode]) ? mode : 'normal';
+  try { localStorage.setItem(CURRENT_MODE_KEY, m); } catch (e) {}
+  return m;
+}
 
 const DEFAULT_STATS = {
   casesOpened: 0,
@@ -27,21 +47,21 @@ const DEFAULT_STATS = {
   miniBest: 0,
   miniCaught: 0,
   /* 🚀 Ракета (Crash) */
-  crashRounds: 0,     // всего раундов сыграно
-  crashWins: 0,       // успешно забрал до взрыва
-  crashLosses: 0,     // ракета взорвалась раньше
-  crashWagered: 0,    // суммарно поставлено
-  crashWon: 0,        // суммарно выиграно
-  crashBestMult: 0,   // лучший множитель, на котором забрал
-  crashBestWin: 0,    // лучший выигрыш за раунд
-  crashHistory: [],   // последние точки краша (для ленты)
+  crashRounds: 0,
+  crashWins: 0,
+  crashLosses: 0,
+  crashWagered: 0,
+  crashWon: 0,
+  crashBestMult: 0,
+  crashBestWin: 0,
+  crashHistory: [],
   /* 🍾 Бутылочка (Bottle spin) */
-  bottleSpins: 0,     // всего вращений сыграно
-  bottleWins: 0,      // бутылочка указала на предмет дороже ставки
-  bottleLosses: 0,    // бутылочка указала на предмет не дороже ставки
-  bottleWon: 0,       // суммарно выиграно деньгами (разницы цен)
-  bottleBestWin: 0,   // лучший денежный выигрыш за вращение
-  bottleHistory: [],  // последние результаты (для ленты)
+  bottleSpins: 0,
+  bottleWins: 0,
+  bottleLosses: 0,
+  bottleWon: 0,
+  bottleBestWin: 0,
+  bottleHistory: [],
   biggestDrop: 0,
   biggestDropName: '',
   bestWinChance: 0,
@@ -51,18 +71,17 @@ const DEFAULT_STATS = {
   dailyStreak: 0,
   lastDailyClaim: 0,
   promosUsed: [],
-  usedVipCodes: [],   // Использованные VIP-коды (чтобы один код не сработал дважды)
-  vipActive: false,   // Активирован ли вечный VIP (отключает налог миллионера)
-  vipActivatedAt: 0,  // Дата активации VIP
-  vipCode: '',        // Какой именно код был активирован
-  betaTester: false,  // Активирован ли доступ к закрытому бета-тесту
-  betaActivatedAt: 0, // Дата активации бета-доступа
-  betaMode: false,    // Включена ли тестовая ветка 3.6 Beta
-  betaSavedNick: '',  // Бэкап настоящего ника на время беты (в бете ник — «Тест»)
-  // Спонсорство (код автора): кого поддерживаю, сколько сгенерировал автору и очередь на сервер
-  authorCode: null,           // { code, ownerUid, ownerName } | null
-  authorRoyaltyLocal: 0,      // сколько ₽ мои открытия принесли автору (локальный счётчик)
-  authorRoyaltyPending: 0,    // очередь репортов на сервер (придётся, когда сервер появится онлайн)
+  usedVipCodes: [],
+  vipActive: false,
+  vipActivatedAt: 0,
+  vipCode: '',
+  betaTester: false,
+  betaActivatedAt: 0,
+  betaMode: false,
+  betaSavedNick: '',
+  authorCode: null,
+  authorRoyaltyLocal: 0,
+  authorRoyaltyPending: 0,
   netGiftsSent: 0,
   netGiftsReceived: 0,
   netTradesDone: 0,
@@ -76,15 +95,32 @@ const DEFAULT_STATS = {
   hardModeNotified: false,
   richTaxNotified: false,
   tapLimitClosed: false,
-  apologyGiftClaimed: false, // сезон 3.5 — подарок-извинение за вайп 3.9
-  // 4.1 — перерождение и кредит
-  rebirth: 0,                 // 0..10 уровень перерождения
-  creditDebt: 0,              // сколько должен банку
-  creditBorrowAt: 0,          // когда взял последний кредит (ms)
-  creditHistory: 0,           // всего взято в кредит за всё время
-  bankruptUntil: 0,           // до какого времени титул банкрота/воздухана
-  bankruptType: '',           // 'bankrupt' | 'vozduhan' | ''
-  rebirthNotified: false
+  apologyGiftClaimed: false,
+  rebirth: 0,
+  creditDebt: 0,
+  creditBorrowAt: 0,
+  creditHistory: 0,
+  bankruptUntil: 0,
+  bankruptType: '',
+  rebirthNotified: false,
+  // 4.0 — новые системы
+  collections: {},            // { [collectionId]: { owned: number, percent: number, completed: bool, lastBonus: string } }
+  craft: {
+    totalCrafts: 0,
+    bestRarity: null,
+    history: [],               // последние крафты { from: [...], to: id, at }
+    byCollection: {}          // { [collection]: count }
+  },
+  gameMode: 'normal',         // текущий режим
+  gameModeNotified: false,    // показывали ли выбор режима
+  hardcoreDead: false,        // в хардкоре — погиб ли
+  hardcoreDeathAt: 0,
+  modeStats: {                // статистика по режимам
+    easy: { games: 0, bestBalance: 0 },
+    normal: { games: 0, bestBalance: 0 },
+    hard: { games: 0, bestBalance: 0 },
+    hardcore: { games: 0, bestBalance: 0, deaths: 0 }
+  }
 };
 
 function freshStats() {
@@ -522,7 +558,6 @@ const SaveManager = {
     ['authorRoyaltyLocal', 'authorRoyaltyPending', 'netGiftsSent', 'netGiftsReceived', 'netTradesDone'].forEach(k => {
       if (!Number.isFinite(stats[k])) stats[k] = 0;
     });
-    // 4.1 rebirth
     if (!Number.isFinite(stats.rebirth)) stats.rebirth = 0;
     stats.rebirth = Math.max(0, Math.min(10, Math.floor(stats.rebirth)));
     if (!Number.isFinite(stats.creditDebt)) stats.creditDebt = 0;
@@ -531,13 +566,32 @@ const SaveManager = {
     if (!Number.isFinite(stats.bankruptUntil)) stats.bankruptUntil = 0;
     if (typeof stats.bankruptType !== 'string') stats.bankruptType = '';
     if (typeof stats.rebirthNotified !== 'boolean') stats.rebirthNotified = false;
-    /* 🚀 Ракета (Crash): числа защищаем от мусора, историю режем по длине */
+    // 4.0 — новые поля
+    if (!stats.collections || typeof stats.collections !== 'object') stats.collections = {};
+    if (!stats.craft || typeof stats.craft !== 'object') stats.craft = { totalCrafts: 0, bestRarity: null, history: [], byCollection: {} };
+    if (!Number.isFinite(stats.craft.totalCrafts)) stats.craft.totalCrafts = 0;
+    if (!Array.isArray(stats.craft.history)) stats.craft.history = [];
+    if (!stats.craft.byCollection || typeof stats.craft.byCollection !== 'object') stats.craft.byCollection = {};
+    if (typeof stats.gameMode !== 'string') stats.gameMode = (typeof DEFAULT_GAME_MODE !== 'undefined' ? DEFAULT_GAME_MODE : 'normal');
+    if (typeof stats.gameModeNotified !== 'boolean') stats.gameModeNotified = false;
+    if (typeof stats.hardcoreDead !== 'boolean') stats.hardcoreDead = false;
+    if (!Number.isFinite(stats.hardcoreDeathAt)) stats.hardcoreDeathAt = 0;
+    if (!stats.modeStats || typeof stats.modeStats !== 'object') {
+      stats.modeStats = {
+        easy: { games: 0, bestBalance: 0 },
+        normal: { games: 0, bestBalance: 0 },
+        hard: { games: 0, bestBalance: 0 },
+        hardcore: { games: 0, bestBalance: 0, deaths: 0 }
+      };
+    }
+    ['easy','normal','hard','hardcore'].forEach(m => {
+      if (!stats.modeStats[m]) stats.modeStats[m] = { games: 0, bestBalance: 0, deaths: 0 };
+    });
     ['crashRounds', 'crashWins', 'crashLosses', 'crashWagered', 'crashWon', 'crashBestMult', 'crashBestWin'].forEach(k => {
       if (!Number.isFinite(stats[k]) || stats[k] < 0) stats[k] = 0;
     });
     const crashHistory = Array.isArray(stats.crashHistory) ? stats.crashHistory : [];
     stats.crashHistory = crashHistory.map(h => {
-      // Новая форма — { x, win }; старые записи могли быть просто числом
       if (typeof h === 'number') return Number.isFinite(h) && h >= 1 ? { x: h, win: false } : null;
       if (h && typeof h === 'object') {
         const x = Number(h.x);
@@ -546,7 +600,6 @@ const SaveManager = {
       }
       return null;
     }).filter(Boolean).slice(0, 12);
-    /* 🍾 Бутылочка (Bottle): числа защищаем от мусора, историю режем по длине */
     ['bottleSpins', 'bottleWins', 'bottleLosses', 'bottleWon', 'bottleBestWin'].forEach(k => {
       if (!Number.isFinite(stats[k]) || stats[k] < 0) stats[k] = 0;
     });
@@ -565,45 +618,74 @@ const SaveManager = {
     data.lastSeen = raw.lastSeen || Date.now();
     data.version = SAVE_VERSION;
 
+    // Миграция редкостей: старые ключи → новые
+    const rarityAliasMap = (typeof RARITY_ALIASES !== 'undefined') ? RARITY_ALIASES : { consumer: 'common', milspec: 'uncommon', restricted: 'rare', classified: 'epic', covert: 'legendary', gold: 'mythic' };
     data.inventory = data.inventory.map(inv => {
       const proto = (typeof ITEMS_BY_ID !== 'undefined' && ITEMS_BY_ID[inv.id]) ? ITEMS_BY_ID[inv.id] : null;
-      return Object.assign({}, proto || {}, inv, { uid: inv.uid || 'legacy_' + inv.id + '_' + Math.random().toString(36).slice(2, 7) });
+      let merged = Object.assign({}, proto || {}, inv, { uid: inv.uid || 'legacy_' + inv.id + '_' + Math.random().toString(36).slice(2, 7) });
+      // Если у предмета старая редкость — мигрируем
+      if (merged.rarity && rarityAliasMap[merged.rarity]) {
+        merged.rarity = rarityAliasMap[merged.rarity];
+      }
+      // Если у прототипа есть collection, а у inv нет — берём из прототипа
+      if (!merged.collection && proto && proto.collection) merged.collection = proto.collection;
+      return merged;
     });
 
     return data;
   },
 
-  /** Чтение: localStorage (v14) → cookie-бэкап v14 → vault → вайп */
+  /** Чтение: per-mode localStorage → cookie → vault → legacy v14 migration → вайп */
   load() {
+    const currentMode = getCurrentModeId();
+    const modeKey = getSaveKeyForMode(currentMode);
     let raw = null;
+    let usedKey = modeKey;
 
     try {
-      const ls = localStorage.getItem(SAVE_KEY);
+      const ls = localStorage.getItem(modeKey);
       if (ls) raw = JSON.parse(ls);
     } catch (e) {}
+
+    // Если нет сейва для текущего режима — пробуем старый SAVE_KEY (v15 base) или legacy v14
+    if (!raw) {
+      try {
+        const base = localStorage.getItem(SAVE_KEY_BASE);
+        if (base) { raw = JSON.parse(base); usedKey = SAVE_KEY_BASE; }
+      } catch (e) {}
+    }
+    if (!raw) {
+      for (const lk of LEGACY_KEYS) {
+        try {
+          const v = localStorage.getItem(lk);
+          if (v) { raw = JSON.parse(v); usedKey = lk; break; }
+        } catch (e) {}
+      }
+    }
 
     if (!raw) {
       const cookieBackup = this.readCookieBackup();
       if (cookieBackup) raw = cookieBackup;
     }
 
-    // ---- Если есть основной сейв — применяем vault поверх для защиты от случайной смены id ----
     if (raw) {
       let data = this.normalize(raw);
+      // Устанавливаем режим из сейва или из currentMode
+      if (!data.stats.gameMode) data.stats.gameMode = currentMode;
+      // Если сейв был из legacy ключа — мигрируем его в per-mode ключ
+      if (usedKey !== modeKey) {
+        try { localStorage.setItem(modeKey, JSON.stringify(data)); } catch (e) {}
+      }
       try {
         const uidLock = IdentityVault.getUidLock();
         const vault = IdentityVault.loadVault();
-        // UID-lock: id никогда не меняется случайно
         if (uidLock) {
           if (data.user && data.user.id && data.user.id !== uidLock) {
-            // если в сейве новый id, а в lock старый — оставляем старый (защита)
-            // но если сейв явно новее и vault подтверждает новый id — обновим lock
             if (vault && vault.uid && vault.uid === data.user.id) {
               IdentityVault.setUidLock(data.user.id);
             } else if (vault && vault.user && vault.user.id === uidLock) {
               data.user.id = uidLock;
             } else {
-              // по умолчанию доверяем lock, если vault старше
               data.user.id = uidLock;
             }
           }
@@ -611,7 +693,6 @@ const SaveManager = {
             data.user = vault.user;
           }
         }
-        // Vault восстанавливает критичные поля если они пропали
         if (vault && vault.user) {
           if (!data.user) {
             data.user = vault.user;
@@ -623,7 +704,6 @@ const SaveManager = {
             if (vault.user.email && !data.user.email) data.user.email = vault.user.email;
             if (vault.tag && !data.user.tag) data.user.tag = vault.tag;
           }
-          // баланс/инвентарь из vault если локальный пустой
           if (vault.balance && data.balance < 2000 && vault.balance > data.balance) data.balance = vault.balance;
           if (vault.inventory && vault.inventory.length && !data.inventory.length) data.inventory = vault.inventory;
           if (vault.stats) {
@@ -639,10 +719,9 @@ const SaveManager = {
           }
         }
       } catch (e) {}
-      return { data, migrated: false, fresh: false, wiped: false, carriedUser: false, hadOldSave: false };
+      return { data, migrated: usedKey !== modeKey, fresh: false, wiped: false, carriedUser: false, hadOldSave: false, mode: currentMode };
     }
 
-    // ---- Нет основного сейва — пробуем восстановить из vault (сервер стёрся, но localStorage жив) ----
     try {
       const vault = IdentityVault.loadVault();
       if (vault && vault.user && vault.uid) {
@@ -651,18 +730,16 @@ const SaveManager = {
           balance: vault.balance || 2000,
           inventory: vault.inventory || [],
           user: vault.user,
-          stats: Object.assign(freshStats(), vault.stats || {}),
+          stats: Object.assign(freshStats(), vault.stats || {}, { gameMode: currentMode }),
           settings: vault.settings || Object.assign({}, (typeof DEFAULT_SETTINGS !== 'undefined' ? DEFAULT_SETTINGS : {})),
           createdAt: vault.at || Date.now(),
           lastSeen: Date.now()
         };
         const data = this.normalize(fromVault);
-        // помечаем что это восстановление из vault
-        return { data, migrated: false, fresh: false, wiped: false, carriedUser: true, hadOldSave: true, oldUser: null, fromVault: true };
+        return { data, migrated: false, fresh: false, wiped: false, carriedUser: true, hadOldSave: true, oldUser: null, fromVault: true, mode: currentMode };
       }
     } catch (e) {}
 
-    // ---------- ПОЛНЫЙ ВАЙП СЕЗОНА 3.9 ----------
     let hadOldSave = false;
     let carriedUser = null;
     try {
@@ -683,7 +760,62 @@ const SaveManager = {
     } catch (e) {}
 
     const data = this.defaultData();
-    return { data: data, migrated: false, fresh: true, wiped: true, carriedUser: !!carriedUser, hadOldSave: !!hadOldSave, oldUser: carriedUser || null };
+    data.stats.gameMode = currentMode;
+    return { data: data, migrated: false, fresh: true, wiped: true, carriedUser: !!carriedUser, hadOldSave: !!hadOldSave, oldUser: carriedUser || null, mode: currentMode };
+  },
+
+  /** Загрузка сейва конкретного режима (без смены current) */
+  loadMode(mode) {
+    const m = (mode && typeof GAME_MODES !== 'undefined' && GAME_MODES[mode]) ? mode : 'normal';
+    const key = getSaveKeyForMode(m);
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return null;
+      return this.normalize(JSON.parse(raw));
+    } catch (e) { return null; }
+  },
+
+  /** Список всех режимов, для которых есть сейв */
+  listModes() {
+    const out = [];
+    try {
+      const modes = (typeof GAME_MODES !== 'undefined') ? Object.keys(GAME_MODES) : ['easy','normal','hard','hardcore'];
+      modes.forEach(m => {
+        const key = getSaveKeyForMode(m);
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          try { const d = JSON.parse(raw); out.push({ mode: m, balance: d.balance||0, level: (d.stats&&d.stats.level)||1, lastSeen: d.lastSeen||0 }); } catch (e) {}
+        }
+      });
+    } catch (e) {}
+    return out;
+  },
+
+  /** Переключение режима: сохраняет текущий, меняет current, загружает новый (или создаёт) */
+  switchMode(newMode, currentData) {
+    const target = (newMode && typeof GAME_MODES !== 'undefined' && GAME_MODES[newMode]) ? newMode : 'normal';
+    const prevMode = getCurrentModeId();
+    if (currentData) {
+      // Сохраняем предыдущий режим
+      try {
+        const prevKey = getSaveKeyForMode(prevMode);
+        localStorage.setItem(prevKey, JSON.stringify(currentData));
+      } catch (e) {}
+    }
+    setCurrentModeId(target);
+    // Пытаемся загрузить целевой режим
+    const existing = this.loadMode(target);
+    if (existing) {
+      existing.stats.gameMode = target;
+      return { data: existing, fresh: false, mode: target };
+    }
+    const fresh = this.defaultData();
+    fresh.stats.gameMode = target;
+    fresh.stats.modeStats[target] = fresh.stats.modeStats[target] || { games: 0, bestBalance: 0, deaths: 0 };
+    fresh.stats.modeStats[target].games = 1;
+    // Сохраняем свежий
+    try { localStorage.setItem(getSaveKeyForMode(target), JSON.stringify(fresh)); } catch (e) {}
+    return { data: fresh, fresh: true, mode: target };
   },
 
   _carriedFrom(u) {
@@ -733,16 +865,23 @@ const SaveManager = {
     return null;
   },
 
-  /** Основная запись: localStorage + компактная копия в cookie + vault */
+  /** Основная запись: per-mode localStorage + cookie + vault */
   save(data) {
     if (!Consent.saveAllowed()) return false;
 
     data.lastSeen = Date.now();
     data.version = SAVE_VERSION;
     data.stats.lastSeen = Date.now();
+    if (!data.stats.gameMode) data.stats.gameMode = getCurrentModeId();
+
+    const mode = data.stats.gameMode || getCurrentModeId();
+    const modeKey = getSaveKeyForMode(mode);
 
     let lsOk = false;
     try {
+      localStorage.setItem(modeKey, JSON.stringify(data));
+      // Также дублируем в базовый ключ для совместимости (только если normal)
+      if (mode === 'normal') localStorage.setItem(SAVE_KEY_BASE, JSON.stringify(data));
       localStorage.setItem(SAVE_KEY, JSON.stringify(data));
       lsOk = true;
     } catch (e) {
@@ -752,7 +891,7 @@ const SaveManager = {
     this.writeCookieBackup(data);
 
     MetaStore.write(Object.assign(MetaStore.read(), {
-      version: (typeof APP_VERSION !== 'undefined' ? APP_VERSION : '4.0'),
+      version: (typeof APP_VERSION !== 'undefined' ? APP_VERSION : '4.1'),
       saveVersion: SAVE_VERSION,
       lastSeen: Date.now(),
       level: data.stats.level,
@@ -761,10 +900,10 @@ const SaveManager = {
       lastDailyClaim: data.stats.lastDailyClaim,
       promosUsed: data.stats.promosUsed,
       catFound: !!data.stats.catFound,
-      balanceHint: data.balance
+      balanceHint: data.balance,
+      gameMode: mode
     }));
 
-    // ---- Двойное сохранение: vault + uid-lock ----
     try {
       IdentityVault.saveFromSnapshot(data);
       if (data.user && data.user.id) IdentityVault.setUidLock(data.user.id);
@@ -866,12 +1005,26 @@ const SaveManager = {
   clearAll() {
     try {
       localStorage.removeItem(SAVE_KEY);
+      localStorage.removeItem(SAVE_KEY_BASE);
+      try {
+        const modes = (typeof GAME_MODES !== 'undefined') ? Object.keys(GAME_MODES) : ['easy','normal','hard','hardcore'];
+        modes.forEach(m => localStorage.removeItem(getSaveKeyForMode(m)));
+      } catch (e) {}
       OLD_SAVE_KEYS.forEach(k => localStorage.removeItem(k));
     } catch (e) {}
     this.clearCookieBackup();
     CookieStore.remove(MetaStore.COOKIE_META);
-    // ВАЖНО: vault НЕ чистим — он должен пережить вайп, чтобы восстановить данные с сервера
-    // IdentityVault остаётся для автовосстановления
+  },
+
+  clearMode(mode) {
+    try {
+      const m = mode || getCurrentModeId();
+      localStorage.removeItem(getSaveKeyForMode(m));
+      if (m === 'normal') {
+        localStorage.removeItem(SAVE_KEY_BASE);
+        localStorage.removeItem(SAVE_KEY);
+      }
+    } catch (e) {}
   },
 
   clearAllIncludingVault() {
