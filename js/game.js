@@ -265,17 +265,59 @@ function getCreditAvailable() {
 function getRebirthRequirement(lvl) {
   return (typeof REBIRTH_REQUIREMENTS !== 'undefined' ? REBIRTH_REQUIREMENTS.find(x => x.level === lvl) : null) || null;
 }
+
+/* Текущий прогресс по ключу задания (для списка «Задания перерождения») */
+function rebirthTaskCurrent(key) {
+  const s = state.stats || {};
+  switch (key) {
+    case 'level': return s.level || 1;
+    case 'cases': return s.casesOpened || 0;
+    case 'upgrades': return s.upgradesWon || 0;
+    case 'money': return state.balance || 0;
+    case 'sell': return s.itemsSold || 0;
+    case 'idle': return s.idleCollected || 0;
+    case 'crash': return s.crashWins || 0;
+    case 'daily': return s.dailyStreak || 0;
+    case 'achievements': return Array.isArray(s.achievements) ? s.achievements.length : 0;
+    default: return 0;
+  }
+}
+
+function rebirthTaskMeta(key) {
+  const meta = (typeof REBIRTH_TASK_META !== 'undefined' ? REBIRTH_TASK_META[key] : null);
+  return meta || { label: String(key || ''), money: false };
+}
+
+/* Полный список заданий для уровня перерождения: с текущим прогрессом и статусом */
+function rebirthTasksFor(lvl) {
+  const req = getRebirthRequirement(lvl);
+  if (!req || !Array.isArray(req.tasks)) return [];
+  return req.tasks.map(t => {
+    const current = rebirthTaskCurrent(t.key);
+    const target = Math.max(1, Number(t.target) || 1);
+    const meta = rebirthTaskMeta(t.key);
+    return {
+      key: t.key, target, current,
+      label: meta.label, money: !!meta.money,
+      done: current >= target,
+      percent: Math.min(100, Math.round((current / target) * 100))
+    };
+  });
+}
+
+/* Может ли игрок переродиться на следующий уровень: все задания выполнены и нет долга */
 function canRebirthNext() {
   const cur = state.stats.rebirth || 0;
   if (cur >= REBIRTH_MAX) return { ok: false, reason: 'MAX' };
   const nxt = cur + 1;
   const req = getRebirthRequirement(nxt);
   if (!req) return { ok: false, reason: 'NOREQ' };
-  if ((state.stats.level || 1) < req.needLevel) return { ok: false, reason: 'LEVEL', need: req.needLevel };
-  if ((state.stats.casesOpened || 0) < req.needCases) return { ok: false, reason: 'CASES', need: req.needCases };
-  if (state.balance < req.needMoney) return { ok: false, reason: 'MONEY', need: req.needMoney };
-  if ((state.stats.creditDebt || 0) > 0) return { ok: false, reason: 'DEBT' };
-  return { ok: true, next: nxt, req };
+  const tasks = rebirthTasksFor(nxt);
+  if (!tasks.length) return { ok: false, reason: 'NOREQ' };
+  const failed = tasks.filter(t => !t.done);
+  if ((state.stats.creditDebt || 0) > 0) return { ok: false, reason: 'DEBT', tasks, failed };
+  if (failed.length) return { ok: false, reason: 'TASKS', tasks, failed };
+  return { ok: true, next: nxt, req, tasks };
 }
 function formatRebirthDebtTimer() {
   const debt = state.stats.creditDebt || 0;
@@ -379,52 +421,72 @@ function tryPayWithCredit(cost) {
   }
   return { ok: true, usedBalance: usedBal, usedCredit: need };
 }
-function doRebirth() {
+async function doRebirth() {
   const chk = canRebirthNext();
   if (!chk.ok) {
-    let msg = 'Не могу переродиться';
+    let msg = 'Не могу переродиться — не все задания выполнены';
     if (chk.reason === 'MAX') msg = 'Ты уже на максимальном перерождении (10)';
-    else if (chk.reason === 'LEVEL') msg = `Нужен ${chk.need} уровень, у тебя ${state.stats.level}`;
-    else if (chk.reason === 'CASES') msg = `Нужно открыть ${fmt(chk.need)} кейсов, у тебя ${fmt(state.stats.casesOpened||0)}`;
-    else if (chk.reason === 'MONEY') msg = `Нужно ${fmt(chk.need)} ₽, у тебя ${fmt(state.balance)} ₽`;
     else if (chk.reason === 'DEBT') msg = 'Сначала верни кредит! Долг — ' + fmt(state.stats.creditDebt) + ' ₽';
+    else if (chk.reason === 'NOREQ') msg = 'Задания для перерождения не найдены';
+    else if (chk.reason === 'TASKS') {
+      const first = (chk.failed && chk.failed[0]) || null;
+      if (first) {
+        const val = first.money ? fmt(Math.min(first.current, first.target)) + ' ₽' : fmt(Math.min(first.current, first.target));
+        msg = `Задание не выполнено: ${first.label} — ${val} из ${fmt(first.target)}`;
+      }
+    }
     Toast.error(msg);
+    openRebirthModal();
     return;
   }
   const nextLvl = chk.next;
   const card = getRebirthCard(nextLvl);
   if (!card) { Toast.error('Карта не найдена'); return; }
-  Modal.confirm({
+
+  const moneyTask = (chk.tasks || []).find(t => t.key === 'money');
+  const tasksHtml = (chk.tasks || []).map(t =>
+    `<div class="flex items-center justify-between gap-2 text-[10px] text-slate-300">
+       <span class="truncate">✅ ${escapeHtml(t.label)}</span>
+       <span class="font-mono text-emerald-400 flex-shrink-0">${fmt(Math.min(t.current, t.target))} / ${fmt(t.target)}</span>
+     </div>`
+  ).join('');
+
+  const ok = await ConfirmDialog.ask({
+    icon: '🔄',
     title: `Переродиться в ${card.name}?`,
-    text: `Ты перейдёшь на ${nextLvl} перерождение и получишь ${card.name} с лимитом ${fmt(card.limit)} ₽. Весь прогресс (баланс, рюкзак, уровень) сбросится, но карта останется навсегда. Продолжить?`,
-    confirmText: '🔄 ПЕРЕРОДИТЬСЯ',
-    cancelText: 'Отмена',
-    danger: false,
-    onConfirm: () => {
-      // списываем требование денег если есть
-      if (chk.req.needMoney > 0) state.balance -= chk.req.needMoney;
-      state.stats.rebirth = nextLvl;
-      // сброс
-      state.balance = 2000;
-      state.inventory = [];
-      state.stats.level = 1;
-      state.stats.xp = 0;
-      state.stats.creditDebt = 0;
-      state.stats.creditBorrowAt = 0;
-      state.stats.bankruptType = '';
-      state.stats.bankruptUntil = 0;
-      // титулы
-      if (!state.stats.unlockedTitles.includes(card.title)) state.stats.unlockedTitles.push(card.title);
-      // стартовые предметы + подарок если был
-      try { if (typeof START_ITEMS !== 'undefined') state.inventory = START_ITEMS.map(id => { const proto = ITEMS_BY_ID[id]; return proto ? Object.assign({}, proto, { uid: 'rebirth_' + id + '_' + Math.random().toString(36).slice(2,6) }) : null; }).filter(Boolean); } catch(e){}
-      Toast.success(`🔄 Перерождение ${nextLvl}! Получена ${card.name} — лимит ${fmt(card.limit)} ₽`, 6000);
-      Fx.burst(80, [card.color || '#ffd700', '#ff00ff', '#00f0ff']);
-      audio.init(); audio.playLevelUp();
-      persist(true);
-      renderAll();
-      openRebirthModal();
-    }
+    text: `Ты перейдёшь на <b>${nextLvl}</b> перерождение и получишь <b>${escapeHtml(card.name)}</b> с лимитом <b class="text-amber-300">${fmt(card.limit)} ₽</b>. Весь прогресс (баланс, рюкзак, уровень) сбросится, но карта останется навсегда.${moneyTask ? `<br><span class="text-rose-300">За перерождение спишется ${fmt(moneyTask.target)} ₽.</span>` : ''}` +
+      `<div class="mt-2 space-y-0.5">${tasksHtml}</div>`,
+    okText: '🔄 ПЕРЕРОДИТЬСЯ',
+    danger: false
   });
+  if (!ok) return;
+
+  // Списываем «плату» за перерождение (задание money), если она была
+  if (moneyTask && moneyTask.target > 0) state.balance -= moneyTask.target;
+
+  state.stats.rebirth = nextLvl;
+  // сброс прогресса
+  state.balance = 2000;
+  state.inventory = [];
+  state.stats.level = 1;
+  state.stats.xp = 0;
+  state.stats.creditDebt = 0;
+  state.stats.creditBorrowAt = 0;
+  state.stats.bankruptType = '';
+  state.stats.bankruptUntil = 0;
+  // титулы
+  if (!state.stats.unlockedTitles.includes(card.title)) state.stats.unlockedTitles.push(card.title);
+  // стартовые предметы
+  try { if (typeof START_ITEMS !== 'undefined') state.inventory = START_ITEMS.map(id => { const proto = ITEMS_BY_ID[id]; return proto ? Object.assign({}, proto, { uid: 'rebirth_' + id + '_' + Math.random().toString(36).slice(2,6) }) : null; }).filter(Boolean); } catch(e){}
+  Toast.success(`🔄 Перерождение ${nextLvl}! Получена ${card.name} — лимит ${fmt(card.limit)} ₽`, 6000);
+  Fx.burst(80, [card.color || '#ffd700', '#ff00ff', '#00f0ff']);
+  audio.init(); audio.playLevelUp();
+  persist(true);
+  // Сразу пушим новое перерождение на сервер (плашка в чате) + обновляем ID-инфо
+  if (typeof CloudSave !== 'undefined' && CloudSave.push) CloudSave.push(false);
+  if (typeof NetIdentity !== 'undefined') NetIdentity.sync(true);
+  renderAll();
+  openRebirthModal();
 }
 
 function addXp(amount, { silent = false } = {}) {
@@ -602,6 +664,10 @@ function renderAll() {
     const hint = $('crashBalanceHint');
     if (hint) hint.textContent = moneyText(state.balance, true);
     CrashGame.renderStats();
+  }
+  // 🍾 Бутылочка: статистика (только когда панель на экране)
+  if (viewVisible('viewBottle') && typeof BottleGame !== 'undefined') {
+    BottleGame.renderStats();
   }
 
   if (Modal.isOpen('profileModal')) renderProfile();
@@ -2857,6 +2923,29 @@ function renderProfile() {
         creditInfo.innerHTML = `Лимит: <b class="text-emerald-300">${fmt(limit)} ₽</b> · Доступно: <b class="text-cyan-300">${fmt(avail)} ₽</b> · Долга нет ✅`;
       }
     }
+    // Список заданий для следующего перерождения (кратко, прямо в профиле)
+    const tasksBox = $('rebirthTasksList');
+    if (tasksBox) {
+      if (rLvl >= REBIRTH_MAX) {
+        tasksBox.innerHTML = `<div class="text-[9px] text-amber-300 font-bold">🏆 Максимальное перерождение достигнуто</div>`;
+      } else {
+        const tasks = rebirthTasksFor(rLvl + 1);
+        const doneCount = tasks.filter(t => t.done).length;
+        if (!tasks.length) {
+          tasksBox.innerHTML = `<div class="text-[9px] text-slate-500">Задания не найдены</div>`;
+        } else {
+          tasksBox.innerHTML =
+            `<div class="text-[9px] text-slate-400 mb-0.5">🎯 Задания для перерождения №${rLvl + 1} (${doneCount}/${tasks.length}):</div>` +
+            tasks.map(t => {
+              const val = t.money
+                ? `${fmt(Math.min(t.current, t.target))} / ${fmt(t.target)} ₽`
+                : `${fmt(Math.min(t.current, t.target))} / ${fmt(t.target)}`;
+              const okCls = t.done ? 'text-emerald-400' : 'text-slate-400';
+              return `<div class="flex items-center justify-between gap-2 text-[9px] ${okCls}"><span class="truncate">• ${escapeHtml(t.label)}</span><span class="font-mono flex-shrink-0">${val} ${t.done ? '✅' : ''}</span></div>`;
+            }).join('');
+        }
+      }
+    }
     if (bankruptWarn) {
       const debt = state.stats.creditDebt || 0;
       const bType = state.stats.bankruptType;
@@ -2967,20 +3056,30 @@ function openRebirthModal() {
       reqEl.innerHTML = `<b class="text-amber-300">🏆 Максимум!</b> Ты на 10-м перерождении — радужная карта ${fmt(100000000000)} ₽! Больше перерождений нет.`;
     } else {
       const chk = canRebirthNext();
-      const req = chk.req;
-      if (!req) reqEl.textContent = 'Требования не найдены';
-      else {
-        const lvlOk = (state.stats.level||1) >= req.needLevel;
-        const caseOk = (state.stats.casesOpened||0) >= req.needCases;
-        const moneyOk = state.balance >= req.needMoney;
-        const debtOk = (state.stats.creditDebt||0) <= 0;
+      const tasks = rebirthTasksFor(cur + 1);
+      if (!tasks.length) {
+        reqEl.innerHTML = `<div class="text-[10px] text-rose-300">Задания для перерождения не найдены</div>`;
+      } else {
+        const doneCount = tasks.filter(t => t.done).length;
+        const nextCard = REBIRTH_CARDS[cur];
+        const rows = tasks.map(t => {
+          const okCls = t.done ? 'text-emerald-400' : 'text-rose-400';
+          const mark = t.done ? '✅' : '❌';
+          const val = t.money
+            ? `${fmt(Math.min(t.current, t.target))} / ${fmt(t.target)} ₽`
+            : `${fmt(Math.min(t.current, t.target))} / ${fmt(t.target)}`;
+          return `
+            <div class="flex items-center justify-between gap-2 ${okCls}">
+              <span class="truncate">• ${escapeHtml(t.label)}</span>
+              <span class="font-mono flex-shrink-0">${val} ${mark}</span>
+            </div>`;
+        }).join('');
         reqEl.innerHTML = `
-          <div class="text-[10px] font-bold text-amber-300 mb-1">Следующее: ${REBIRTH_CARDS[cur].name} → ${REBIRTH_CARDS[cur+1-1]?.name || ''} (ур. ${cur+1})</div>
-          <div class="${lvlOk ? 'text-emerald-400' : 'text-rose-400'}">• Уровень: ${state.stats.level} / ${req.needLevel} ${lvlOk ? '✅' : '❌'}</div>
-          <div class="${caseOk ? 'text-emerald-400' : 'text-rose-400'}">• Кейсов открыто: ${fmt(state.stats.casesOpened||0)} / ${fmt(req.needCases)} ${caseOk ? '✅' : '❌'}</div>
-          <div class="${moneyOk ? 'text-emerald-400' : 'text-rose-400'}">• Деньги: ${fmt(state.balance)} / ${fmt(req.needMoney)} ${moneyOk ? '✅' : '❌'}</div>
-          <div class="${debtOk ? 'text-emerald-400' : 'text-rose-400'}">• Долг: ${fmt(state.stats.creditDebt||0)} ₽ — ${debtOk ? 'нет ✅' : 'верни долг ❌'}</div>
-          ${!chk.ok ? `<div class="mt-1 text-[10px] text-rose-300">Не хватает условий для перерождения</div>` : `<div class="mt-1 text-[10px] text-emerald-300">Готов к перерождению! Жми кнопку ниже</div>`}
+          <div class="text-[10px] font-bold text-amber-300 mb-1">🎯 Задания для перерождения №${cur+1} (${doneCount}/${tasks.length}) — получишь «${escapeHtml(nextCard ? nextCard.name : '?')}»</div>
+          ${rows}
+          ${!chk.ok
+            ? `<div class="mt-1 text-[10px] text-rose-300">Выполни все задания, чтобы переродиться</div>`
+            : `<div class="mt-1 text-[10px] text-emerald-300">Все задания выполнены — жми кнопку ниже!</div>`}
         `;
       }
     }
@@ -2989,7 +3088,7 @@ function openRebirthModal() {
     const chk = canRebirthNext();
     doBtn.disabled = !chk.ok;
     doBtn.classList.toggle('opacity-50', !chk.ok);
-    doBtn.textContent = chk.ok ? `🔄 ПЕРЕРОДИТЬСЯ В ${cur+1} УРОВЕНЬ` : (cur>=REBIRTH_MAX ? 'МАКСИМУМ ДОСТИГНУТ' : 'НЕ ГОТОВ');
+    doBtn.textContent = chk.ok ? `🔄 ПЕРЕРОДИТЬСЯ В ${cur+1} УРОВЕНЬ` : (cur >= REBIRTH_MAX ? 'МАКСИМУМ ДОСТИГНУТ' : 'НЕ ВСЕ ЗАДАНИЯ ВЫПОЛНЕНЫ');
   }
   Modal.open('rebirthModal');
 }
@@ -3723,6 +3822,7 @@ function switchTab(tab) {
   if (tab === 'community') { renderCommunityTab(); dismissCommunityHint(false); }
   if (tab === 'upgrade') renderUpgradeHud();
   if (tab === 'crash' && typeof CrashGame !== 'undefined') CrashGame.onShow();
+  if (tab === 'bottle' && typeof BottleGame !== 'undefined') BottleGame.onShow();
 
   uiUpdate();
 }
@@ -3793,8 +3893,9 @@ function initGame() {
   renderCasesUI();
   setupCaseTape();
   renderCommunityTab();
-  // 🚀 Мини-игры: ракета + меню «Игры»
+  // 🚀 Мини-игры: ракета + бутылочка + меню «Игры»
   try { if (typeof CrashGame !== 'undefined') CrashGame.init(); } catch (e) { console.error('[crash] init:', e); }
+  try { if (typeof BottleGame !== 'undefined') BottleGame.init(); } catch (e) { console.error('[bottle] init:', e); }
   try { if (typeof MiniGames !== 'undefined') MiniGames.render(); } catch (e) { console.error('[games] init:', e); }
   renderPromoList();
   renderProfile();

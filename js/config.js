@@ -508,6 +508,8 @@ const XP_REWARDS = {
   miniGameEnd: 20,
   crashRound: 4,      // 🚀 сыгранный раунд
   crashWin: 12,       // 🚀 успешный вывод
+  bottleSpin: 4,      // 🍾 сыгранное вращение бутылочки
+  bottleWin: 12,      // 🍾 выигрыш в бутылочке
   idleCollect: 5
 };
 
@@ -705,8 +707,40 @@ const MINI_GAMES = [
     id: 'crash', tab: 'crash', icon: '🚀', iconSvg: 'rocket', name: 'Ракета', badge: 'NEW',
     desc: 'Ставь, следи за множителем и успевай забрать выигрыш до взрыва',
     enabled: () => true
+  },
+  {
+    id: 'bottle', tab: 'bottle', icon: '🍾', iconSvg: 'bottle', name: 'Бутылочка', badge: 'NEW',
+    desc: 'Выложи скины на стол и крути бутылочку — укажет на скин дороже ставки, забираешь выигрыш',
+    enabled: () => true
   }
 ];
+
+/* ---------- Мини-игра «Бутылочка» (Bottle spin) ----------
+   Честная математика: точка остановки бутылочки считается на устройстве игрока
+   через crypto.getRandomValues (RNG.float) ДО запуска вращения — подкрутить
+   по ходу нельзя. Остановка равновероятна: каждый выложенный предмет занимает
+   равный сектор круга (1/K шанс на предмет).
+
+   Механика:
+     • игрок выкладывает minItems..maxItems предметов из рюкзака (они становятся
+       «на кону» и снимаются с рюкзака на время вращения);
+     • один из них отмечается СТАВКОЙ (то, чем рискует игрок);
+     • бутылочка останавливается на одном из выложенных предметов:
+         — цена выпавшего > цена ставки → ВЫИГРЫШ: все предметы возвращаются,
+           а разница (цена выпавшего − цена ставки) начисляется деньгами;
+         — цена выпавшего ≤ цена ставки (в т.ч. сама ставка) → ПРОИГРЫШ:
+           ставка сгорает, остальные предметы возвращаются.
+
+   Шанс выигрыша честно равен доле предметов дороже ставки: поставил дёшево —
+   выигрываешь часто, но по чуть-чуть; поставил дорого — рискуешь крупно. */
+const BOTTLE_CONFIG = {
+  minItems: 2,        // минимум предметов на столе
+  maxItems: 6,        // максимум предметов на столе
+  spinDurationSec: 3.2, // сколько секунд крутится бутылочка
+  fullSpins: 4,       // сколько полных оборотов делает бутылочка до остановки
+  historySize: 12,    // сколько последних результатов помнить
+  tickMs: 140         // интервал «тика» бутылочки при вращении
+};
 
 /* ---------- Апгрейды «Дежурство по школе» (пассивный доход) ---------- */
 const IDLE_LEVELS = [
@@ -1016,17 +1050,43 @@ const REBIRTH_CARDS = [
   { level: 10,id: 'card_rainbow',  name: 'Радужная карта',    color: '#ff00ff', bg: 'from-pink-500/50 via-cyan-400/50 to-yellow-400/50', icon: '🌈', limit: 100000000000, title: 'Радуга', desc: '100B — максимум! Можно взять золотой особняк в кредит, но долг надо вернуть' }
 ];
 
+/* ---------- ЗАДАНИЯ ДЛЯ ПЕРЕРОЖДЕНИЯ (4.1) ----------
+   Каждое перерождение требует выполнить набор ЗАДАНИЙ. Задание — это пара
+   «метрика + цель»: метрика читается из state.stats / state.balance,
+   цель — сколько нужно набрать. Список заданий на уровень — массив tasks.
+   Виды заданий (rebirthTaskCurrent в js/game.js умеет читать каждый):
+     level        — достигни уровня            (state.stats.level)
+     cases        — открой кейсов              (state.stats.casesOpened)
+     upgrades     — выиграй апгрейдов          (state.stats.upgradesWon)
+     money        — накопи на балансе          (state.balance, спишется при перерождении)
+     sell         — продай предметов           (state.stats.itemsSold)
+     idle         — собери с дежурства         (state.stats.idleCollected)
+     crash        — забери раундов в «Ракете»  (state.stats.crashWins)
+     daily        — забирай награду подряд     (state.stats.dailyStreak)
+     achievements — получи достижений          (state.stats.achievements.length) */
+const REBIRTH_TASK_META = {
+  level:        { label: 'Достигни уровня',           money: false },
+  cases:        { label: 'Открой кейсов',             money: false },
+  upgrades:     { label: 'Выиграй апгрейдов',         money: false },
+  money:        { label: 'Накопи на балансе',         money: true },
+  sell:         { label: 'Продай предметов',          money: false },
+  idle:         { label: 'Собери с дежурства',        money: true },
+  crash:        { label: 'Забери раундов в «Ракете»', money: false },
+  daily:        { label: 'Забирай награду подряд',    money: false },
+  achievements: { label: 'Получи достижений',         money: false }
+};
+
 const REBIRTH_REQUIREMENTS = [
-  { level: 1, needLevel: 10, needMoney: 0,          needCases: 25 },
-  { level: 2, needLevel: 11, needMoney: 500000,     needCases: 75 },
-  { level: 3, needLevel: 12, needMoney: 2000000,    needCases: 150 },
-  { level: 4, needLevel: 13, needMoney: 10000000,   needCases: 300 },
-  { level: 5, needLevel: 13, needMoney: 50000000,   needCases: 500 },
-  { level: 6, needLevel: 13, needMoney: 250000000,  needCases: 800 },
-  { level: 7, needLevel: 13, needMoney: 1000000000, needCases: 1200 },
-  { level: 8, needLevel: 13, needMoney: 10000000000, needCases: 2000 },
-  { level: 9, needLevel: 13, needMoney: 50000000000, needCases: 3500 },
-  { level: 10,needLevel: 13, needMoney: 100000000000, needCases: 5000 }
+  { level: 1,  tasks: [ { key: 'level', target: 10 }, { key: 'cases', target: 25 }, { key: 'upgrades', target: 5 } ] },
+  { level: 2,  tasks: [ { key: 'level', target: 11 }, { key: 'cases', target: 75 }, { key: 'upgrades', target: 15 }, { key: 'money', target: 500000 } ] },
+  { level: 3,  tasks: [ { key: 'level', target: 12 }, { key: 'cases', target: 150 }, { key: 'upgrades', target: 40 }, { key: 'sell', target: 60 }, { key: 'money', target: 2000000 } ] },
+  { level: 4,  tasks: [ { key: 'level', target: 13 }, { key: 'cases', target: 300 }, { key: 'money', target: 10000000 }, { key: 'idle', target: 1000000 }, { key: 'crash', target: 25 } ] },
+  { level: 5,  tasks: [ { key: 'level', target: 13 }, { key: 'cases', target: 500 }, { key: 'money', target: 50000000 }, { key: 'achievements', target: 15 }, { key: 'upgrades', target: 100 } ] },
+  { level: 6,  tasks: [ { key: 'level', target: 13 }, { key: 'cases', target: 800 }, { key: 'money', target: 250000000 }, { key: 'sell', target: 250 }, { key: 'daily', target: 10 } ] },
+  { level: 7,  tasks: [ { key: 'level', target: 13 }, { key: 'cases', target: 1200 }, { key: 'money', target: 1000000000 }, { key: 'upgrades', target: 300 }, { key: 'crash', target: 75 } ] },
+  { level: 8,  tasks: [ { key: 'level', target: 13 }, { key: 'cases', target: 2000 }, { key: 'money', target: 10000000000 }, { key: 'idle', target: 100000000 }, { key: 'achievements', target: 20 } ] },
+  { level: 9,  tasks: [ { key: 'level', target: 13 }, { key: 'cases', target: 3500 }, { key: 'money', target: 50000000000 }, { key: 'upgrades', target: 750 }, { key: 'sell', target: 1000 } ] },
+  { level: 10, tasks: [ { key: 'level', target: 13 }, { key: 'cases', target: 5000 }, { key: 'money', target: 100000000000 }, { key: 'achievements', target: 23 }, { key: 'idle', target: 1000000000 } ] }
 ];
 
 const CREDIT_BANKRUPT_AFTER_MS = 60 * 60 * 1000; // 1 час

@@ -93,6 +93,12 @@ function onServerJustCameOnline() {
   if (!state.user) return;
   if (!state.user.tag) NetIdentity.sync(true); // добрать уникальный ID / галочку
   CloudSave.startAutoPush();                    // на оффлайн-старте автопуш не стартовал
+  // Сначала проверяем сервер (восстановление/свежесть), и только если там
+  // пусто или локальная копия новее — заливаем данные с телефона обратно.
+  // Так возвращение к сети после оффлайн-старта не затрёт чужой свежий сейв.
+  CloudSave.pullAndRestore(false).then(restored => {
+    if (!restored) CloudSave.push(false);
+  });
 }
 
 /* Секрет админки для серверных запросов: подбирается под роль, с которой
@@ -2122,9 +2128,13 @@ const AutoWake = {
         if (typeof Community !== 'undefined' && Modal.isOpen('communityModal')) Community.refreshChat(true);
         if (typeof AuthGate !== 'undefined') AuthGate.refreshNetworkState(false);
         if (typeof NetPlay !== 'undefined' && Modal.isOpen('netplayModal')) NetPlay.refreshAll();
-        // после пробуждения — сразу пушим vault на сервер
+        // после пробуждения — сначала проверяем сервер, затем пушим локальные данные
         try {
-          if (typeof CloudSave !== 'undefined' && state.user) CloudSave.push(false);
+          if (typeof CloudSave !== 'undefined' && state.user) {
+            CloudSave.pullAndRestore(false).then(restored => {
+              if (!restored) CloudSave.push(false); // на сервере пусто / локальная свежее — заливаем
+            });
+          }
           if (typeof AdminVaultBackup !== 'undefined' && typeof IdentityVault !== 'undefined' && IdentityVault.hasAdminBackup()) {
             AdminVaultBackup.tryAutoRestore();
           }

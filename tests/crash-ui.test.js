@@ -108,7 +108,7 @@ const tick = () => new Promise(r => setTimeout(r, 30));
   const { document } = window;
   const games = g('MiniGames');
   t('реестр игр доступен в окне', !!games && typeof games.list === 'function');
-  t('в реестре три игры', games.list().length === 3, games.list().map(g => g.id).join(','));
+  t('в реестре четыре игры', games.list().length === 4, games.list().map(g => g.id).join(','));
 
   // Навигация: одна кнопка «Игры» вместо разрозненных кнопок активностей
   const navButtons = document.querySelectorAll('#tabbar .nav-tab');
@@ -123,10 +123,10 @@ const tick = () => new Promise(r => setTimeout(r, 30));
   const modal = document.getElementById('gamesModal');
   t('меню игр открывается', !modal.classList.contains('hidden'));
   const cards = document.querySelectorAll('#gamesList .mini-game-card');
-  t('в меню отрисованы карточки всех игр', cards.length === 3, `карточек: ${cards.length}`);
+  t('в меню отрисованы карточки всех игр', cards.length === 4, `карточек: ${cards.length}`);
   const cardText = document.getElementById('gamesList').textContent;
-  t('в меню есть «Кейсы», «Апгрейд» и «Ракета»',
-    cardText.includes('Кейсы') && cardText.includes('Апгрейд') && cardText.includes('Ракета'));
+  t('в меню есть «Кейсы», «Апгрейд», «Ракета» и «Бутылочка»',
+    cardText.includes('Кейсы') && cardText.includes('Апгрейд') && cardText.includes('Ракета') && cardText.includes('Бутылочка'));
 
   console.log('\n🧭 ПЕРЕКЛЮЧЕНИЕ ИГР');
 
@@ -476,7 +476,7 @@ const tick = () => new Promise(r => setTimeout(r, 30));
     g('ACHIEVEMENTS').some(a => a.id === 'crash_1'));
   t('меню игр можно расширить новым режимом',
     g('MiniGames').register({ id: 'test_game', tab: 'testGame', icon: '🎲', name: 'Тест', desc: 'Тестовая игра для проверки реестра' })
-    && g('MiniGames').list().length === 4);
+    && g('MiniGames').list().length === 5);
 
   const fatal = errors.filter(e => !/offline|Failed to fetch|network|fetch|CDN|tailwind/i.test(e));
   t('в консоли нет критических ошибок', fatal.length === 0, fatal.slice(0, 3).join(' | '));

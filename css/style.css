@@ -1122,3 +1122,162 @@ body.shkola-app {
   .crash-action-btn { min-height: 46px; font-size: 10px !important; }
   .mini-game-icon { width: 2.2rem; height: 2.2rem; font-size: 1.1rem; }
 }
+
+/* ==========================================================================
+   🍾 МИНИ-ИГРА «БУТЫЛОЧКА»
+   Стол — круг, по которому раскладываются выбранные предметы; в центре
+   крутится бутылочка (встроенный SVG, не эмодзи). Геометрию (радиус, угол
+   секторов) считает js/bottle.js через CSS-переменные --r и --a.
+   ========================================================================== */
+.bottle-shell {
+  width: 100%;
+  max-width: 34rem;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: .75rem;
+  min-width: 0;
+}
+
+.bottle-stage { position: relative; width: 100%; }
+
+.bottle-table {
+  position: relative;
+  width: 100%;
+  max-width: 340px;
+  aspect-ratio: 1 / 1;
+  margin: 0 auto;
+  border-radius: 50%;
+  border: 1.5px solid rgba(51, 65, 85, .7);
+  background:
+    radial-gradient(circle at 50% 42%, rgba(16, 185, 129, .07), transparent 62%),
+    radial-gradient(circle at 50% 50%, #0b1120 0%, #060a14 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .04), 0 18px 40px -26px rgba(0, 0, 0, .95);
+}
+
+/* Слоты предметов: раскладываются по кругу, при этом сами карточки
+   остаются вертикальными (обратный поворот на --a). */
+.bottle-slot {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 84px;
+  min-height: 74px;
+  margin: -37px 0 0 -42px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 6px 4px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, .92);
+  border: 1.5px solid var(--rc);
+  box-shadow: 0 4px 14px -6px rgba(0, 0, 0, .8);
+  transform: rotate(var(--a)) translateY(calc(var(--r) * -1)) rotate(calc(var(--a) * -1));
+  cursor: pointer;
+  transition: box-shadow .15s ease;
+}
+
+.bottle-slot-name {
+  font-size: 8px;
+  line-height: 1.15;
+  text-align: center;
+  color: #cbd5e1;
+  max-width: 100%;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.bottle-slot-price { font-family: 'Chakra Petch', sans-serif; font-size: 9px; font-weight: 700; color: var(--rc); }
+
+.bottle-slot-bet { box-shadow: 0 0 0 2px var(--rc), 0 6px 18px -6px rgba(0, 0, 0, .9); }
+
+.bottle-slot-badge {
+  position: absolute;
+  top: -9px;
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: var(--rc);
+  color: #0b1220;
+  text-transform: uppercase;
+}
+
+.bottle-slot-win  { box-shadow: 0 0 0 2px #34d399, 0 0 24px rgba(52, 211, 153, .5); }
+.bottle-slot-lose { box-shadow: 0 0 0 2px #f87171, 0 0 24px rgba(248, 113, 113, .5); }
+
+.bottle-hub {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 74px;
+  height: 74px;
+  margin: -37px 0 0 -37px;
+  border-radius: 50%;
+  z-index: 1;
+  background: radial-gradient(circle at 50% 38%, #1e293b 0%, #0f172a 70%);
+  border: 1.5px solid rgba(100, 116, 139, .5);
+  box-shadow: inset 0 2px 6px rgba(255, 255, 255, .06), 0 6px 16px -8px rgba(0, 0, 0, .9);
+}
+
+.bottle-bottle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 3;
+  pointer-events: none;
+  color: #34d399;
+  filter: drop-shadow(0 0 10px rgba(52, 211, 153, .35));
+  will-change: transform;
+}
+.bottle-bottle svg { display: block; width: 100%; height: 100%; }
+
+.bottle-hud { margin-top: .6rem; text-align: center; min-height: 1rem; padding: 0 .5rem; }
+
+.bottle-table-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 1rem;
+  font-size: 10px;
+  color: #64748b;
+}
+
+.bottle-pick {
+  display: flex;
+  flex-direction: column;
+  gap: .4rem;
+  max-height: 200px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.bottle-pick-row {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  width: 100%;
+  text-align: left;
+  padding: .4rem .5rem;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, .7);
+  border: 1px solid rgba(51, 65, 85, .6);
+  transition: border-color .12s ease, background .12s ease;
+}
+.bottle-pick-row:hover { background: rgba(30, 41, 59, .8); }
+.bottle-pick-row-on { border-color: var(--rc); background: rgba(15, 23, 42, .95); }
+.bottle-pick-row-on .bottle-pick-mark { color: var(--rc); font-weight: 700; }
+
+.bottle-pick-mark { flex-shrink: 0; font-size: 9px; color: #64748b; font-weight: 700; white-space: nowrap; }
+
+@media (max-width: 360px) {
+  .bottle-slot { width: 72px; min-height: 64px; margin: -32px 0 0 -36px; }
+}

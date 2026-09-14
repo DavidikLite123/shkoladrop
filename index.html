@@ -665,6 +665,101 @@
     </div>
   </main>
 
+  <main id="viewBottle" class="view-panel w-full px-4 mt-2 hidden space-y-3">
+    <div class="bottle-shell">
+      <div class="flex items-center justify-between gap-2">
+        <div class="min-w-0">
+          <h2 class="font-cs text-sm font-bold uppercase tracking-wider text-slate-200 flex items-center gap-1.5">
+            <i data-icon="bottle" data-icon-size="16" class="text-emerald-300 flex-shrink-0"></i><span class="truncate">Бутылочка</span>
+          </h2>
+          <p class="text-[11px] text-slate-400">Выложи скины на стол и крути — укажет на скин дороже ставки, забираешь выигрыш</p>
+        </div>
+        <span class="text-[10px] bg-emerald-500/20 text-emerald-300 font-bold px-2 py-0.5 rounded-lg border border-emerald-500/30 flex-shrink-0">ЧЕСТНО</span>
+      </div>
+
+      <!-- Стол: по кругу раскладываются выбранные предметы, в центре крутится бутылочка -->
+      <div id="bottleStage" class="bottle-stage">
+        <div id="bottleTable" class="bottle-table">
+          <div id="bottleSlots" class="bottle-slots"></div>
+          <div id="bottleHub" class="bottle-hub" aria-hidden="true"></div>
+          <div id="bottleBottle" class="bottle-bottle" aria-hidden="true"></div>
+        </div>
+        <div id="bottleStatusText" class="bottle-hud text-[10px] text-slate-400">Выбери 2–6 предметов и отметь ставку</div>
+      </div>
+
+      <!-- Панель выбора предметов и запуска -->
+      <div class="w-full bg-slate-900/90 border border-slate-800 rounded-2xl p-3 space-y-2">
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+            <i data-icon="package" data-icon-size="13" class="text-amber-300"></i><span>Твои предметы</span>
+          </span>
+          <div class="flex items-center gap-2">
+            <span id="bottleCountInfo" class="text-[9px] text-slate-500">выбрано 0 / 6</span>
+            <button type="button" onclick="bottleClearTable()" class="text-[9px] text-slate-500 underline hover:text-slate-300">очистить</button>
+          </div>
+        </div>
+        <div id="bottlePick" class="bottle-pick"></div>
+        <div id="bottleBetInfo" class="text-[10px] text-slate-400">Ставка не выбрана — сначала выложи предметы на стол.</div>
+
+        <button id="btnBottleSpin" onclick="bottleSpin()" disabled
+                class="crash-action-btn w-full py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-lime-400 text-slate-950 font-cs font-bold text-[11px] uppercase tracking-wider shadow-lg shadow-emerald-500/20 hover:brightness-110 active:scale-95 transition disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 flex items-center justify-center gap-1.5">
+          <i data-icon="play" data-icon-size="14"></i><span id="bottleSpinLabel">Крутить бутылочку</span>
+        </button>
+        <div class="text-center text-[9px] text-slate-500 leading-relaxed">
+          Предметы на столе снимаются с рюкзака на время вращения. Указала на предмет
+          <span class="text-slate-300">дороже ставки</span> — всё возвращается + разница деньгами. Иначе ставка сгорает.
+        </div>
+      </div>
+
+      <!-- Статистика бутылочки -->
+      <div class="w-full grid grid-cols-3 gap-2 md:grid-cols-5">
+        <div class="stat-tile">
+          <div class="stat-tile-label">Вращений</div>
+          <div id="bottleSpinsStat" class="stat-tile-value text-emerald-300">0</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-tile-label">Выигрышей</div>
+          <div id="bottleWinsStat" class="stat-tile-value text-emerald-400">0</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-tile-label">Проигрышей</div>
+          <div id="bottleLossesStat" class="stat-tile-value text-rose-400">0</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-tile-label">Лучший выигрыш</div>
+          <div id="bottleBestWinStat" class="stat-tile-value text-amber-300">0 ₽</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-tile-label">Выиграно всего</div>
+          <div id="bottleWonStat" class="stat-tile-value text-slate-300">0 ₽</div>
+        </div>
+      </div>
+
+      <!-- Лента последних вращений -->
+      <div class="w-full bg-slate-900/40 border border-slate-800/60 rounded-xl p-2.5">
+        <div class="flex items-center justify-between mb-2 gap-2">
+          <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+            <i data-icon="history" data-icon-size="13" class="text-slate-400"></i><span>Последние вращения</span>
+          </span>
+          <span class="text-[9px] text-slate-500">зелёный — выигрыш, красный — проигрыш</span>
+        </div>
+        <div id="bottleHistoryList" class="flex flex-wrap gap-1.5 text-xs"></div>
+      </div>
+
+      <!-- Честность -->
+      <div class="w-full bg-slate-900/40 border border-slate-800/60 rounded-xl p-2.5 text-[10px] text-slate-400 leading-relaxed">
+        <span class="flex items-center gap-1 text-slate-300 font-bold mb-1">
+          <i data-icon="shield" data-icon-size="13" class="text-emerald-300"></i><span>Честная математика</span>
+        </span>
+        Точка остановки бутылочки считается на твоём устройстве через
+        <span class="text-slate-300">crypto.getRandomValues</span> <b>до запуска</b> вращения —
+        подкрутить по ходу нельзя. Каждый выложенный предмет занимает равный сектор круга,
+        поэтому бутылочка останавливается на каждом из них с одинаковой вероятностью
+        <b class="text-slate-300">1 / N</b>. Шанс выигрыша честно равен доле предметов дороже ставки.
+      </div>
+    </div>
+  </main>
+
   <!-- ================= TAB 3: COMMUNITY (СООБЩЕСТВО + IDLE + DAILY + PROMO) ================= -->
   <main id="viewCommunity" class="view-panel w-full px-4 mt-2 hidden flex flex-col items-center space-y-3">
     <div class="w-full text-left">
@@ -1093,6 +1188,7 @@
               <div class="text-[10px] text-slate-500">Нет карты — переродись, чтобы получить бронзовую кредитку</div>
             </div>
             <div id="creditInfo" class="text-[10px] text-slate-400 leading-relaxed"></div>
+            <div id="rebirthTasksList" class="space-y-0.5 pt-1 border-t border-slate-800/60"></div>
             <div class="grid grid-cols-2 gap-1.5">
               <button onclick="openRebirthModal()" class="py-2 rounded-lg bg-gradient-to-r from-amber-500 to-orange-600 text-black font-bold text-[11px] transition active:scale-95">🔄 Переродиться</button>
               <button onclick="repayAllCredit()" class="py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-[11px] transition">💳 Вернуть долг</button>
@@ -1212,7 +1308,7 @@
         </h3>
         <button onclick="closeGamesModal()" class="text-slate-400 hover:text-white text-lg leading-none">✕</button>
       </div>
-      <p class="text-[10px] text-slate-400 mb-2.5">Выбери, во что играем: кейсы, апгрейд или ракета. Список игр растёт вместе с обновлениями.</p>
+      <p class="text-[10px] text-slate-400 mb-2.5">Выбери, во что играем: кейсы, апгрейд, ракета или бутылочка. Список игр растёт вместе с обновлениями.</p>
       <div id="gamesList" class="space-y-2"></div>
       <div class="mt-3 pt-2.5 border-t border-slate-800 text-center text-[9px] text-slate-500">
         Новые игры появляются прямо в этом меню 🎁
@@ -2190,6 +2286,7 @@
   <script defer src="js/game.js?v=4.0.0"></script>
   <script defer src="js/icons.js?v=4.2.0"></script>
   <script defer src="js/crash.js?v=4.2.0"></script>
+  <script defer src="js/bottle.js?v=4.3.0"></script>
   <script defer src="js/games.js?v=4.1.0"></script>
   <script defer src="js/netplay.js?v=4.0.0"></script>
   <script defer src="js/main.js?v=4.0.0"></script>

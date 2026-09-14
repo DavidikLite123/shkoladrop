@@ -35,6 +35,13 @@ const DEFAULT_STATS = {
   crashBestMult: 0,   // лучший множитель, на котором забрал
   crashBestWin: 0,    // лучший выигрыш за раунд
   crashHistory: [],   // последние точки краша (для ленты)
+  /* 🍾 Бутылочка (Bottle spin) */
+  bottleSpins: 0,     // всего вращений сыграно
+  bottleWins: 0,      // бутылочка указала на предмет дороже ставки
+  bottleLosses: 0,    // бутылочка указала на предмет не дороже ставки
+  bottleWon: 0,       // суммарно выиграно деньгами (разницы цен)
+  bottleBestWin: 0,   // лучший денежный выигрыш за вращение
+  bottleHistory: [],  // последние результаты (для ленты)
   biggestDrop: 0,
   biggestDropName: '',
   bestWinChance: 0,
@@ -536,6 +543,19 @@ const SaveManager = {
         const x = Number(h.x);
         if (!Number.isFinite(x) || x < 1) return null;
         return { x, win: !!h.win };
+      }
+      return null;
+    }).filter(Boolean).slice(0, 12);
+    /* 🍾 Бутылочка (Bottle): числа защищаем от мусора, историю режем по длине */
+    ['bottleSpins', 'bottleWins', 'bottleLosses', 'bottleWon', 'bottleBestWin'].forEach(k => {
+      if (!Number.isFinite(stats[k]) || stats[k] < 0) stats[k] = 0;
+    });
+    const bottleHistory = Array.isArray(stats.bottleHistory) ? stats.bottleHistory : [];
+    stats.bottleHistory = bottleHistory.map(h => {
+      if (h && typeof h === 'object') {
+        const price = Number(h.price);
+        if (!Number.isFinite(price) || price < 0) return null;
+        return { price: Math.floor(price), win: !!h.win };
       }
       return null;
     }).filter(Boolean).slice(0, 12);
