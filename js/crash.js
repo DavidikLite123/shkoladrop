@@ -258,16 +258,19 @@ const CrashGame = {
     const rawBet = this.parseNum($('crashBetInput'));
     const rawAuto = this.parseNum($('crashAutoInput'));
     const cfg = CRASH_CONFIG;
+    const priceMult = (typeof ModeManager !== 'undefined') ? ModeManager.getCurrent().priceMult : 1;
+    const minBetMode = Math.floor(cfg.minBet * priceMult);
+    const maxBetMode = Math.floor(cfg.maxBet * priceMult);
 
     if (!isFinite(rawBet) || rawBet <= 0) {
       return { ok: false, error: 'Введи ставку — сколько ставишь на ракету?' };
     }
     const bet = Math.floor(rawBet);
-    if (bet < cfg.minBet) {
-      return { ok: false, error: `Минимальная ставка — ${fmt(cfg.minBet)} ₽` };
+    if (bet < minBetMode) {
+      return { ok: false, error: `Минимальная ставка — ${fmt(minBetMode)} ₽` };
     }
-    if (bet > cfg.maxBet) {
-      return { ok: false, error: `Максимальная ставка — ${shortMoney(cfg.maxBet)} ₽` };
+    if (bet > maxBetMode) {
+      return { ok: false, error: `Максимальная ставка — ${shortMoney(maxBetMode)} ₽` };
     }
     if (bet > state.balance) {
       return { ok: false, error: `Не хватает денег: ставка ${fmt(bet)} ₽, а на балансе ${fmt(state.balance)} ₽` };
@@ -290,6 +293,10 @@ const CrashGame = {
      РАУНД
      ====================================================================== */
   start() {
+    if (typeof state !== 'undefined' && state.gameMode === 'hardcore' && state.stats && state.stats.hardcoreDead) {
+      if (typeof showHardcoreDeathModal === 'function') showHardcoreDeathModal();
+      return;
+    }
     if (this.phase === 'flying') return;                 // уже летим — игнорим двойной тап
     if (this.phase !== 'idle') return;                   // ждём, пока отыграет прошлый раунд
     if (typeof state === 'undefined' || !state.stats) return;
@@ -303,7 +310,10 @@ const CrashGame = {
 
     /* Финальный предохранитель: даже если что-то пошло не так выше —
        списываем не больше остатка и никогда не уводим баланс в минус. */
-    const bet = Math.max(CRASH_CONFIG.minBet, Math.min(parsed.bet, CRASH_CONFIG.maxBet, Math.floor(state.balance)));
+    const priceMult2 = (typeof ModeManager !== 'undefined') ? ModeManager.getCurrent().priceMult : 1;
+    const minBetM = Math.floor(CRASH_CONFIG.minBet * priceMult2);
+    const maxBetM = Math.floor(CRASH_CONFIG.maxBet * priceMult2);
+    const bet = Math.max(minBetM, Math.min(parsed.bet, maxBetM, Math.floor(state.balance)));
     if (bet < parsed.bet || bet <= 0) {
       Toast.error(`Нельзя поставить ${fmt(parsed.bet)} ₽ — на балансе ${fmt(state.balance)} ₽`);
       return;
@@ -861,9 +871,11 @@ const CrashGame = {
     if (status) {
       if (this.phase === 'idle') {
         const auto = this.autoXText();
+        const pm = (typeof ModeManager !== 'undefined') ? ModeManager.getCurrent().priceMult : 1;
+        const minB = Math.floor(CRASH_CONFIG.minBet * pm);
         status.textContent = auto
-          ? `Готов к запуску · автовывод на ${auto}× · мин. ${fmt(CRASH_CONFIG.minBet)} ₽`
-          : `Готов к запуску · мин. ${fmt(CRASH_CONFIG.minBet)} ₽`;
+          ? `Готов к запуску · автовывод на ${auto}× · мин. ${fmt(minB)} ₽`
+          : `Готов к запуску · мин. ${fmt(minB)} ₽`;
         status.className = 'text-[10px] text-slate-400';
       } else if (this.isTakeoff()) {
         status.textContent = 'Разгон: ракета на старте, краш невозможен';

@@ -7,7 +7,7 @@
 const APP_VERSION = '4.0';
 const WHATS_NEW_VERSION = 'season-3.5-apology-4.0-2026-09'; // версия 4.0, сезон 3.5 — извинительный подарок + обязательный онлайн
 const SAVE_VERSION = 14;      // v14 = сезон 3.5 / версия 4.0 — подарок-извинение за вайп 3.9 + обязательный онлайн-коннект
-const SEASON_NUMBER = 3.5;
+const SEASON_NUMBER = 4.0;
 const HARD_MODE_THRESHOLD = 100000000;
 const HARD_MODE_CASE_DISCOUNT = 0.9;
 
@@ -46,6 +46,199 @@ const RARITY_WEIGHT_PENALTY = {
   covert: 0.012, gold: 0.0045, secret: 0.0012
 };
 
+const RARITIES = {
+  common:    { name: 'Обычный',      short: 'Обычный',     color: '#b0c3d9', bg: 'rgba(176,195,217,0.12)', order: 1, power: 1.0, valueMult: 1.0 },
+  uncommon:  { name: 'Необычный',    short: 'Необычный',   color: '#5ee9b5', bg: 'rgba(94,233,181,0.14)', order: 2, power: 1.25, valueMult: 1.3 },
+  rare:      { name: 'Редкий',       short: 'Редкий',      color: '#4b69ff', bg: 'rgba(75,105,255,0.14)', order: 3, power: 1.6, valueMult: 1.8 },
+  epic:      { name: 'Эпический',    short: 'Эпический',   color: '#8847ff', bg: 'rgba(136,71,255,0.16)', order: 4, power: 2.1, valueMult: 2.5 },
+  legendary: { name: 'Легендарный',  short: 'Легендарный', color: '#d32ce6', bg: 'rgba(211,44,230,0.16)', order: 5, power: 2.8, valueMult: 3.5 },
+  mythic:    { name: 'Мифический',   short: 'Мифический',  color: '#ffd700', bg: 'rgba(255,215,0,0.20)', order: 6, power: 4.0, valueMult: 6.0 },
+  secret:    { name: 'Секретный',    short: 'Секретный',   color: '#00f0ff', bg: 'rgba(0,240,255,0.20)', order: 7, power: 6.0, valueMult: 12.0 }
+};
+const RARITY_ALIASES = {
+  consumer: 'common',
+  milspec: 'uncommon',
+  restricted: 'rare',
+  classified: 'epic',
+  covert: 'legendary',
+  gold: 'mythic',
+  secret: 'secret'
+};
+RARITIES.consumer = RARITIES.common;
+RARITIES.milspec = RARITIES.uncommon;
+RARITIES.restricted = RARITIES.rare;
+RARITIES.classified = RARITIES.epic;
+RARITIES.covert = RARITIES.legendary;
+RARITIES.gold = RARITIES.mythic;
+
+function normalizeRarity(r) {
+  if (!r) return 'common';
+  if (RARITIES[r]) return RARITY_ALIASES[r] || r;
+  return 'common';
+}
+
+const COLLECTIONS = {
+  school:      { id: 'school',      label: 'Школа',        short: 'Школа',  icon: '🎒', color: '#ff7a00', bg: 'rgba(255,122,0,0.15)',  desc: 'Тематические предметы, скины, аксессуары, включая отсылки к Школа Drop CS2' },
+  school_drop: { id: 'school_drop', label: 'Школа Drop',   short: 'SD',     icon: '📦', color: '#f97316', bg: 'rgba(249,115,22,0.15)', desc: 'Эксклюзивы Школа Drop CS2' },
+  minecraft:   { id: 'minecraft',   label: 'Minecraft',    short: 'MC',     icon: '⛏️', color: '#10b981', bg: 'rgba(16,185,129,0.15)', desc: 'Стилизация и предметы по мотивам Minecraft' },
+  rust:        { id: 'rust',        label: 'Rust',         short: 'Rust',   icon: '🔧', color: '#f59e0b', bg: 'rgba(245,158,11,0.15)', desc: 'Тематика выживания, ресурсы и экипировка в стиле Rust' },
+  cs2:         { id: 'cs2',         label: 'CS2',          short: 'CS2',    icon: '🔫', color: '#06b6d4', bg: 'rgba(6,182,212,0.15)',  desc: 'Скины CS2 из серии Школа Drop' },
+  cat:         { id: 'cat',         label: 'Коты',         short: 'Кот',    icon: '🐱', color: '#ec4899', bg: 'rgba(236,72,153,0.15)', desc: 'Кошачьи предметы и хранители школы' },
+  youtube:     { id: 'youtube',     label: 'YouTube',      short: 'YT',     icon: '▶',  color: '#ef4444', bg: 'rgba(239,68,68,0.15)',  desc: 'Кейсы и предметы ютуберов сезона 3' },
+  dota:        { id: 'dota',        label: 'Dota 2',       short: 'Dota',   icon: '⚔️', color: '#14b8a6', bg: 'rgba(20,184,166,0.15)', desc: 'Предметы Dota 2' },
+  other:       { id: 'other',       label: 'Другое',       short: 'Другое', icon: '🎮', color: '#8b5cf6', bg: 'rgba(139,92,246,0.15)', desc: 'Другие тематические наборы: TF2 и др.' },
+  upgrade:     { id: 'upgrade',     label: 'Апгрейд',      short: 'Апгр',   icon: '⚡', color: '#f97316', bg: 'rgba(249,115,22,0.15)', desc: 'Эксклюзивы апгрейдера' },
+  beta:        { id: 'beta',        label: 'Бета 3.6',     short: 'Бета',   icon: '🧪', color: '#22d3ee', bg: 'rgba(34,211,238,0.15)', desc: 'Экспериментальные предметы лаборатории' },
+  beta41:      { id: 'beta41',      label: 'Бета 4.1',     short: '4.1',    icon: '🚀', color: '#a855f7', bg: 'rgba(168,85,247,0.15)', desc: 'Предметы вне школьной тематики' }
+};
+
+const COLLECTION_BONUSES = {
+  thresholds: [
+    { percent: 25, label: 'Новичок коллекции', bonuses: { craftChance: 0.05, dropBonus: 0.02 } },
+    { percent: 50, label: 'Знаток коллекции',  bonuses: { craftChance: 0.10, dropBonus: 0.05, cosmetic: true } },
+    { percent: 75, label: 'Мастер коллекции',  bonuses: { craftChance: 0.15, dropBonus: 0.10, cosmetic: true } },
+    { percent: 100,label: 'Легенда коллекции', bonuses: { craftChance: 0.25, dropBonus: 0.20, cosmetic: true, buff: true } }
+  ],
+  global: [
+    { collections: 1, label: 'Коллекционер I', bonuses: { craftChance: 0.05 } },
+    { collections: 3, label: 'Коллекционер II', bonuses: { craftChance: 0.10, rareDrop: 0.05 } },
+    { collections: 5, label: 'Коллекционер III', bonuses: { craftChance: 0.15, rareDrop: 0.10, buff: true } }
+  ]
+};
+
+const CRAFT_CONFIG = {
+  requiredCount: 10,
+  resultCount: 1,
+  sameRarity: true,
+  minCollectionWeight: 0.01
+};
+
+const GAME_MODES = {
+  easy: {
+    id: 'easy',
+    label: 'Лёгкий режим',
+    short: 'Лёгкий',
+    icon: '🌱',
+    color: '#22c55e',
+    bg: 'from-green-600/30 to-emerald-900/40',
+    desc: 'Максимально упрощённые условия: сниженные цены, отсутствие налогов и других усложняющих механик. Онлайн-чат недоступен. Полностью локальный режим, подходит для обучения.',
+    priceMult: 0.5,
+    tapMoneyValue: 1.5,
+    tax: false,
+    chat: false,
+    local: true,
+    sync: false,
+    harder: false,
+    hardcore: false,
+    features: ['Сниженные цены x0.5', 'Нет налогов', 'Нет чата', 'Локально', 'Обучение']
+  },
+  normal: {
+    id: 'normal',
+    label: 'Обычный режим',
+    short: 'Обычный',
+    icon: '🎒',
+    color: '#ff7a00',
+    bg: 'from-orange-600/30 to-amber-900/40',
+    desc: 'Стандартная версия со сбалансированной экономикой и полным набором функций, включая онлайн-чат. Единственный режим, который полностью синхронизируется с сервером.',
+    priceMult: 1.0,
+    tapMoneyValue: 1.0,
+    tax: true,
+    chat: true,
+    local: false,
+    sync: true,
+    harder: false,
+    hardcore: false,
+    features: ['Баланс x1.0', 'Налоги', 'Чат', 'Синхронизация', 'Полный функционал']
+  },
+  hard: {
+    id: 'hard',
+    label: 'Сложный режим',
+    short: 'Сложный',
+    icon: '🔥',
+    color: '#ef4444',
+    bg: 'from-red-600/30 to-orange-900/40',
+    desc: 'Повышенная сложность: цены выше, условия жёстче, испытания сложнее. Только локальный прогресс, без синхронизации.',
+    priceMult: 1.8,
+    tapMoneyValue: 0.6,
+    tax: true,
+    taxMult: 1.5,
+    chat: false,
+    local: true,
+    sync: false,
+    harder: true,
+    hardcore: false,
+    features: ['Цены x1.8', 'Жёсткие налоги x1.5', 'Сложнее', 'Локально']
+  },
+  hardcore: {
+    id: 'hardcore',
+    label: 'Хардкорный режим',
+    short: 'Хардкор',
+    icon: '💀',
+    color: '#a855f7',
+    bg: 'from-violet-600/30 to-purple-900/40',
+    desc: 'Максимальная сложность: одна попытка. При полной потере средств — проигрыш. Кредитная карта может попытаться выдать займ, но есть шанс отказа. Только локально.',
+    priceMult: 2.2,
+    tapMoneyValue: 0.4,
+    tax: true,
+    taxMult: 2.0,
+    chat: false,
+    local: true,
+    sync: false,
+    harder: true,
+    hardcore: true,
+    oneLife: true,
+    creditChance: 0.6,
+    permadeath: true,
+    features: ['Цены x2.2', 'Одна жизнь', 'Банкротство = конец', 'Кредит 60% шанс', 'Локально']
+  }
+};
+
+const DEFAULT_GAME_MODE = 'normal';
+
+function getGameMode(id) {
+  return GAME_MODES[id] || GAME_MODES[DEFAULT_GAME_MODE];
+}
+function getModePrice(price, modeId) {
+  const mode = getGameMode(modeId);
+  return Math.floor(price * (mode.priceMult || 1));
+}
+function getCollectionProgress(inventory, collection) {
+  const all = ALL_MASTER_ITEMS.filter(it => it.collection === collection);
+  if (!all.length) return { total: 0, owned: 0, percent: 0 };
+  const ownedIds = new Set((inventory || []).map(id => typeof id === 'string' ? id : id.id).filter(Boolean));
+  const owned = all.filter(it => ownedIds.has(it.id)).length;
+  const total = all.length;
+  const percent = total ? (owned / total) * 100 : 0;
+  return { total, owned, percent };
+}
+function getCollectionBonus(percent) {
+  let bonus = { craftChance: 0, dropBonus: 0, rareDrop: 0, cosmetic: false, buff: false };
+  for (const th of COLLECTION_BONUSES.thresholds) {
+    if (percent >= th.percent) {
+      bonus.craftChance = Math.max(bonus.craftChance, th.bonuses.craftChance || 0);
+      bonus.dropBonus = Math.max(bonus.dropBonus, th.bonuses.dropBonus || 0);
+      if (th.bonuses.cosmetic) bonus.cosmetic = true;
+      if (th.bonuses.buff) bonus.buff = true;
+    }
+  }
+  return bonus;
+}
+function collectionOf(item) {
+  if (!item) return 'other';
+  return item.collection || 'other';
+}
+function getItemsByCollectionAndRarity(collection, rarity) {
+  const r = normalizeRarity(rarity);
+  return ALL_MASTER_ITEMS.filter(it => (it.collection === collection) && normalizeRarity(it.rarity) === r);
+}
+function getItemsByRarity(rarity) {
+  const r = normalizeRarity(rarity);
+  return ALL_MASTER_ITEMS.filter(it => normalizeRarity(it.rarity) === r);
+}
+
+
+
+
 /** 0..1 — насколько «раскулачен» игрок с таким балансом (лог-шкала: важно «во сколько раз», а не «на сколько») */
 function richTaxProgress(balance) {
   const bal = Number.isFinite(balance) ? Math.max(0, balance) : 0;
@@ -76,17 +269,6 @@ function richTaxBalanceOf(balance) {
 function richTaxBalance() {
   return (typeof state !== 'undefined' && state && Number.isFinite(state.balance)) ? state.balance : 0;
 }
-
-/* ---------- Редкости ---------- */
-const RARITIES = {
-  consumer:   { name: 'Ширпотреб',            short: 'Ширпотреб', color: '#b0c3d9', bg: 'rgba(176, 195, 217, 0.12)', order: 1 },
-  milspec:    { name: 'Армейское качество',   short: 'Армейское', color: '#4b69ff', bg: 'rgba(75, 105, 255, 0.14)',  order: 2 },
-  restricted: { name: 'Запрещённое',          short: 'Запрещённое', color: '#8847ff', bg: 'rgba(136, 71, 255, 0.16)', order: 3 },
-  classified: { name: 'Засекреченное',        short: 'Засекреченное', color: '#d32ce6', bg: 'rgba(211, 44, 230, 0.16)', order: 4 },
-  covert:     { name: 'Тайное',               short: 'Тайное', color: '#eb4b4b', bg: 'rgba(235, 75, 75, 0.18)',  order: 5 },
-  gold:       { name: '★ Чрезвычайно редкое', short: '★ Редкое', color: '#ffd700', bg: 'rgba(255, 215, 0, 0.2)',   order: 6 },
-  secret:     { name: '☠ СЕКРЕТНОЕ (Кошачье)', short: '☠ Секрет', color: '#00f0ff', bg: 'rgba(0, 240, 255, 0.2)',   order: 7 }
-};
 
 /* ---------- Категории ---------- */
 const CATEGORIES = {
