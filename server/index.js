@@ -1383,7 +1383,11 @@ const PUBLIC_FILES = new Set(['index.html', 'manifest.webmanifest']);
 const PUBLIC_DIRS = ['css/', 'js/', 'assets/'];
 function isPublicStaticPath(p) {
   const rel = String(p || '').replace(/\\/g, '/').replace(/^\/+/, '');
-  if (!rel || rel.includes('..') || rel.includes('\0')) return false;
+  if (rel.includes('..') || rel.includes('\0')) return false;
+  // Пустой rel — это запрос к корню «/». Его НЕЛЬЗЯ отбрасывать: именно так
+  // браузер открывает игру, а serveStatic() сам подставит index.html.
+  // (Раньше «/» попадал под !rel и отдавал 404 вместо игры.)
+  if (!rel) return true;
   if (PUBLIC_FILES.has(rel)) return true;
   return PUBLIC_DIRS.some(dir => rel.startsWith(dir)) && !rel.endsWith('/');
 }

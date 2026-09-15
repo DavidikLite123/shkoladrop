@@ -103,7 +103,7 @@ function loadGame() {
   MetaStore.bumpSession();
 
   if (migrated) {
-    Toast.success('Старый прогресс перенесён — привет в Сезоне 4.0! 🎒', 5000);
+    Toast.success('Старый прогресс перенесён — привет в Сезоне 3.5! 🎒', 5000);
   }
   const metaForWipe = MetaStore.read();
   if (wiped && (carriedUser || hadOldSave)) {

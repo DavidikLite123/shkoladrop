@@ -31,7 +31,7 @@ function bootShkolaDrop() {
       showWhatsNewIfNeeded();
     }
 
-    console.log(`%c🎒 ШКОЛА ДРОП v${APP_VERSION} Stable`, 'color:#ff5500;font-weight:bold', '— David Lite Studio · Сезон 3');
+    console.log(`%c🎒 ШКОЛА ДРОП v${APP_VERSION} Stable`, 'color:#ff5500;font-weight:bold', '— David Lite Studio · Сезон 3.5 · релиз 4.1');
     console.log(`Сохранение: localStorage «${SAVE_KEY}» + cookie-бэкап · согласие: ${Consent.isSet() ? 'получено' : 'нет'}`);
   } catch (err) {
     console.error('[ШКОЛА ДРОП] Ошибка запуска:', err);
