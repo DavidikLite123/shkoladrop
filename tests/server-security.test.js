@@ -71,6 +71,12 @@ const json = async (p, opts) => (await fetch(BASE + p, opts)).json();
 
     console.log('\n🔒 СТАТИКА: отдаём только игру');
     t('index.html — отдаётся', await code('/index.html') === 200);
+    // РЕГРЕССИЯ: белый список статики однажды начал отбрасывать пустой путь,
+    // и при заходе на сервер браузером вместо игры отдавался 404.
+    const rootResp = await fetch(BASE + '/');
+    const rootBody = rootResp.ok ? await rootResp.text() : '';
+    t('корень «/» открывает игру, а не 404',
+      rootResp.status === 200 && rootBody.includes('ШКОЛА ДРОП'), 'код ' + rootResp.status);
     t('js/config.js — отдаётся (это клиент игры)', await code('/js/config.js') === 200);
     t('css/style.css — отдаётся', await code('/css/style.css') === 200);
     t('codes/vip-codes.md — НЕ отдаётся', await code('/codes/vip-codes.md') === 404);

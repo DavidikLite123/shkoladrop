@@ -73,7 +73,7 @@
 
   <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="assets/icon.svg">
-  <link rel="manifest" href="manifest.webmanifest?v=4.0.0">
+  <link rel="manifest" href="manifest.webmanifest?v=4.3.1">
   <!-- КРИТИЧЕСКИЙ CSS: прокрутка и нижнее меню работают всегда, даже если внешний файл не загрузился -->
   <style>
     /* Прокрутка страницы.
@@ -157,7 +157,7 @@
     @media (prefers-reduced-motion: reduce) { #appPreloader .pre-logo { animation: none; } }
   </style>
 
-  <link rel="stylesheet" href="css/style.css?v=4.0.0">
+  <link rel="stylesheet" href="css/style.css?v=4.3.1">
 
   <script>
     window.tailwind = window.tailwind || {};
@@ -196,7 +196,7 @@
       <div id="preloaderPercent" class="pre-percent">0%</div>
       <div id="preloaderStatus" class="pre-status">Проверяем сменку на входе...</div>
       <div id="preloaderServer" class="pre-server">Подключение к серверу, подождите...</div>
-      <div class="pre-ver">v4.0 Season 3.5 Stable · David Lite Studio · обязательный онлайн</div>
+      <div class="pre-ver">v4.1 · Сезон 3.5 Stable · David Lite Studio · обязательный онлайн</div>
     </div>
   </div>
 
@@ -219,7 +219,7 @@
       <div class="min-w-0">
         <div class="flex items-center space-x-1.5 min-w-0">
           <h1 class="text-xs font-black uppercase tracking-wider text-orange-400 font-cs truncate">ШКОЛА ДРОП</h1>
-          <span id="versionBadge" class="text-[8px] bg-orange-500/20 text-orange-300 font-bold px-1.5 py-0.5 rounded border border-orange-500/40 font-cs flex-shrink-0">v4.0 Season 3.5</span>
+          <span id="versionBadge" class="text-[8px] bg-orange-500/20 text-orange-300 font-bold px-1.5 py-0.5 rounded border border-orange-500/40 font-cs flex-shrink-0">v4.1 · Сезон 3.5</span>
           <span id="gameModeBadge" onclick="openGameModeSelectorModal()" title="Сменить режим" class="cursor-pointer text-[8px] bg-cyan-500/20 text-cyan-300 font-bold px-1.5 py-0.5 rounded border border-cyan-500/40 font-cs flex-shrink-0">Обычный</span>
           <span id="serverHeaderDot" title="Подключение к серверу..." class="w-2 h-2 rounded-full bg-amber-400 animate-pulse border border-amber-500/50 flex-shrink-0"></span>
         </div>
@@ -2401,19 +2401,23 @@
     </div>
   </div>
 
-  <!-- ЛОГИКА ИГРЫ (модульная структура v2.0) -->
-  <script defer src="js/preloader.js?v=4.0.0"></script>
-  <script defer src="js/config.js?v=4.2.0"></script>
-  <script defer src="js/storage.js?v=4.0.0"></script>
-  <script defer src="js/craft.js?v=4.0.0"></script>
-  <script defer src="js/modes.js?v=4.0.0"></script>
-  <script defer src="js/ui.js?v=4.0.0"></script>
-  <script defer src="js/game.js?v=4.0.0"></script>
-  <script defer src="js/icons.js?v=4.2.0"></script>
-  <script defer src="js/crash.js?v=4.2.0"></script>
-  <script defer src="js/bottle.js?v=4.3.0"></script>
-  <script defer src="js/games.js?v=4.1.0"></script>
-  <script defer src="js/netplay.js?v=4.0.0"></script>
-  <script defer src="js/main.js?v=4.0.0"></script>
+  <!-- ЛОГИКА ИГРЫ (модульная структура).
+       ВАЖНО: ?v=4.3.1 — это ТОЛЬКО кэш-бастер, а не версия игры.
+       Версия живёт в js/config.js (APP_VERSION / SEASON_NUMBER).
+       Правило: поменял любой файл из js/ или css/ — подними ?v= у всех тегов сразу
+       (значение должно быть больше прежнего, иначе игрок получит устаревший кэш). -->
+  <script defer src="js/preloader.js?v=4.3.1"></script>
+  <script defer src="js/config.js?v=4.3.1"></script>
+  <script defer src="js/storage.js?v=4.3.1"></script>
+  <script defer src="js/craft.js?v=4.3.1"></script>
+  <script defer src="js/modes.js?v=4.3.1"></script>
+  <script defer src="js/ui.js?v=4.3.1"></script>
+  <script defer src="js/game.js?v=4.3.1"></script>
+  <script defer src="js/icons.js?v=4.3.1"></script>
+  <script defer src="js/crash.js?v=4.3.1"></script>
+  <script defer src="js/bottle.js?v=4.3.1"></script>
+  <script defer src="js/games.js?v=4.3.1"></script>
+  <script defer src="js/netplay.js?v=4.3.1"></script>
+  <script defer src="js/main.js?v=4.3.1"></script>
 </body>
 </html>
